@@ -15,7 +15,9 @@
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-system.css') }}?v=20250912065500">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/enhanced-design.css') }}?v=20250912065500">
     <style>
         .btn-touch {
             min-height: 60px;
@@ -78,23 +80,64 @@
         <i class="bi bi-moon-fill"></i> Modo Claro
     </button>
     {% if session.user_id %}
-    <nav class="navbar navbar-expand-lg">
+    <nav class="navbar navbar-expand-lg animate-fade-in">
         <div class="container-fluid">
             <a class="navbar-brand" href="/">
-                <img src="{{ url_for('static', filename='css/logo.png') }}" alt="Four One Solutions" height="32" class="me-2">
-                Four One POS
+                <img src="{{ url_for('static', filename='css/logo.png') }}" alt="Four One Solutions" height="32">
+                <span>Four One POS</span>
             </a>
             
-            <div class="navbar-nav ms-auto">
-                <span class="navbar-text me-3">
-                    <i class="bi bi-person-circle"></i> {{ session.username }} ({{ session.role }})
-                </span>
-                <a class="btn btn-outline-light" href="{{ url_for('auth.logout') }}">
-                    <i class="bi bi-box-arrow-right"></i> Cerrar Sesión
-                </a>
+            <div class="navbar-nav ms-auto align-items-center">
+                <div class="dropdown me-3">
+                    <button class="btn btn-link text-decoration-none dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle me-2"></i>
+                        <span class="d-none d-sm-inline">{{ session.username }}</span>
+                        <small class="d-block d-sm-inline text-muted ms-1">({{ session.role }})</small>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><h6 class="dropdown-header">Cuenta</h6></li>
+                        <li><a class="dropdown-item" href="{{ url_for('auth.change_password') }}">
+                            <i class="bi bi-key me-2"></i>Cambiar Contraseña
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
+                            <i class="bi bi-box-arrow-right me-2"></i>Cerrar Sesión
+                        </a></li>
+                    </ul>
+                </div>
             </div>
         </div>
     </nav>
+    
+    <!-- Quick Navigation Sidebar for Desktop -->
+    <div class="d-none d-lg-block position-fixed" style="top: 50%; left: 20px; transform: translateY(-50%); z-index: 1000;">
+        <div class="d-flex flex-column gap-2">
+            {% if session.role in ['administrador', 'cajero'] %}
+                <a href="{{ url_for('admin.dashboard') }}" class="btn btn-sm" 
+                   style="background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); width: 48px; height: 48px; border-radius: 50%;"
+                   title="Dashboard" data-bs-toggle="tooltip">
+                    <i class="bi bi-speedometer2"></i>
+                </a>
+                <a href="{{ url_for('admin.pos') }}" class="btn btn-sm"
+                   style="background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); width: 48px; height: 48px; border-radius: 50%;"
+                   title="Punto de Venta" data-bs-toggle="tooltip">
+                    <i class="bi bi-cash-register"></i>
+                </a>
+                <a href="{{ url_for('admin.invoices') }}" class="btn btn-sm"
+                   style="background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); width: 48px; height: 48px; border-radius: 50%;"
+                   title="Facturas" data-bs-toggle="tooltip">
+                    <i class="bi bi-receipt"></i>
+                </a>
+            {% endif %}
+            {% if session.role == 'mesero' %}
+                <a href="{{ url_for('waiter.tables') }}" class="btn btn-sm"
+                   style="background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); width: 48px; height: 48px; border-radius: 50%;"
+                   title="Mesas" data-bs-toggle="tooltip">
+                    <i class="bi bi-table"></i>
+                </a>
+            {% endif %}
+        </div>
+    </div>
     {% endif %}
 
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -116,6 +159,119 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Enhanced UI Scripts -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+        
+        // Add smooth scroll behavior
+        document.documentElement.style.scrollBehavior = 'smooth';
+        
+        // Add loading states to buttons
+        document.querySelectorAll('button[type="submit"], .btn[href]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                if (!this.classList.contains('no-loading')) {
+                    this.classList.add('loading');
+                    setTimeout(() => this.classList.remove('loading'), 2000);
+                }
+            });
+        });
+        
+        // Add fade-in animation to cards
+        const cards = document.querySelectorAll('.card, .stats-card');
+        cards.forEach((card, index) => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            setTimeout(() => {
+                card.style.transition = 'all 0.5s ease-out';
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+            }, index * 100);
+        });
+        
+        // Enhanced alert auto-dismiss
+        const alerts = document.querySelectorAll('.alert:not(.alert-persistent)');
+        alerts.forEach(alert => {
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.style.opacity = '0';
+                    alert.style.transform = 'translateX(100%)';
+                    setTimeout(() => alert.remove(), 300);
+                }
+            }, 5000);
+        });
+        
+        // Add ripple effect to buttons
+        document.querySelectorAll('.btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                const rect = this.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                const ripple = document.createElement('span');
+                ripple.style.cssText = `
+                    position: absolute;
+                    border-radius: 50%;
+                    background: rgba(255,255,255,0.3);
+                    pointer-events: none;
+                    transform: scale(0);
+                    animation: ripple 0.6s linear;
+                    left: ${x}px;
+                    top: ${y}px;
+                    width: 20px;
+                    height: 20px;
+                    margin-left: -10px;
+                    margin-top: -10px;
+                `;
+                
+                this.style.position = 'relative';
+                this.style.overflow = 'hidden';
+                this.appendChild(ripple);
+                
+                setTimeout(() => ripple.remove(), 600);
+            });
+        });
+    });
+    
+    // Add ripple animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes ripple {
+            to {
+                transform: scale(4);
+                opacity: 0;
+            }
+        }
+        .loading {
+            position: relative;
+            pointer-events: none;
+        }
+        .loading::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            margin: -10px 0 0 -10px;
+            border: 2px solid transparent;
+            border-top: 2px solid currentColor;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    `;
+    document.head.appendChild(style);
+    </script>
+    
     {% block scripts %}{% endblock %}
     
     <!-- PWA Service Worker Registration -->

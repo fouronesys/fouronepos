@@ -8,123 +8,161 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="pos-header fade-in-up">
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <h2 class="mb-0"><i class="bi bi-cash-register me-3"></i> Punto de Venta</h2>
-                <p class="mb-0 mt-2 opacity-75">Sistema POS con Cumplimiento Fiscal Dominicano</p>
-            </div>
+    <!-- Modern POS Header -->
+    <div class="row align-items-center mb-4">
+        <div class="col">
             <div class="d-flex align-items-center gap-3">
-                <!-- Connection Status Indicator -->
-                <div id="connection-status" class="connection-status online">
-                    <i class="bi bi-wifi"></i> En línea
+                <div class="pos-icon">
+                    <i class="bi bi-cash-register"></i>
                 </div>
-                <!-- Offline Queue Status -->
-                <div id="sync-status" class="sync-status" style="display: none;">
-                    <i class="bi bi-cloud-upload"></i> <span id="sync-count">0</span> pendiente(s)
+                <div>
+                    <h1 class="display-6 fw-bold mb-1">Punto de Venta</h1>
+                    <p class="text-muted mb-0">Sistema POS con Cumplimiento Fiscal • República Dominicana</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="d-flex align-items-center gap-3">
+                <!-- Enhanced Status Indicators -->
+                <div id="connection-status" class="status-indicator online">
+                    <div class="status-dot"></div>
+                    <span><i class="bi bi-wifi me-1"></i>En línea</span>
+                </div>
+                <div id="sync-status" class="status-indicator sync" style="display: none;">
+                    <div class="status-dot sync-dot"></div>
+                    <span><i class="bi bi-cloud-upload me-1"></i><span id="sync-count">0</span> pendiente(s)</span>
+                </div>
+                <!-- Quick Stats -->
+                <div class="quick-stats">
+                    <div class="stat-item">
+                        <div class="stat-value" id="daily-sales">RD$ 0</div>
+                        <div class="stat-label">Ventas del día</div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
     
-    <div class="row">
+    <div class="row g-4">
         <!-- Products Section -->
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-grid"></i> Productos</h5>
-                </div>
-                <div class="card-body">
-                    <!-- Category Tabs -->
-                    <ul class="nav nav-pills mb-3" id="category-tabs">
+        <div class="col-lg-8">
+            <div class="products-section">
+                <!-- Enhanced Category Navigation -->
+                <div class="category-nav mb-4">
+                    <div class="category-pills">
                         {% for category in categories %}
-                        <li class="nav-item">
-                            <button class="nav-link {% if loop.first %}active{% endif %}" 
-                                    data-bs-toggle="pill" 
-                                    data-bs-target="#category-{{ category.id }}">
-                                {{ category.name }}
-                            </button>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    
-                    <!-- Product Grid -->
-                    <div class="tab-content">
-                        {% for category in categories %}
-                        <div class="tab-pane fade {% if loop.first %}show active{% endif %}" 
-                             id="category-{{ category.id }}">
-                            <div class="row" id="products-{{ category.id }}">
-                                <!-- Products will be loaded via JavaScript -->
-                            </div>
-                        </div>
+                        <button class="category-pill {% if loop.first %}active{% endif %}" 
+                                data-category-id="{{ category.id }}"
+                                onclick="switchCategory({{ category.id }})">
+                            <i class="bi bi-{% if category.name == 'Bebidas' %}cup-straw{% elif category.name == 'Comidas' %}egg-fried{% elif category.name == 'Postres' %}cake2{% else %}box{% endif %}"></i>
+                            <span>{{ category.name }}</span>
+                        </button>
                         {% endfor %}
                     </div>
+                </div>
+                
+                <!-- Enhanced Product Grid -->
+                <div class="products-grid">
+                    {% for category in categories %}
+                    <div class="category-products {% if not loop.first %}d-none{% endif %}" 
+                         id="category-products-{{ category.id }}">
+                        <div class="products-container" id="products-{{ category.id }}">
+                            <!-- Products will be loaded via JavaScript -->
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
         
-        <!-- Cart Section -->
-        <div class="col-md-4">
-            <div class="cart-section fade-in-up">
-                <h5 class="mb-4"><i class="bi bi-cart me-2"></i> Carrito de Compras</h5>
+        <!-- Modern Cart Section -->
+        <div class="col-lg-4">
+            <div class="modern-cart">
+                <!-- Cart Header -->
+                <div class="cart-header">
+                    <div class="cart-title">
+                        <i class="bi bi-cart3"></i>
+                        <span>Carrito</span>
+                    </div>
+                    <div class="cart-counter" id="cart-counter">0</div>
+                </div>
+                
+                <!-- Cart Configuration -->
+                <div class="cart-config">
                     <!-- Table Selection -->
-                    <div class="mb-3">
-                        <label for="table-select" class="form-label">
-                            <i class="bi bi-table"></i> Mesa (Opcional)
+                    <div class="config-item">
+                        <label for="table-select" class="config-label">
+                            <i class="bi bi-table"></i>
+                            <span>Mesa</span>
                         </label>
-                        <select class="form-control" id="table-select">
-                            <option value="">Sin mesa asignada</option>
+                        <select class="modern-select" id="table-select">
+                            <option value="">Sin asignar</option>
                         </select>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="ncf-type-select" class="form-label">
-                            <i class="bi bi-receipt"></i> Tipo de Comprobante
+                    <!-- NCF Type -->
+                    <div class="config-item">
+                        <label for="ncf-type-select" class="config-label">
+                            <i class="bi bi-receipt"></i>
+                            <span>Comprobante</span>
                         </label>
-                        <select class="form-control" id="ncf-type-select" onchange="toggleClientInfo()">
+                        <select class="modern-select" id="ncf-type-select" onchange="toggleClientInfo()">
                             <option value="consumo">Consumo</option>
                             <option value="credito_fiscal">Crédito Fiscal</option>
                             <option value="gubernamental">Gubernamental</option>
                         </select>
                     </div>
                     
-                    <!-- Client Information for Fiscal/Government Invoices -->
-                    <div id="client-info-section" style="display: none;">
-                        <div class="mb-3">
-                            <label for="client-name" class="form-label">
-                                <i class="bi bi-person"></i> Nombre/Empresa
+                    <!-- Client Information -->
+                    <div id="client-info-section" class="client-info-section" style="display: none;">
+                        <div class="config-item">
+                            <label for="client-name" class="config-label">
+                                <i class="bi bi-person"></i>
+                                <span>Cliente</span>
                             </label>
-                            <input type="text" class="form-control" id="client-name" placeholder="Nombre o razón social">
+                            <input type="text" class="modern-input" id="client-name" placeholder="Nombre o razón social">
                         </div>
-                        <div class="mb-3">
-                            <label for="client-rnc" class="form-label">
-                                <i class="bi bi-card-text"></i> RNC/Cédula
+                        <div class="config-item">
+                            <label for="client-rnc" class="config-label">
+                                <i class="bi bi-card-text"></i>
+                                <span>RNC/Cédula</span>
                             </label>
-                            <input type="text" class="form-control" id="client-rnc" placeholder="RNC o número de cédula">
+                            <input type="text" class="modern-input" id="client-rnc" placeholder="RNC o número de cédula">
                         </div>
                     </div>
-                    
-                    <div id="cart-items">
-                        <p class="text-muted">No hay productos en el carrito</p>
-                    </div>
-                    
-                    <div class="totals-section">
-                        <div class="d-flex justify-content-between mb-2">
-                            <span><strong>Subtotal:</strong></span>
-                            <span id="subtotal" class="fw-bold">RD$ 0.00</span>
-                        </div>
-                        <div class="d-flex justify-content-between mb-2">
-                            <span><strong>ITBIS (18%):</strong></span>
-                            <span id="tax" class="fw-bold">RD$ 0.00</span>
-                        </div>
-                        <div class="d-flex justify-content-between fw-bold">
-                            <span>Total:</span>
-                            <span id="total">RD$ 0.00</span>
+                </div>
+                
+                <!-- Cart Items -->
+                <div class="cart-items-container">
+                    <div id="cart-items" class="cart-items">
+                        <div class="empty-cart">
+                            <i class="bi bi-cart-x"></i>
+                            <p>Carrito vacío</p>
+                            <small>Agrega productos para empezar</small>
                         </div>
                     </div>
-                    
+                </div>
+                
+                <!-- Cart Totals -->
+                <div class="cart-totals">
+                    <div class="total-row subtotal-row">
+                        <span>Subtotal</span>
+                        <span id="subtotal">RD$ 0.00</span>
+                    </div>
+                    <div class="total-row tax-row">
+                        <span>ITBIS (18%)</span>
+                        <span id="tax">RD$ 0.00</span>
+                    </div>
+                    <div class="total-row final-row">
+                        <span>Total</span>
+                        <span id="total">RD$ 0.00</span>
+                    </div>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="cart-actions">
                     <div class="d-grid gap-2">
-                        <button class="btn btn-success-custom pulse-animation" id="process-sale" onclick="processSale()">
+                        <button class="btn btn-success btn-lg" id="process-sale" onclick="processSale()">
                             <i class="bi bi-check-circle me-2"></i> Procesar Venta
                         </button>
                         <button class="btn btn-warning" id="assign-table" onclick="assignToTable()" style="background: linear-gradient(135deg, #ffa500 0%, #ff8c00 100%); color: #000; font-weight: 600;">
