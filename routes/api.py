@@ -248,7 +248,7 @@ def finalize_sale(sale_id):
             sale.payment_method = payment_method
             sale.status = 'completed'
             
-            # Add client info for fiscal/government invoices
+            # Add client info for fiscal/government invoices (NCF compliance)
             if customer_name and customer_rnc and ncf_type in ['credito_fiscal', 'gubernamental']:
                 sale.customer_name = customer_name
                 sale.customer_rnc = customer_rnc

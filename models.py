@@ -202,6 +202,9 @@ class Sale(db.Model):
     payment_method: Mapped[str] = mapped_column(String(50), default="efectivo")
     status: Mapped[str] = mapped_column(String(20), default="pending")  # completed, pending, cancelled
     order_status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.NOT_SENT)
+    # Client info for fiscal/government invoices (NCF compliance)
+    customer_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    customer_rnc: Mapped[str] = mapped_column(String(20), nullable=True) 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
     # Relationships
