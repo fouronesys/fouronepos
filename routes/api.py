@@ -147,13 +147,29 @@ def add_sale_item(sale_id):
     if not product:
         return jsonify({'error': 'Producto no encontrado'}), 404
     
+    # Validate quantity is positive integer
+    try:
+        quantity = int(data['quantity'])
+        if quantity <= 0:
+            return jsonify({'error': 'La cantidad debe ser mayor a 0'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'error': 'La cantidad debe ser un número válido'}), 400
+    
+    # Check stock availability
+    if product.stock < quantity:
+        return jsonify({'error': f'Stock insuficiente para {product.name}. Disponible: {product.stock}'}), 400
+    
+    # Only allow adding items to pending sales
+    if sale.status != 'pending':
+        return jsonify({'error': 'Solo se pueden modificar ventas pendientes'}), 400
+    
     # Create sale item
     sale_item = models.SaleItem()
     sale_item.sale_id = sale_id
     sale_item.product_id = product.id
-    sale_item.quantity = data['quantity']
+    sale_item.quantity = quantity
     sale_item.unit_price = product.price
-    sale_item.total_price = product.price * data['quantity']
+    sale_item.total_price = product.price * quantity
     
     db.session.add(sale_item)
     
