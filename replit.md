@@ -9,6 +9,16 @@ The application supports three user roles:
 
 Key features include fiscal compliance with NCF sequences, inventory management with low stock alerts, purchase tracking with supplier management, DGII tax report generation (606/607 formats), and multi-device support optimized for tablets and mobile interfaces.
 
+# Recent Changes
+
+**September 12, 2025**: Enhanced fiscal compliance and UI improvements
+- Fixed CSS cache issues preventing dark mode display by implementing cache-busting parameters and no-cache headers
+- Added customer RNC/Cédula capture fields for fiscal and governmental receipts with dynamic form validation 
+- Implemented table assignment functionality allowing orders to be assigned to tables without immediate payment processing
+- Added customer_name and customer_rnc columns to sales table for enhanced Dominican fiscal compliance
+- Created favicon to eliminate 404 errors and improve user experience
+- Enhanced error handling for cleaner operation and better debugging
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -32,7 +42,7 @@ The application uses a server-side rendered architecture with Flask templating:
 ## Database Design
 **Primary Database**: PostgreSQL with SQLAlchemy ORM
 - **User Management**: Role-based access control with enum-defined user roles
-- **Sales System**: Complete transaction tracking with NCF assignment and status management
+- **Sales System**: Complete transaction tracking with NCF assignment, status management, and customer fiscal information (RNC/Cédula) for compliance
 - **Inventory**: Product management with categories, stock tracking, and supplier relationships
 - **Fiscal Compliance**: NCF sequences, cancelled NCF tracking, and audit trail maintenance
 
