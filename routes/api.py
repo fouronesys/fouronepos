@@ -151,62 +151,62 @@ def add_sale_item(sale_id):
     
     # CRITICAL: Use transactional locking to prevent post-finalization mutations
     try:
-        with db.session.begin():
-            # Lock the sale to prevent concurrent finalization
-            sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
-            if not sale:
-                return jsonify({'error': 'Venta no encontrada'}), 404
+        # Lock the sale to prevent concurrent finalization
+        sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
+        if not sale:
+            return jsonify({'error': 'Venta no encontrada'}), 404
+        
+        # CRITICAL: Re-check sale status after acquiring lock (prevents post-finalization mutations)
+        if sale.status != 'pending':
+            return jsonify({'error': 'Solo se pueden modificar ventas pendientes'}), 400
+        
+        # Lock product to ensure consistent stock validation
+        product = db.session.query(models.Product).filter_by(id=data['product_id']).with_for_update().first()
+        if not product:
+            return jsonify({'error': 'Producto no encontrado'}), 404
+
+        # Check for existing sale items of the same product in this sale
+        existing_quantity = db.session.query(db.func.sum(models.SaleItem.quantity)).filter_by(
+            sale_id=sale_id, 
+            product_id=product.id
+        ).scalar() or 0
+        
+        # Calculate total quantity (existing + new)
+        total_quantity = existing_quantity + quantity
+        
+        # Check stock availability against total quantity
+        if product.stock < total_quantity:
+            return jsonify({
+                'error': f'Stock insuficiente para {product.name}. Disponible: {product.stock}, ya en venta: {existing_quantity}, solicitado: {quantity}'
+            }), 400
+
+        # Check if product already exists in this sale - merge quantities instead of creating duplicate lines
+        existing_item = models.SaleItem.query.filter_by(sale_id=sale_id, product_id=product.id).first()
+        
+        if existing_item:
+            # Update existing item quantity
+            existing_item.quantity = total_quantity
+            existing_item.total_price = product.price * total_quantity
+            sale_item = existing_item
+        else:
+            # Create new sale item
+            sale_item = models.SaleItem()
+            sale_item.sale_id = sale_id
+            sale_item.product_id = product.id
+            sale_item.quantity = quantity
+            sale_item.unit_price = product.price
+            sale_item.total_price = product.price * quantity
             
-            # CRITICAL: Re-check sale status after acquiring lock (prevents post-finalization mutations)
-            if sale.status != 'pending':
-                return jsonify({'error': 'Solo se pueden modificar ventas pendientes'}), 400
-            
-            # Lock product to ensure consistent stock validation
-            product = db.session.query(models.Product).filter_by(id=data['product_id']).with_for_update().first()
-            if not product:
-                return jsonify({'error': 'Producto no encontrado'}), 404
-    
-            # Check for existing sale items of the same product in this sale
-            existing_quantity = db.session.query(db.func.sum(models.SaleItem.quantity)).filter_by(
-                sale_id=sale_id, 
-                product_id=product.id
-            ).scalar() or 0
-            
-            # Calculate total quantity (existing + new)
-            total_quantity = existing_quantity + quantity
-            
-            # Check stock availability against total quantity
-            if product.stock < total_quantity:
-                return jsonify({
-                    'error': f'Stock insuficiente para {product.name}. Disponible: {product.stock}, ya en venta: {existing_quantity}, solicitado: {quantity}'
-                }), 400
-    
-            # Check if product already exists in this sale - merge quantities instead of creating duplicate lines
-            existing_item = models.SaleItem.query.filter_by(sale_id=sale_id, product_id=product.id).first()
-            
-            if existing_item:
-                # Update existing item quantity
-                existing_item.quantity = total_quantity
-                existing_item.total_price = product.price * total_quantity
-                sale_item = existing_item
-            else:
-                # Create new sale item
-                sale_item = models.SaleItem()
-                sale_item.sale_id = sale_id
-                sale_item.product_id = product.id
-                sale_item.quantity = quantity
-                sale_item.unit_price = product.price
-                sale_item.total_price = product.price * quantity
-                
-                db.session.add(sale_item)
-            
-            # Recalculate sale totals from all items (to handle both new and updated items correctly)
-            total_items_price = sum(item.total_price for item in sale.sale_items)
-            sale.subtotal = total_items_price
-            sale.tax_amount = sale.subtotal * 0.18  # 18% ITBIS
-            sale.total = sale.subtotal + sale.tax_amount
-            
-            # Transaction commits automatically at the end of this block
+            db.session.add(sale_item)
+        
+        # Recalculate sale totals from all items (to handle both new and updated items correctly)
+        total_items_price = sum(item.total_price for item in sale.sale_items)
+        sale.subtotal = total_items_price
+        sale.tax_amount = sale.subtotal * 0.18  # 18% ITBIS
+        sale.total = sale.subtotal + sale.tax_amount
+        
+        # Commit the transaction
+        db.session.commit()
         
         return jsonify({
             'id': sale_item.id,
@@ -240,112 +240,113 @@ def finalize_sale(sale_id):
     # CRITICAL FIX: Idempotent sale finalization with proper locking to prevent NCF race conditions
     # This ensures exactly one NCF per sale even under concurrent finalization requests
     try:
-        with db.session.begin():
-            # Get sale with row-level lock to prevent concurrent modifications
-            sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
-            
-            if not sale:
-                raise ValueError('Venta no encontrada')
-            
-            # IDEMPOTENCY CHECK: If sale is already completed, return existing data
-            # This prevents duplicate NCF allocation for the same sale
-            if sale.status == 'completed':
-                return jsonify({
-                    'id': sale.id,
-                    'ncf': sale.ncf,
-                    'total': sale.total,
-                    'status': sale.status,
-                    'payment_method': sale.payment_method,
-                    'created_at': sale.created_at.isoformat(),
-                    'message': 'Venta ya estaba finalizada'
-                })
-            
-            # Validate that sale is in pending status (only pending sales can be finalized)
-            if sale.status != 'pending':
-                raise ValueError(f'No se puede finalizar una venta con estado {sale.status}')
-            
-            # PREVENT EMPTY SALES: Validate that sale has items before proceeding with NCF allocation
-            if not sale.sale_items:
-                raise ValueError('No se puede finalizar una venta sin productos')
-            
-            # Validate stock availability before proceeding with NCF allocation with concurrent safety
-            # Load sale items and group by product for aggregate validation
-            sale_items = db.session.query(models.SaleItem).filter_by(sale_id=sale_id).all()
-            
-            # Group sale items by product ID and calculate total quantity per product
-            product_quantities = {}
-            product_ids = []
-            
-            for sale_item in sale_items:
-                product_id = sale_item.product_id
-                if product_id not in product_quantities:
-                    product_quantities[product_id] = 0
-                    product_ids.append(product_id)
-                product_quantities[product_id] += sale_item.quantity
-            
-            # Lock all involved products to prevent concurrent modifications (CRITICAL for fiscal compliance)
-            locked_products = db.session.query(models.Product).filter(
-                models.Product.id.in_(product_ids)
-            ).with_for_update().all()
-            
-            # Validate stock availability per product (aggregated quantities)
-            for product in locked_products:
-                required_quantity = product_quantities[product.id]
-                if product.stock < required_quantity:
-                    raise ValueError(f'Stock insuficiente para {product.name}. Disponible: {product.stock}, requerido: {required_quantity}')
-            
-            # SALE REASSIGNMENT: If sale doesn't have cash register (waiter-created), assign finalizing user's cash register
-            if not sale.cash_register_id:
-                # Get cash register for the finalizing user (must be cashier/admin)
-                user_cash_register = db.session.query(models.CashRegister).filter_by(
-                    user_id=user.id, 
-                    active=True
-                ).first()
-                
-                if not user_cash_register:
-                    raise ValueError('Solo usuarios con caja asignada pueden finalizar ventas. Contacta al administrador.')
-                
-                # Assign the cash register to the sale for NCF generation
-                sale.cash_register_id = user_cash_register.id
-            
-            # Get NCF sequence with row-level lock to prevent concurrent access
-            ncf_sequence = db.session.query(models.NCFSequence).filter_by(
-                cash_register_id=sale.cash_register_id,
-                ncf_type=models.NCFType(ncf_type),
+        # Get sale with row-level lock to prevent concurrent modifications
+        sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
+        
+        if not sale:
+            raise ValueError('Venta no encontrada')
+        
+        # IDEMPOTENCY CHECK: If sale is already completed, return existing data
+        # This prevents duplicate NCF allocation for the same sale
+        if sale.status == 'completed':
+            return jsonify({
+                'id': sale.id,
+                'ncf': sale.ncf,
+                'total': sale.total,
+                'status': sale.status,
+                'payment_method': sale.payment_method,
+                'created_at': sale.created_at.isoformat(),
+                'message': 'Venta ya estaba finalizada'
+            })
+        
+        # Validate that sale is in pending status (only pending sales can be finalized)
+        if sale.status != 'pending':
+            raise ValueError(f'No se puede finalizar una venta con estado {sale.status}')
+        
+        # PREVENT EMPTY SALES: Validate that sale has items before proceeding with NCF allocation
+        if not sale.sale_items:
+            raise ValueError('No se puede finalizar una venta sin productos')
+        
+        # Validate stock availability before proceeding with NCF allocation with concurrent safety
+        # Load sale items and group by product for aggregate validation
+        sale_items = db.session.query(models.SaleItem).filter_by(sale_id=sale_id).all()
+        
+        # Group sale items by product ID and calculate total quantity per product
+        product_quantities = {}
+        product_ids = []
+        
+        for sale_item in sale_items:
+            product_id = sale_item.product_id
+            if product_id not in product_quantities:
+                product_quantities[product_id] = 0
+                product_ids.append(product_id)
+            product_quantities[product_id] += sale_item.quantity
+        
+        # Lock all involved products to prevent concurrent modifications (CRITICAL for fiscal compliance)
+        locked_products = db.session.query(models.Product).filter(
+            models.Product.id.in_(product_ids)
+        ).with_for_update().all()
+        
+        # Validate stock availability per product (aggregated quantities)
+        for product in locked_products:
+            required_quantity = product_quantities[product.id]
+            if product.stock < required_quantity:
+                raise ValueError(f'Stock insuficiente para {product.name}. Disponible: {product.stock}, requerido: {required_quantity}')
+        
+        # SALE REASSIGNMENT: If sale doesn't have cash register (waiter-created), assign finalizing user's cash register
+        if not sale.cash_register_id:
+            # Get cash register for the finalizing user (must be cashier/admin)
+            user_cash_register = db.session.query(models.CashRegister).filter_by(
+                user_id=user.id, 
                 active=True
-            ).with_for_update().first()
+            ).first()
             
-            if not ncf_sequence:
-                raise ValueError(f'No hay secuencia NCF activa para tipo {ncf_type} en esta caja')
+            if not user_cash_register:
+                raise ValueError('Solo usuarios con caja asignada pueden finalizar ventas. Contacta al administrador.')
             
-            # Check if sequence is exhausted (treat end_number as inclusive)
-            if ncf_sequence.current_number > ncf_sequence.end_number:
-                raise ValueError('Secuencia NCF agotada. Contacta al administrador.')
+            # Assign the cash register to the sale for NCF generation
+            sale.cash_register_id = user_cash_register.id
+        
+        # Get NCF sequence with row-level lock to prevent concurrent access
+        ncf_sequence = db.session.query(models.NCFSequence).filter_by(
+            cash_register_id=sale.cash_register_id,
+            ncf_type=models.NCFType(ncf_type),
+            active=True
+        ).with_for_update().first()
+        
+        if not ncf_sequence:
+            raise ValueError(f'No hay secuencia NCF activa para tipo {ncf_type} en esta caja')
+        
+        # Check if sequence is exhausted (treat end_number as inclusive)
+        if ncf_sequence.current_number > ncf_sequence.end_number:
+            raise ValueError('Secuencia NCF agotada. Contacta al administrador.')
+        
+        # Generate NCF number using current number
+        ncf_number = f"{ncf_sequence.serie}{ncf_sequence.current_number:08d}"
+        
+        # Increment counter for next use
+        ncf_sequence.current_number += 1
+        
+        # Update sale with NCF and finalize (atomic state transition from pending to completed)
+        sale.ncf_sequence_id = ncf_sequence.id
+        sale.ncf = ncf_number
+        sale.payment_method = payment_method
+        sale.status = 'completed'
+        
+        # Add client info for fiscal/government invoices (NCF compliance)
+        if customer_name and customer_rnc and ncf_type in ['credito_fiscal', 'gubernamental']:
+            sale.customer_name = customer_name
+            sale.customer_rnc = customer_rnc
+        
+        # Reduce stock for all products (using already locked products to prevent race conditions)
+        for product in locked_products:
+            required_quantity = product_quantities[product.id]
+            product.stock -= required_quantity
             
-            # Generate NCF number using current number
-            ncf_number = f"{ncf_sequence.serie}{ncf_sequence.current_number:08d}"
-            
-            # Increment counter for next use
-            ncf_sequence.current_number += 1
-            
-            # Update sale with NCF and finalize (atomic state transition from pending to completed)
-            sale.ncf_sequence_id = ncf_sequence.id
-            sale.ncf = ncf_number
-            sale.payment_method = payment_method
-            sale.status = 'completed'
-            
-            # Add client info for fiscal/government invoices (NCF compliance)
-            if customer_name and customer_rnc and ncf_type in ['credito_fiscal', 'gubernamental']:
-                sale.customer_name = customer_name
-                sale.customer_rnc = customer_rnc
-            
-            # Reduce stock for all products (using already locked products to prevent race conditions)
-            for product in locked_products:
-                required_quantity = product_quantities[product.id]
-                product.stock -= required_quantity
-            
-            # Transaction commits automatically at the end of this block
-            # If ANY part fails, everything rolls back and no NCF is consumed
+        # Commit the transaction
+        db.session.commit()
+        
+        # If ANY part fails, everything rolls back and no NCF is consumed
         
         # Return success response
         return jsonify({
