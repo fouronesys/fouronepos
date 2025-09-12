@@ -42,7 +42,7 @@
                     
                     <!-- Upload Form -->
                     <form method="POST" action="{{ url_for('admin.update_logo') }}" enctype="multipart/form-data">
-                        {{ csrf_token() }}
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="mb-3">
                             <label for="logo_file" class="form-label">Subir Nuevo Logo</label>
                             <input type="file" class="form-control" id="logo_file" name="logo_file" 
@@ -60,7 +60,7 @@
                     {% if current_logo %}
                     <hr>
                     <form method="POST" action="{{ url_for('admin.remove_logo') }}">
-                        {{ csrf_token() }}
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <button type="submit" class="btn btn-outline-danger" 
                                 onclick="return confirm('¿Estás seguro de que deseas eliminar el logo actual?')">
                             <i class="bi bi-trash"></i> Eliminar Logo Actual

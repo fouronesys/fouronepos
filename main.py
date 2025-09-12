@@ -17,6 +17,12 @@ if not app.secret_key:
 # Configure CSRF protection
 csrf = CSRFProtect(app)
 app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 hour token lifetime
+
+# Make csrf_token available in all templates
+@app.context_processor
+def inject_csrf_token():
+    from flask_wtf.csrf import generate_csrf
+    return dict(csrf_token=generate_csrf)
 # configure the database, relative to the app instance folder
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
