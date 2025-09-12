@@ -273,3 +273,14 @@ class PasswordResetToken(db.Model):
     
     # Relationships
     user = relationship("User", back_populates="password_reset_tokens")
+
+
+class SystemConfiguration(db.Model):
+    __tablename__ = 'system_configuration'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    value: Mapped[str] = mapped_column(Text, nullable=True)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

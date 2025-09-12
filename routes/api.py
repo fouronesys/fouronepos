@@ -606,3 +606,34 @@ def send_to_kitchen(sale_id):
         return jsonify({'error': str(e)}), 400
     except Exception as e:
         return jsonify({'error': f'Error interno: {str(e)}'}), 500
+
+
+@bp.route('/tables')
+def get_tables():
+    """Get tables filtered by status"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Get status filter from query params
+    status_filter = request.args.get('status')
+    
+    query = models.Table.query
+    
+    if status_filter:
+        if status_filter == 'available':
+            query = query.filter_by(status=models.TableStatus.AVAILABLE)
+        elif status_filter == 'occupied':
+            query = query.filter_by(status=models.TableStatus.OCCUPIED)
+        elif status_filter == 'reserved':
+            query = query.filter_by(status=models.TableStatus.RESERVED)
+    
+    tables = query.order_by(models.Table.number).all()
+    
+    return jsonify([{
+        'id': table.id,
+        'number': table.number,
+        'name': table.name,
+        'capacity': table.capacity,
+        'status': table.status.value
+    } for table in tables])

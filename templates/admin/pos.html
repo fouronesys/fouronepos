@@ -49,6 +49,16 @@
                     <h5><i class="bi bi-cart"></i> Carrito</h5>
                 </div>
                 <div class="card-body">
+                    <!-- Table Selection -->
+                    <div class="mb-3">
+                        <label for="table-select" class="form-label">
+                            <i class="bi bi-table"></i> Mesa (Opcional)
+                        </label>
+                        <select class="form-control" id="table-select">
+                            <option value="">Sin mesa asignada</option>
+                        </select>
+                    </div>
+                    
                     <div id="cart-items">
                         <p class="text-muted">No hay productos en el carrito</p>
                     </div>
@@ -71,10 +81,10 @@
                     </div>
                     
                     <div class="d-grid gap-2">
-                        <button class="btn btn-success btn-touch" id="process-sale">
+                        <button class="btn btn-success btn-touch" id="process-sale" onclick="processSale()">
                             <i class="bi bi-check-circle"></i> Procesar Venta
                         </button>
-                        <button class="btn btn-outline-secondary" id="clear-cart">
+                        <button class="btn btn-outline-secondary" id="clear-cart" onclick="clearCart()">
                             <i class="bi bi-trash"></i> Limpiar
                         </button>
                     </div>
@@ -184,13 +194,118 @@ function removeFromCart(productId) {
     updateCartDisplay();
 }
 
-// Load initial products
+// Process sale
+function processSale() {
+    if (cart.length === 0) {
+        alert('El carrito está vacío');
+        return;
+    }
+    
+    const tableId = document.getElementById('table-select').value || null;
+    
+    // Create sale first
+    fetch('/api/sales', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            table_id: tableId
+        })
+    })
+    .then(response => response.json())
+    .then(sale => {
+        if (sale.error) {
+            alert('Error al crear venta: ' + sale.error);
+            return;
+        }
+        
+        // Add items to sale
+        const promises = cart.map(item => 
+            fetch(`/api/sales/${sale.id}/items`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    product_id: item.id,
+                    quantity: item.quantity
+                })
+            })
+        );
+        
+        Promise.all(promises)
+        .then(() => {
+            // Finalize sale
+            return fetch(`/api/sales/${sale.id}/finalize`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    payment_method: 'efectivo',
+                    ncf_type: 'consumo'
+                })
+            });
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.error) {
+                alert('Error al finalizar venta: ' + result.error);
+                return;
+            }
+            alert(`Venta procesada exitosamente. NCF: ${result.ncf}`);
+            clearCart();
+            loadTables(); // Refresh table list
+        })
+        .catch(error => {
+            console.error('Error processing sale:', error);
+            alert('Error al procesar la venta');
+        });
+    })
+    .catch(error => {
+        console.error('Error creating sale:', error);
+        alert('Error al crear la venta');
+    });
+}
+
+// Clear cart
+function clearCart() {
+    cart = [];
+    updateCartDisplay();
+    document.getElementById('table-select').value = '';
+}
+
+// Load available tables
+function loadTables() {
+    fetch('/api/tables?status=available')
+        .then(response => response.json())
+        .then(tables => {
+            const tableSelect = document.getElementById('table-select');
+            tableSelect.innerHTML = '<option value="">Sin mesa asignada</option>';
+            
+            tables.forEach(table => {
+                const option = document.createElement('option');
+                option.value = table.id;
+                option.textContent = `Mesa ${table.number}${table.name ? ' - ' + table.name : ''}`;
+                tableSelect.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading tables:', error);
+        });
+}
+
+// Load initial products and tables
 document.addEventListener('DOMContentLoaded', function() {
     const firstCategory = document.querySelector('[data-bs-toggle="pill"]');
     if (firstCategory) {
         const categoryId = firstCategory.getAttribute('data-bs-target').replace('#category-', '');
         loadProducts(categoryId);
     }
+    
+    // Load available tables
+    loadTables();
     
     // Load products when switching categories
     document.addEventListener('shown.bs.tab', function(e) {

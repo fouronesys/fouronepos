@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Mesas - Four One POS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-table"></i> Gestión de Mesas</h2>
+        <button class="btn btn-primary btn-touch" data-bs-toggle="modal" data-bs-target="#tableModal" onclick="newTable()">
+            <i class="bi bi-plus-circle"></i> Nueva Mesa
+        </button>
+    </div>
+
+    <!-- Tables Grid -->
+    <div class="row">
+        {% for table in tables %}
+        <div class="col-md-4 col-lg-3 mb-3">
+            <div class="card h-100 
+                        {% if table.status.value == 'available' %}border-success
+                        {% elif table.status.value == 'occupied' %}border-danger
+                        {% else %}border-warning{% endif %}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title">
+                            <i class="bi bi-table"></i> Mesa {{ table.number }}
+                        </h5>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li>
+                                    <a class="dropdown-item" href="#" onclick="editTable({{ table.id }}, '{{ table.number }}', '{{ table.name or '' }}', {{ table.capacity }}, '{{ table.status.value }}')">
+                                        <i class="bi bi-pencil"></i> Editar
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item text-danger" href="#" onclick="deleteTable({{ table.id }}, '{{ table.number }}')">
+                                        <i class="bi bi-trash"></i> Eliminar
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    {% if table.name %}
+                    <p class="text-muted mb-2">{{ table.name }}</p>
+                    {% endif %}
+                    
+                    <p class="mb-2">
+                        <i class="bi bi-people"></i> {{ table.capacity }} personas
+                    </p>
+                    
+                    <div class="mb-3">
+                        {% if table.status.value == 'available' %}
+                        <span class="badge bg-success">Disponible</span>
+                        {% elif table.status.value == 'occupied' %}
+                        <span class="badge bg-danger">Ocupada</span>
+                        {% else %}
+                        <span class="badge bg-warning">Reservada</span>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Show current sale info if occupied -->
+                    {% if table.status.value == 'occupied' %}
+                    <div class="alert alert-info p-2">
+                        <small>
+                            <i class="bi bi-clock"></i> En uso
+                            <br>Revisar en sistema de meseros
+                        </small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        
+        {% if not tables %}
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-table display-1 text-muted"></i>
+                    <h5 class="text-muted mt-3">No hay mesas creadas</h5>
+                    <p class="text-muted">Crea tu primera mesa para comenzar</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Table Modal -->
+<div class="modal fade" id="tableModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="tableModalTitle">Nueva Mesa</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="tableForm" method="POST">
+                {{ csrf_token() }}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="tableNumber" class="form-label">Número de Mesa</label>
+                        <input type="text" class="form-control" id="tableNumber" name="number" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="tableName" class="form-label">Nombre (Opcional)</label>
+                        <input type="text" class="form-control" id="tableName" name="name" placeholder="Ej: Terraza, VIP, etc.">
+                    </div>
+                    <div class="mb-3">
+                        <label for="tableCapacity" class="form-label">Capacidad</label>
+                        <input type="number" class="form-control" id="tableCapacity" name="capacity" value="4" min="1" max="20" required>
+                    </div>
+                    <div class="mb-3" id="statusDiv" style="display: none;">
+                        <label for="tableStatus" class="form-label">Estado</label>
+                        <select class="form-control" id="tableStatus" name="status">
+                            <option value="available">Disponible</option>
+                            <option value="occupied">Ocupada</option>
+                            <option value="reserved">Reservada</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Mesa</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Table functions
+function newTable() {
+    document.getElementById('tableModalTitle').textContent = 'Nueva Mesa';
+    document.getElementById('tableForm').reset();
+    document.getElementById('tableForm').action = '{{ url_for("admin.create_table") }}';
+    document.getElementById('statusDiv').style.display = 'none';
+    document.getElementById('tableCapacity').value = '4';
+}
+
+function editTable(tableId, tableNumber, tableName, tableCapacity, tableStatus) {
+    document.getElementById('tableModalTitle').textContent = 'Editar Mesa';
+    document.getElementById('tableNumber').value = tableNumber;
+    document.getElementById('tableName').value = tableName;
+    document.getElementById('tableCapacity').value = tableCapacity;
+    document.getElementById('tableStatus').value = tableStatus;
+    document.getElementById('tableForm').action = '{{ url_for("admin.edit_table", table_id=0) }}'.replace('0', tableId);
+    document.getElementById('statusDiv').style.display = 'block';
+    
+    var modal = new bootstrap.Modal(document.getElementById('tableModal'));
+    modal.show();
+}
+
+function deleteTable(tableId, tableNumber) {
+    if (confirm('¿Estás seguro de que deseas eliminar la Mesa ' + tableNumber + '?')) {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{{ url_for("admin.delete_table", table_id=0) }}'.replace('0', tableId);
+        
+        var csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrf_token';
+        csrfInput.value = '{{ csrf_token() }}';
+        form.appendChild(csrfInput);
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
+{% endblock %}

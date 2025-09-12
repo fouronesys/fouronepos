@@ -110,6 +110,375 @@ def products():
     return render_template('admin/products.html', products=products, categories=categories)
 
 
+@bp.route('/categories/create', methods=['POST'])
+def create_category():
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.products'))
+    
+    try:
+        name = request.form['name'].strip()
+        description = request.form.get('description', '').strip()
+        
+        if not name:
+            flash('El nombre de la categoría es obligatorio', 'error')
+            return redirect(url_for('admin.products'))
+        
+        # Check if name already exists
+        existing_category = models.Category.query.filter_by(name=name, active=True).first()
+        if existing_category:
+            flash('Ya existe una categoría con ese nombre', 'error')
+            return redirect(url_for('admin.products'))
+        
+        new_category = models.Category()
+        new_category.name = name
+        new_category.description = description
+        new_category.active = True
+        
+        db.session.add(new_category)
+        db.session.commit()
+        
+        flash(f'Categoría {name} creada exitosamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al crear categoría: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.products'))
+
+@bp.route('/categories/<int:category_id>/edit', methods=['POST'])
+def edit_category(category_id):
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.products'))
+    
+    try:
+        category = models.Category.query.get_or_404(category_id)
+        
+        name = request.form['name'].strip()
+        description = request.form.get('description', '').strip()
+        
+        if not name:
+            flash('El nombre de la categoría es obligatorio', 'error')
+            return redirect(url_for('admin.products'))
+        
+        # Check if name already exists (excluding current category)
+        existing_category = models.Category.query.filter(
+            models.Category.name == name, 
+            models.Category.active == True, 
+            models.Category.id != category_id
+        ).first()
+        if existing_category:
+            flash('Ya existe una categoría con ese nombre', 'error')
+            return redirect(url_for('admin.products'))
+        
+        category.name = name
+        category.description = description
+        
+        db.session.commit()
+        
+        flash(f'Categoría {name} actualizada exitosamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al actualizar categoría: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.products'))
+
+@bp.route('/categories/<int:category_id>/delete', methods=['POST'])
+def delete_category(category_id):
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.products'))
+    
+    try:
+        category = models.Category.query.get_or_404(category_id)
+        
+        # Check if category has products
+        products_count = models.Product.query.filter_by(category_id=category_id, active=True).count()
+        if products_count > 0:
+            flash(f'No se puede eliminar la categoría porque tiene {products_count} productos asociados', 'error')
+            return redirect(url_for('admin.products'))
+        
+        category.active = False
+        db.session.commit()
+        
+        flash(f'Categoría {category.name} eliminada exitosamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar categoría: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.products'))
+
+
+# Table Management Routes  
+@bp.route('/tables')
+def tables():
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return user
+    
+    tables = models.Table.query.order_by(models.Table.number).all()
+    return render_template('admin/tables.html', tables=tables)
+
+@bp.route('/tables/create', methods=['POST'])
+def create_table():
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.tables'))
+    
+    try:
+        number = request.form['number'].strip()
+        name = request.form.get('name', '').strip()
+        capacity = int(request.form.get('capacity', 4))
+        
+        if not number:
+            flash('El número de mesa es obligatorio', 'error')
+            return redirect(url_for('admin.tables'))
+        
+        # Check if number already exists
+        existing_table = models.Table.query.filter_by(number=number).first()
+        if existing_table:
+            flash('Ya existe una mesa con ese número', 'error')
+            return redirect(url_for('admin.tables'))
+        
+        new_table = models.Table()
+        new_table.number = number
+        new_table.name = name
+        new_table.capacity = capacity
+        new_table.status = models.TableStatus.AVAILABLE
+        
+        db.session.add(new_table)
+        db.session.commit()
+        
+        flash(f'Mesa {number} creada exitosamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al crear mesa: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.tables'))
+
+@bp.route('/tables/<int:table_id>/edit', methods=['POST'])
+def edit_table(table_id):
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.tables'))
+    
+    try:
+        table = models.Table.query.get_or_404(table_id)
+        
+        number = request.form['number'].strip()
+        name = request.form.get('name', '').strip()
+        capacity = int(request.form.get('capacity', 4))
+        status = request.form.get('status', 'available')
+        
+        if not number:
+            flash('El número de mesa es obligatorio', 'error')
+            return redirect(url_for('admin.tables'))
+        
+        # Check if number already exists (excluding current table)
+        existing_table = models.Table.query.filter(
+            models.Table.number == number, 
+            models.Table.id != table_id
+        ).first()
+        if existing_table:
+            flash('Ya existe una mesa con ese número', 'error')
+            return redirect(url_for('admin.tables'))
+        
+        table.number = number
+        table.name = name
+        table.capacity = capacity
+        table.status = models.TableStatus(status)
+        
+        db.session.commit()
+        
+        flash(f'Mesa {number} actualizada exitosamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al actualizar mesa: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.tables'))
+
+@bp.route('/tables/<int:table_id>/delete', methods=['POST'])
+def delete_table(table_id):
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.tables'))
+    
+    try:
+        table = models.Table.query.get_or_404(table_id)
+        
+        # Check if table has active sales
+        active_sales = models.Sale.query.filter_by(table_id=table_id, status='pending').count()
+        if active_sales > 0:
+            flash(f'No se puede eliminar la mesa porque tiene {active_sales} ventas activas', 'error')
+            return redirect(url_for('admin.tables'))
+        
+        db.session.delete(table)
+        db.session.commit()
+        
+        flash(f'Mesa {table.number} eliminada exitosamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar mesa: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.tables'))
+
+
+# System Configuration Routes
+@bp.route('/settings')
+def settings():
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Get current logo configuration
+    logo_config = models.SystemConfiguration.query.filter_by(key='receipt_logo').first()
+    current_logo = logo_config.value if logo_config else None
+    
+    return render_template('admin/settings.html', current_logo=current_logo)
+
+@bp.route('/settings/logo', methods=['POST'])
+def update_logo():
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.settings'))
+    
+    try:
+        # Check if file was uploaded
+        if 'logo_file' not in request.files:
+            flash('No se seleccionó ningún archivo', 'error')
+            return redirect(url_for('admin.settings'))
+        
+        file = request.files['logo_file']
+        
+        if file.filename == '':
+            flash('No se seleccionó ningún archivo', 'error')
+            return redirect(url_for('admin.settings'))
+        
+        # Validate file type
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif'}
+        filename = file.filename or ''
+        if not ('.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+            flash('Solo se permiten archivos PNG, JPG, JPEG y GIF', 'error')
+            return redirect(url_for('admin.settings'))
+        
+        # Validate file size (max 500KB)
+        file.seek(0, 2)  # Seek to end of file
+        file_size = file.tell()
+        file.seek(0)  # Reset to beginning
+        if file_size > 500 * 1024:  # 500KB limit
+            flash('El archivo es demasiado grande. Máximo 500KB permitido', 'error')
+            return redirect(url_for('admin.settings'))
+        
+        # Create logos directory if it doesn't exist
+        import os
+        from werkzeug.utils import secure_filename
+        logos_dir = os.path.join('static', 'uploads', 'logos')
+        if not os.path.exists(logos_dir):
+            os.makedirs(logos_dir, exist_ok=True)
+        
+        # Generate unique filename with secure_filename
+        import uuid
+        file_extension = filename.rsplit('.', 1)[1].lower()
+        base_name = secure_filename(filename.rsplit('.', 1)[0])
+        unique_filename = f'{base_name}_{uuid.uuid4().hex[:8]}.{file_extension}'
+        
+        # Save file
+        file_path = os.path.join(logos_dir, unique_filename)
+        file.save(file_path)
+        
+        # Update or create configuration
+        logo_config = models.SystemConfiguration.query.filter_by(key='receipt_logo').first()
+        if logo_config:
+            # Remove old logo file if exists
+            if logo_config.value:
+                old_file_path = logo_config.value
+                if os.path.exists(old_file_path):
+                    os.remove(old_file_path)
+            logo_config.value = file_path
+            logo_config.updated_at = datetime.utcnow()
+        else:
+            logo_config = models.SystemConfiguration()
+            logo_config.key = 'receipt_logo'
+            logo_config.value = file_path
+            logo_config.description = 'Logo personalizado para recibos'
+            db.session.add(logo_config)
+        
+        db.session.commit()
+        flash('Logo del recibo actualizado exitosamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al actualizar logo: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.settings'))
+
+@bp.route('/settings/logo/remove', methods=['POST'])
+def remove_logo():
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.settings'))
+    
+    try:
+        logo_config = models.SystemConfiguration.query.filter_by(key='receipt_logo').first()
+        if logo_config and logo_config.value:
+            # Remove file
+            import os
+            if os.path.exists(logo_config.value):
+                os.remove(logo_config.value)
+            
+            # Remove configuration
+            db.session.delete(logo_config)
+            db.session.commit()
+            
+            flash('Logo del recibo eliminado exitosamente', 'success')
+        else:
+            flash('No hay logo configurado para eliminar', 'warning')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar logo: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.settings'))
+
+
 @bp.route('/reports')
 def reports():
     user = require_admin_or_cashier()
