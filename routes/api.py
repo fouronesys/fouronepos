@@ -309,15 +309,24 @@ def finalize_sale(sale_id):
             # Assign the cash register to the sale for NCF generation
             sale.cash_register_id = user_cash_register.id
         
-        # Get NCF sequence with row-level lock to prevent concurrent access
+        # Get shared NCF sequence with row-level lock to prevent concurrent access
+        # Uses global shared sequences for fiscal compliance across all registers
+        shared_cash_register = db.session.query(models.CashRegister).filter_by(
+            name="Secuencias NCF Compartidas",
+            active=True
+        ).first()
+        
+        if not shared_cash_register:
+            raise ValueError('Configuración de secuencias NCF compartidas no encontrada. Contacta al administrador.')
+            
         ncf_sequence = db.session.query(models.NCFSequence).filter_by(
-            cash_register_id=sale.cash_register_id,
+            cash_register_id=shared_cash_register.id,
             ncf_type=models.NCFType(ncf_type),
             active=True
         ).with_for_update().first()
         
         if not ncf_sequence:
-            raise ValueError(f'No hay secuencia NCF activa para tipo {ncf_type} en esta caja')
+            raise ValueError(f'No hay secuencia NCF compartida activa para tipo {ncf_type}. Contacta al administrador.')
         
         # Check if sequence is exhausted (treat end_number as inclusive)
         if ncf_sequence.current_number > ncf_sequence.end_number:
