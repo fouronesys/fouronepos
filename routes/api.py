@@ -134,7 +134,6 @@ def add_sale_item(sale_id):
     if not isinstance(user, models.User):
         return user
     
-    sale = models.Sale.query.get_or_404(sale_id)
     data = request.get_json()
     
     if not data:
@@ -142,10 +141,6 @@ def add_sale_item(sale_id):
         
     if 'product_id' not in data or 'quantity' not in data:
         return jsonify({'error': 'Faltan campos requeridos: product_id y quantity'}), 400
-    
-    product = models.Product.query.get(data['product_id'])
-    if not product:
-        return jsonify({'error': 'Producto no encontrado'}), 404
     
     # Validate quantity is positive integer
     try:
@@ -155,59 +150,76 @@ def add_sale_item(sale_id):
     except (ValueError, TypeError):
         return jsonify({'error': 'La cantidad debe ser un número válido'}), 400
     
-    # Check for existing sale items of the same product in this sale
-    existing_quantity = db.session.query(db.func.sum(models.SaleItem.quantity)).filter_by(
-        sale_id=sale_id, 
-        product_id=product.id
-    ).scalar() or 0
+    # CRITICAL: Use transactional locking to prevent post-finalization mutations
+    try:
+        with db.session.begin():
+            # Lock the sale to prevent concurrent finalization
+            sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
+            if not sale:
+                return jsonify({'error': 'Venta no encontrada'}), 404
+            
+            # CRITICAL: Re-check sale status after acquiring lock (prevents post-finalization mutations)
+            if sale.status != 'pending':
+                return jsonify({'error': 'Solo se pueden modificar ventas pendientes'}), 400
+            
+            # Lock product to ensure consistent stock validation
+            product = db.session.query(models.Product).filter_by(id=data['product_id']).with_for_update().first()
+            if not product:
+                return jsonify({'error': 'Producto no encontrado'}), 404
     
-    # Calculate total quantity (existing + new)
-    total_quantity = existing_quantity + quantity
+            # Check for existing sale items of the same product in this sale
+            existing_quantity = db.session.query(db.func.sum(models.SaleItem.quantity)).filter_by(
+                sale_id=sale_id, 
+                product_id=product.id
+            ).scalar() or 0
+            
+            # Calculate total quantity (existing + new)
+            total_quantity = existing_quantity + quantity
+            
+            # Check stock availability against total quantity
+            if product.stock < total_quantity:
+                return jsonify({
+                    'error': f'Stock insuficiente para {product.name}. Disponible: {product.stock}, ya en venta: {existing_quantity}, solicitado: {quantity}'
+                }), 400
     
-    # Check stock availability against total quantity
-    if product.stock < total_quantity:
-        return jsonify({
-            'error': f'Stock insuficiente para {product.name}. Disponible: {product.stock}, ya en venta: {existing_quantity}, solicitado: {quantity}'
-        }), 400
-    
-    # Only allow adding items to pending sales
-    if sale.status != 'pending':
-        return jsonify({'error': 'Solo se pueden modificar ventas pendientes'}), 400
-    
-    # Check if product already exists in this sale - merge quantities instead of creating duplicate lines
-    existing_item = models.SaleItem.query.filter_by(sale_id=sale_id, product_id=product.id).first()
-    
-    if existing_item:
-        # Update existing item quantity
-        existing_item.quantity = total_quantity
-        existing_item.total_price = product.price * total_quantity
-        sale_item = existing_item
-    else:
-        # Create new sale item
-        sale_item = models.SaleItem()
-        sale_item.sale_id = sale_id
-        sale_item.product_id = product.id
-        sale_item.quantity = quantity
-        sale_item.unit_price = product.price
-        sale_item.total_price = product.price * quantity
+            # Check if product already exists in this sale - merge quantities instead of creating duplicate lines
+            existing_item = models.SaleItem.query.filter_by(sale_id=sale_id, product_id=product.id).first()
+            
+            if existing_item:
+                # Update existing item quantity
+                existing_item.quantity = total_quantity
+                existing_item.total_price = product.price * total_quantity
+                sale_item = existing_item
+            else:
+                # Create new sale item
+                sale_item = models.SaleItem()
+                sale_item.sale_id = sale_id
+                sale_item.product_id = product.id
+                sale_item.quantity = quantity
+                sale_item.unit_price = product.price
+                sale_item.total_price = product.price * quantity
+                
+                db.session.add(sale_item)
+            
+            # Recalculate sale totals from all items (to handle both new and updated items correctly)
+            total_items_price = sum(item.total_price for item in sale.sale_items)
+            sale.subtotal = total_items_price
+            sale.tax_amount = sale.subtotal * 0.18  # 18% ITBIS
+            sale.total = sale.subtotal + sale.tax_amount
+            
+            # Transaction commits automatically at the end of this block
         
-        db.session.add(sale_item)
-    
-    # Recalculate sale totals from all items (to handle both new and updated items correctly)
-    total_items_price = sum(item.total_price for item in sale.sale_items)
-    sale.subtotal = total_items_price
-    sale.tax_amount = sale.subtotal * 0.18  # 18% ITBIS
-    sale.total = sale.subtotal + sale.tax_amount
-    
-    db.session.commit()
-    
-    return jsonify({
-        'id': sale_item.id,
-        'product_name': product.name,
-        'quantity': sale_item.quantity,
-        'unit_price': sale_item.unit_price,
-        'total_price': sale_item.total_price
-    })
+        return jsonify({
+            'id': sale_item.id,
+            'product_name': product.name,
+            'quantity': sale_item.quantity,
+            'unit_price': sale_item.unit_price,
+            'total_price': sale_item.total_price
+        })
+        
+    except Exception as e:
+        # Handle any unexpected errors
+        return jsonify({'error': 'Error interno del servidor'}), 500
 
 
 @bp.route('/sales/<int:sale_id>/finalize', methods=['POST'])
@@ -252,6 +264,10 @@ def finalize_sale(sale_id):
             # Validate that sale is in pending status (only pending sales can be finalized)
             if sale.status != 'pending':
                 raise ValueError(f'No se puede finalizar una venta con estado {sale.status}')
+            
+            # PREVENT EMPTY SALES: Validate that sale has items before proceeding with NCF allocation
+            if not sale.sale_items:
+                raise ValueError('No se puede finalizar una venta sin productos')
             
             # Validate stock availability before proceeding with NCF allocation with concurrent safety
             # Load sale items and group by product for aggregate validation
