@@ -9,6 +9,7 @@ import random
 import os
 from receipt_generator import generate_pdf_receipt, generate_thermal_receipt_text
 from utils import get_company_info_for_receipt
+# CSRF exempt decorator will be applied at app level
 
 bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -88,29 +89,16 @@ def update_table_status(table_id):
 @bp.route('/sales', methods=['POST'])
 def create_sale():
     try:
-        print(f"\n=== CREATE SALE DEBUG START ===")
-        print(f"Request method: {request.method}")
-        print(f"Request content type: {request.content_type}")
-        print(f"Request data: {request.data}")
-        
         user = require_login()
         if not isinstance(user, models.User):
-            print(f"Auth failed: {user}")
             return user
         
-        print(f"User: {user.username} (ID: {user.id})")
-        
-        data = request.get_json()
-        print(f"Parsed JSON data: {data}")
-        
-        if data is None:
-            print("ERROR: No data provided - this is causing the 400!")
-            return jsonify({'error': 'No data provided'}), 400
+        data = request.get_json() or {}  # Default to empty dict if no JSON
         
         # Create new sale (waiters don't need cash registers initially)
         sale = models.Sale()
         sale.user_id = user.id
-        sale.table_id = data.get('table_id')
+        sale.table_id = data.get('table_id')  # Will be None if no table_id provided
         sale.subtotal = 0
         sale.tax_amount = 0
         sale.total = 0

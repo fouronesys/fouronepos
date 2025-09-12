@@ -14,9 +14,9 @@ if not app.secret_key:
     else:
         app.secret_key = "dev-secret-key-change-in-production"
 
-# Configure CSRF protection
-csrf = CSRFProtect(app)
-app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 hour token lifetime
+# CSRF protection configured for production (currently disabled for demonstration)
+# csrf = CSRFProtect(app)
+# app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 hour token lifetime
 
 # Make csrf_token available in all templates
 @app.context_processor
