@@ -1,0 +1,52 @@
+Genera un sistema POS web ligero y listo para producción en Render, diseñado para bares y restaurantes en República Dominicana. El sistema debe estar hecho en Python con Flask y PostgreSQL, con interfaz web en HTML, Bootstrap 5 y JavaScript básico, optimizada para tablets.
+
+Requisitos principales:
+1. **Usuarios y roles:**
+   - Roles: administrador, cajero y mesero.
+   - Login seguro (bcrypt).
+   - Cada caja vinculada a un cajero y a una secuencia de NCF.
+
+2. **POS con múltiples cajas:**
+   - Soporte para varias cajas/terminales en red.
+   - Secuencias de NCF configurables (consumo, crédito fiscal, gubernamental).
+   - Validación estricta de rangos y registro de NCF anulados.
+   - Impresión de tickets con NCF en formato **80 mm y 58 mm**.
+
+3. **Vista para Administrador/Caja (Tablet o PC en barra):**
+   - Pantalla de facturación rápida con productos y cobros.
+   - Emisión de facturas con NCF.
+   - Reportes de ventas del día, caja cerrada, anulaciones.
+   - Acceso a inventario y compras.
+   - Configuración de secuencias NCF.
+
+4. **Vista para Meseros (Tablet en mesas):**
+   - Interfaz simplificada y táctil con botones grandes.
+   - Funciones: abrir mesa, agregar pedidos, enviar comanda a cocina, dividir cuenta, cerrar mesa.
+   - No permite acceso a configuraciones ni reportes.
+   - Optimizado para tablets y móviles (Bootstrap grid + diseño mobile-first).
+
+5. **Inventario y compras:**
+   - Registro de productos (costo, precio, categoría, impuestos, stock).
+   - Alertas de stock bajo.
+   - Registro de compras con NCF de proveedor y actualización de inventario.
+   - Gestión de proveedores (nombre, RNC, contacto).
+
+6. **Reportes fiscales DGII:**
+   - Exportar **606 (compras)** y **607 (ventas)** en formato CSV según layouts oficiales DGII.
+   - Reportes internos: ventas por caja, por producto, por usuario.
+   - Historial de facturas emitidas y anuladas.
+
+7. **Impresión de tickets:**
+   - Plantillas adaptadas a **80 mm y 58 mm**.
+   - Generación en PDF para impresión desde tablets.
+   - Opción ESC/POS para impresoras térmicas de red.
+
+8. **Arquitectura lista para Render:**
+   - Flask modular con Blueprints.
+   - SQLAlchemy + PostgreSQL (servicio Render).
+   - Plantillas Jinja2 con Bootstrap.
+   - Archivos `requirements.txt`, `Procfile` y `render.yaml` listos para despliegue.
+   - Código comentado y optimizado para bajo consumo de recursos.
+
+Objetivo:
+Un POS rápido y ligero con soporte multi-caja, dos vistas diferenciadas (administrador/caja y meseros en tablets), impresión de tickets en 80 mm/58 mm y cumplimiento fiscal en República Dominicana (NCF impresos, reportes 606/607).
