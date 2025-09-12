@@ -251,10 +251,11 @@ def export_607():
         else:
             end_date = datetime(year, month + 1, 1)
         
-        # Get sales for the period
+        # Get sales for the period (only completed sales)
         sales = Sale.query.filter(
             Sale.created_at >= start_date,
-            Sale.created_at < end_date
+            Sale.created_at < end_date,
+            Sale.status == 'completed'
         ).all()
         
         # Generate CSV
@@ -266,15 +267,23 @@ def export_607():
         
         # Write sales records
         for sale in sales:
-            # Most sales are to general public (no specific customer)
-            rnc_cedula = sale.customer_id or '00000000000'  # Default for general public
-            tipo_id = '2'  # Default to Cédula for general public
+            # Determine identification type based on customer RNC/Cédula
+            if sale.customer_rnc and len(sale.customer_rnc) == 9:
+                tipo_id = '1'  # RNC
+                rnc_cedula = sale.customer_rnc
+            elif sale.customer_rnc and len(sale.customer_rnc) == 11:
+                tipo_id = '2'  # Cédula
+                rnc_cedula = sale.customer_rnc
+            else:
+                # Most sales are to general public (no specific customer)
+                tipo_id = '2'  # Default to Cédula for general public
+                rnc_cedula = '00000000000'  # Default for general public
             
             # Format date as YYYYMMDD
-            fecha_comprobante = sale.sale_date.strftime('%Y%m%d')
+            fecha_comprobante = sale.created_at.strftime('%Y%m%d')
             
             # Calculate amounts
-            monto_facturado = sale.total_amount
+            monto_facturado = sale.total
             itbis_facturado = sale.tax_amount or 0
             
             # Write row
@@ -363,10 +372,11 @@ def preview_607(year, month):
         else:
             end_date = datetime(year, month + 1, 1)
         
-        # Get sales for the period
+        # Get sales for the period (only completed sales)
         sales = Sale.query.filter(
             Sale.created_at >= start_date,
-            Sale.created_at < end_date
+            Sale.created_at < end_date,
+            Sale.status == 'completed'
         ).all()
         
         return render_template('dgii/preview_607.html',
