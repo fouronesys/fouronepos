@@ -54,6 +54,12 @@ app.register_blueprint(api.bp)
 app.register_blueprint(inventory.bp)
 
 
+@app.route('/sw.js')
+def service_worker():
+    """Serve service worker from root to control entire app scope"""
+    from flask import send_from_directory
+    return send_from_directory('static', 'sw.js', mimetype='application/javascript')
+
 @app.route('/')
 def index():
     if 'user_id' not in session:
