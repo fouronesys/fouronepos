@@ -210,11 +210,9 @@
                 {% endif %}
             </div>
 
-            <!-- Receipt Title -->
-            <div class="receipt-title">RECIBO FISCAL</div>
 
             <!-- Receipt Details -->
-            <div class="receipt-details">
+            <div class="receipt-details" style="text-align: center;">
                 <div>Fecha: {{ sale_data.created_at.strftime('%d/%m/%Y %H:%M:%S') if sale_data.created_at else 'N/A' }}</div>
                 <div>Venta No: {{ sale_data.id or 'N/A' }}</div>
                 {% if sale_data.ncf %}
@@ -227,7 +225,7 @@
             </div>
 
             <!-- Items Table -->
-            <table class="items-table">
+            <table class="items-table" style="margin: 0 auto;">
                 <thead>
                     <tr>
                         <th class="item-qty">Cant.</th>
@@ -252,7 +250,7 @@
             </table>
 
             <!-- Totals Section -->
-            <div class="totals-section">
+            <div class="totals-section" style="text-align: center;">
                 <div class="total-line">
                     <span>Subtotal:</span>
                     <span>{{ "RD$ %.2f"|format(sale_data.subtotal or 0) }}</span>
@@ -268,17 +266,9 @@
             </div>
 
             <!-- Fiscal Information -->
-            {% if sale_data.ncf or company_info.rnc %}
+            {% if sale_data.ncf_type_display %}
                 <div class="fiscal-info">
-                    <div><strong>INFORMACIÓN FISCAL</strong></div>
-                    {% if company_info.rnc %}
-                        <div>RNC Empresa: {{ company_info.rnc }}</div>
-                    {% endif %}
-                    {% if sale_data.ncf %}
-                        <div>NCF: {{ sale_data.ncf }}</div>
-                        <div>Tipo: {{ sale_data.ncf_type_display or 'Comprobante Fiscal' }}</div>
-                    {% endif %}
-                    <div>Generado: {{ moment().format('DD/MM/YYYY HH:mm:ss') }}</div>
+                    <div>Tipo: {{ sale_data.ncf_type_display }}</div>
                 </div>
             {% endif %}
 
