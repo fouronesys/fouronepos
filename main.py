@@ -1,16 +1,7 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase
 import bcrypt
 from datetime import datetime
-
-
-class Base(DeclarativeBase):
-    pass
-
-
-db = SQLAlchemy(model_class=Base)
 
 # create the app
 app = Flask(__name__)
@@ -28,12 +19,15 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
 }
 
+# Import models and get db instance
+import models  # noqa: F401
+from models import db
+
 # initialize the app with the extension, flask-sqlalchemy >= 3.0.x
 db.init_app(app)
 
 with app.app_context():
-    # Make sure to import the models here or their tables won't be created
-    import models  # noqa: F401
+    # Create all database tables
     db.create_all()
 
 

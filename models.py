@@ -1,4 +1,12 @@
-from main import db
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import DeclarativeBase
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+db = SQLAlchemy(model_class=Base)
 from datetime import datetime
 from sqlalchemy import String, Integer, Float, DateTime, Boolean, Text, ForeignKey, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship

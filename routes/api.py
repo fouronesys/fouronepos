@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, session
 import models
-from main import db
+from models import db
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import text

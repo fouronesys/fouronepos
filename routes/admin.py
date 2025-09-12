@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
 import models
-from main import db
+from models import db
 from datetime import datetime, date
 from sqlalchemy import func, and_
 
