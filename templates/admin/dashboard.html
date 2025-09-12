@@ -97,42 +97,62 @@
         </div>
         
         <div class="col-md-4">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-header">
                     <h5><i class="bi bi-gear"></i> Acciones Rápidas</h5>
                 </div>
                 <div class="card-body">
-                    <div class="d-grid gap-2">
-                        <a href="{{ url_for('admin.users') }}" class="btn btn-outline-danger btn-touch">
-                            <i class="bi bi-people"></i> Gestionar Usuarios
-                        </a>
-                        <a href="{{ url_for('admin.cash_registers') }}" class="btn btn-outline-primary btn-touch">
-                            <i class="bi bi-cash-register"></i> Cajas Registradoras
-                        </a>
-                        <a href="{{ url_for('admin.products') }}" class="btn btn-outline-primary btn-touch">
-                            <i class="bi bi-box"></i> Gestionar Productos
-                        </a>
-                        <a href="{{ url_for('admin.tables') }}" class="btn btn-outline-success btn-touch">
-                            <i class="bi bi-table"></i> Gestionar Mesas
-                        </a>
-                        <a href="{{ url_for('inventory.suppliers') }}" class="btn btn-outline-success btn-touch">
-                            <i class="bi bi-building"></i> Proveedores
-                        </a>
-                        <a href="{{ url_for('inventory.purchases') }}" class="btn btn-outline-info btn-touch">
-                            <i class="bi bi-cart-plus"></i> Compras
-                        </a>
-                        <a href="{{ url_for('inventory.stock_alerts') }}" class="btn btn-outline-warning btn-touch">
-                            <i class="bi bi-exclamation-triangle"></i> Alertas Stock
-                        </a>
-                        <a href="{{ url_for('admin.reports') }}" class="btn btn-outline-secondary btn-touch">
-                            <i class="bi bi-file-earmark-text"></i> Reportes
-                        </a>
-                        <a href="{{ url_for('admin.ncf_sequences') }}" class="btn btn-outline-dark btn-touch">
-                            <i class="bi bi-file-earmark-ruled"></i> Secuencias NCF
-                        </a>
-                        <a href="{{ url_for('admin.settings') }}" class="btn btn-outline-secondary btn-touch">
-                            <i class="bi bi-gear"></i> Configuración
-                        </a>
+                    <div class="row g-2">
+                        <div class="col-lg-6 col-xl-12">
+                            <a href="{{ url_for('admin.users') }}" class="btn btn-outline-danger btn-touch w-100">
+                                <i class="bi bi-people"></i> Gestionar Usuarios
+                            </a>
+                        </div>
+                        <div class="col-lg-6 col-xl-12">
+                            <a href="{{ url_for('admin.cash_registers') }}" class="btn btn-outline-primary btn-touch w-100">
+                                <i class="bi bi-cash-register"></i> Cajas Registradoras
+                            </a>
+                        </div>
+                        <div class="col-lg-6 col-xl-12">
+                            <a href="{{ url_for('admin.products') }}" class="btn btn-outline-primary btn-touch w-100">
+                                <i class="bi bi-box"></i> Gestionar Productos
+                            </a>
+                        </div>
+                        <div class="col-lg-6 col-xl-12">
+                            <a href="{{ url_for('admin.tables') }}" class="btn btn-outline-success btn-touch w-100">
+                                <i class="bi bi-table"></i> Gestionar Mesas
+                            </a>
+                        </div>
+                        <div class="col-lg-6 col-xl-12">
+                            <a href="{{ url_for('inventory.suppliers') }}" class="btn btn-outline-success btn-touch w-100">
+                                <i class="bi bi-building"></i> Proveedores
+                            </a>
+                        </div>
+                        <div class="col-lg-6 col-xl-12">
+                            <a href="{{ url_for('inventory.purchases') }}" class="btn btn-outline-info btn-touch w-100">
+                                <i class="bi bi-cart-plus"></i> Compras
+                            </a>
+                        </div>
+                        <div class="col-lg-6 col-xl-12">
+                            <a href="{{ url_for('inventory.stock_alerts') }}" class="btn btn-outline-warning btn-touch w-100">
+                                <i class="bi bi-exclamation-triangle"></i> Alertas Stock
+                            </a>
+                        </div>
+                        <div class="col-lg-6 col-xl-12">
+                            <a href="{{ url_for('admin.reports') }}" class="btn btn-outline-secondary btn-touch w-100">
+                                <i class="bi bi-file-earmark-text"></i> Reportes
+                            </a>
+                        </div>
+                        <div class="col-lg-6 col-xl-12">
+                            <a href="{{ url_for('admin.ncf_sequences') }}" class="btn btn-outline-dark btn-touch w-100">
+                                <i class="bi bi-file-earmark-ruled"></i> Secuencias NCF
+                            </a>
+                        </div>
+                        <div class="col-lg-6 col-xl-12">
+                            <a href="{{ url_for('admin.settings') }}" class="btn btn-outline-secondary btn-touch w-100">
+                                <i class="bi bi-gear"></i> Configuración
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
