@@ -93,7 +93,7 @@ def create_sale():
             return user
         
         data = request.get_json()
-        if not data:
+        if data is None:
             return jsonify({'error': 'No data provided'}), 400
         
         # Create new sale (waiters don't need cash registers initially)
@@ -136,6 +136,12 @@ def add_sale_item(sale_id):
     
     sale = models.Sale.query.get_or_404(sale_id)
     data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+        
+    if 'product_id' not in data or 'quantity' not in data:
+        return jsonify({'error': 'Faltan campos requeridos: product_id y quantity'}), 400
     
     product = models.Product.query.get(data['product_id'])
     if not product:
