@@ -63,6 +63,17 @@
                         </select>
                     </div>
                     
+                    <div class="mb-3">
+                        <label for="ncf-type-select" class="form-label">
+                            <i class="bi bi-receipt"></i> Tipo de Comprobante
+                        </label>
+                        <select class="form-control" id="ncf-type-select">
+                            <option value="consumo">Consumo</option>
+                            <option value="credito_fiscal">Crédito Fiscal</option>
+                            <option value="gubernamental">Gubernamental</option>
+                        </select>
+                    </div>
+                    
                     <div id="cart-items">
                         <p class="text-muted">No hay productos en el carrito</p>
                     </div>
@@ -251,7 +262,7 @@ function processSale() {
                 credentials: 'same-origin',
                 body: JSON.stringify({
                     payment_method: 'efectivo',
-                    ncf_type: 'consumo'
+                    ncf_type: document.getElementById('ncf-type-select').value
                 })
             });
         })
@@ -307,20 +318,26 @@ function loadTables() {
 
 // Load initial products and tables
 document.addEventListener('DOMContentLoaded', function() {
+    // Load products for the first category (default)
     const firstCategory = document.querySelector('[data-bs-toggle="pill"]');
     if (firstCategory) {
         const categoryId = firstCategory.getAttribute('data-bs-target').replace('#category-', '');
         loadProducts(categoryId);
+    } else {
+        // Fallback: load products for category 1 if no tabs found
+        loadProducts(1);
     }
     
     // Load available tables
     loadTables();
-    
-    // Load products when switching categories
-    document.addEventListener('shown.bs.tab', function(e) {
+});
+
+// Handle category tab changes
+document.addEventListener('shown.bs.tab', function(e) {
+    if (e.target.getAttribute('data-bs-toggle') === 'pill') {
         const categoryId = e.target.getAttribute('data-bs-target').replace('#category-', '');
         loadProducts(categoryId);
-    });
+    }
 });
 </script>
 {% endblock %}
