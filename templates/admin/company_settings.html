@@ -116,7 +116,18 @@
                         </div>
 
                         <div class="row">
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
+                                <label for="receipt_format" class="form-label">
+                                    <i class="bi bi-receipt"></i> Formato del Recibo
+                                </label>
+                                <select class="form-select" id="receipt_format" name="receipt_format">
+                                    <option value="80mm" {{ 'selected' if company_settings.get('receipt_format', '80mm') == '80mm' }}>80mm (Estándar)</option>
+                                    <option value="58mm" {{ 'selected' if company_settings.get('receipt_format', '80mm') == '58mm' }}>58mm (Compacto)</option>
+                                </select>
+                                <div class="form-text">Ancho del papel térmico</div>
+                            </div>
+                            
+                            <div class="col-md-4 mb-3">
                                 <label for="receipt_copies" class="form-label">
                                     <i class="bi bi-files"></i> Copias del Recibo
                                 </label>
@@ -128,7 +139,7 @@
                                 <div class="form-text">Número de copias a imprimir</div>
                             </div>
                             
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <label for="fiscal_printer_enabled" class="form-label">
                                     <i class="bi bi-printer"></i> Impresión Automática
                                 </label>
@@ -222,39 +233,67 @@
                     <h5><i class="bi bi-eye"></i> Vista Previa</h5>
                 </div>
                 <div class="card-body">
-                    <div class="receipt-preview border rounded p-3 text-center" style="font-family: monospace; background-color: #f8f9fa;">
-                        <div id="preview-name" style="font-weight: bold; font-size: 14px;">
+                    <div class="receipt-preview border rounded p-3 text-center shadow-sm" style="font-family: 'Courier New', monospace; background-color: #ffffff; border: 2px dashed #dee2e6;">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted">Vista Previa</small>
+                            <span id="preview-format-badge" class="badge bg-primary">80mm</span>
+                        </div>
+                        
+                        {% if company_settings.get('receipt_logo') %}
+                        <div class="mb-2">
+                            <img src="{{ url_for('static', filename=company_settings.get('receipt_logo').replace('static/', '')) }}" 
+                                 alt="Logo" style="max-height: 30px; max-width: 100px;">
+                        </div>
+                        {% endif %}
+                        
+                        <div id="preview-name" style="font-weight: bold; font-size: 14px; margin-bottom: 4px;">
                             {{ company_settings.get('company_name', 'Mi Empresa') }}
                         </div>
-                        <div id="preview-rnc" style="font-size: 11px;">
+                        <div id="preview-rnc" style="font-size: 11px; color: #666;">
                             {% if company_settings.get('company_rnc') %}
                                 RNC: {{ company_settings.get('company_rnc') }}
                             {% endif %}
                         </div>
-                        <div id="preview-address" style="font-size: 10px;">
+                        <div id="preview-address" style="font-size: 10px; color: #666;">
                             {{ company_settings.get('company_address', '') }}
                         </div>
-                        <div id="preview-phone" style="font-size: 10px;">
+                        <div id="preview-phone" style="font-size: 10px; color: #666;">
                             {% if company_settings.get('company_phone') %}
-                                Tel: {{ company_settings.get('company_phone') }}
+                                <i class="bi bi-telephone-fill"></i> {{ company_settings.get('company_phone') }}
                             {% endif %}
                         </div>
-                        <hr style="margin: 8px 0;">
-                        <div style="font-size: 10px;">RECIBO FISCAL</div>
-                        <hr style="margin: 8px 0;">
-                        <div style="font-size: 9px;">
-                            1x Producto Ejemplo<br>
-                            RD$ 100.00<br>
-                            Subtotal: RD$ 100.00<br>
-                            ITBIS: RD$ 18.00<br>
-                            <strong>Total: RD$ 118.00</strong>
+                        <hr style="margin: 8px 0; border-style: dashed;">
+                        <div style="font-size: 11px; font-weight: bold;">🧾 RECIBO FISCAL</div>
+                        <hr style="margin: 8px 0; border-style: dashed;">
+                        <div style="font-size: 9px; text-align: left;">
+                            <div class="d-flex justify-content-between">
+                                <span>1x Producto Ejemplo</span>
+                                <span>RD$ 100.00</span>
+                            </div>
+                            <hr style="margin: 4px 0;">
+                            <div class="d-flex justify-content-between">
+                                <span>Subtotal:</span>
+                                <span>RD$ 100.00</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>ITBIS (18%):</span>
+                                <span>RD$ 18.00</span>
+                            </div>
+                            <hr style="margin: 4px 0;">
+                            <div class="d-flex justify-content-between" style="font-weight: bold; font-size: 10px;">
+                                <span>TOTAL:</span>
+                                <span>RD$ 118.00</span>
+                            </div>
                         </div>
-                        <hr style="margin: 8px 0;">
-                        <div id="preview-message" style="font-size: 9px;">
-                            {{ company_settings.get('receipt_message', 'Gracias por su compra') }}
+                        <hr style="margin: 8px 0; border-style: dashed;">
+                        <div id="preview-message" style="font-size: 9px; font-style: italic;">
+                            💝 {{ company_settings.get('receipt_message', 'Gracias por su compra') }}
                         </div>
-                        <div id="preview-footer" style="font-size: 8px;">
+                        <div id="preview-footer" style="font-size: 8px; color: #666;">
                             {{ company_settings.get('receipt_footer', '') }}
+                        </div>
+                        <div style="font-size: 7px; color: #999; margin-top: 8px;">
+                            📋 Válido para efectos fiscales - DGII
                         </div>
                     </div>
                 </div>
@@ -266,12 +305,13 @@
 <script>
 // Real-time preview updates
 document.addEventListener('DOMContentLoaded', function() {
-    const fields = ['company_name', 'company_rnc', 'company_address', 'company_phone', 'receipt_message', 'receipt_footer'];
+    const fields = ['company_name', 'company_rnc', 'company_address', 'company_phone', 'receipt_message', 'receipt_footer', 'receipt_format'];
     
     fields.forEach(field => {
         const input = document.getElementById(field);
         if (input) {
             input.addEventListener('input', updatePreview);
+            input.addEventListener('change', updatePreview); // For select fields
         }
     });
     
@@ -282,13 +322,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const phone = document.getElementById('company_phone').value;
         const message = document.getElementById('receipt_message').value || 'Gracias por su compra';
         const footer = document.getElementById('receipt_footer').value;
+        const format = document.getElementById('receipt_format').value || '80mm';
         
         document.getElementById('preview-name').textContent = name;
         document.getElementById('preview-rnc').innerHTML = rnc ? `RNC: ${rnc}` : '';
         document.getElementById('preview-address').textContent = address;
-        document.getElementById('preview-phone').innerHTML = phone ? `Tel: ${phone}` : '';
-        document.getElementById('preview-message').textContent = message;
+        document.getElementById('preview-phone').innerHTML = phone ? `<i class="bi bi-telephone-fill"></i> ${phone}` : '';
+        document.getElementById('preview-message').textContent = `💝 ${message}`;
         document.getElementById('preview-footer').textContent = footer;
+        
+        // Update format badge
+        const formatBadge = document.getElementById('preview-format-badge');
+        formatBadge.textContent = format;
+        formatBadge.className = format === '58mm' ? 'badge bg-warning' : 'badge bg-primary';
     }
 });
 
@@ -352,7 +398,69 @@ function showAlert(type, message) {
 }
 
 function testReceiptGeneration() {
-    showAlert('info', 'Función de prueba de recibo - Implementar según necesidades específicas');
+    // Show loading message
+    showAlert('info', 'Generando recibo de prueba...');
+    
+    // Get CSRF token
+    const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+    
+    fetch('/admin/api/test-receipt', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', data.message);
+            
+            // Open PDF in new window
+            if (data.pdf_path) {
+                window.open(data.pdf_path, '_blank');
+            }
+            
+            // Show thermal preview if available
+            if (data.thermal_preview) {
+                const thermalModal = document.createElement('div');
+                thermalModal.innerHTML = `
+                    <div class="modal fade" id="thermalPreviewModal" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Vista Previa Recibo Térmico (${data.format})</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <pre style="font-family: monospace; font-size: 12px; background: #f8f9fa; padding: 15px; border-radius: 5px;">${data.thermal_preview}</pre>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(thermalModal);
+                
+                const modal = new bootstrap.Modal(document.getElementById('thermalPreviewModal'));
+                modal.show();
+                
+                // Remove modal after it's hidden
+                document.getElementById('thermalPreviewModal').addEventListener('hidden.bs.modal', function() {
+                    thermalModal.remove();
+                });
+            }
+        } else {
+            showAlert('danger', 'Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', 'Error de conexión al generar el recibo de prueba');
+    });
 }
 </script>
 {% endblock %}

@@ -29,10 +29,19 @@ class DominicanReceiptGenerator:
     Compliant with DGII regulations and NCF requirements
     """
     
-    def __init__(self):
-        """Initialize the receipt generator with default settings"""
-        self.page_size = (80 * mm, 200 * mm)  # Standard thermal paper size 80mm
-        self.margin = 3 * mm
+    def __init__(self, format_type='80mm'):
+        """Initialize the receipt generator with specified format settings"""
+        # Set page size based on format type
+        if format_type == '58mm':
+            self.page_size = (58 * mm, 200 * mm)  # 58mm thermal paper
+            self.margin = 2 * mm
+            self.text_width = 32  # Characters for 58mm
+        else:  # Default to 80mm
+            self.page_size = (80 * mm, 200 * mm)  # 80mm thermal paper
+            self.margin = 3 * mm
+            self.text_width = 40  # Characters for 80mm
+            
+        self.format_type = format_type
         self.styles = self._create_styles()
         
     def _create_styles(self):
@@ -175,7 +184,13 @@ class DominicanReceiptGenerator:
         # Company logo (if available)
         if company_info.get('logo') and os.path.exists(company_info['logo']):
             try:
-                logo = Image(company_info['logo'], width=20*mm, height=15*mm)
+                # Adjust logo size based on format
+                if self.format_type == '58mm':
+                    logo_width, logo_height = 14*mm, 10*mm
+                else:
+                    logo_width, logo_height = 20*mm, 15*mm
+                
+                logo = Image(company_info['logo'], width=logo_width, height=logo_height)
                 logo.hAlign = 'CENTER'
                 content.append(logo)
                 content.append(Spacer(1, 3*mm))
@@ -271,8 +286,21 @@ class DominicanReceiptGenerator:
                 format_currency_rd(total)
             ])
         
+        # Calculate available width for table
+        available_width = self.page_size[0] - (2 * self.margin)
+        
+        # Set column widths proportionally based on available width
+        if self.format_type == '58mm':
+            # For 58mm: tighter layout
+            col_proportions = [0.15, 0.50, 0.17, 0.18]  # Cant, Descripción, Precio, Total
+        else:
+            # For 80mm: standard layout  
+            col_proportions = [0.14, 0.43, 0.21, 0.22]  # Cant, Descripción, Precio, Total
+        
+        col_widths = [prop * available_width for prop in col_proportions]
+        
         # Create table
-        table = Table(table_data, colWidths=[10*mm, 30*mm, 15*mm, 15*mm])
+        table = Table(table_data, colWidths=col_widths)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
@@ -387,21 +415,21 @@ class DominicanReceiptGenerator:
         receipt_lines = []
         
         # Header
-        receipt_lines.append("=" * 40)
-        receipt_lines.append(company_info['name'].center(40))
+        receipt_lines.append("=" * self.text_width)
+        receipt_lines.append(company_info['name'].center(self.text_width))
         
         if company_info.get('rnc'):
-            receipt_lines.append(f"RNC: {company_info['rnc']}".center(40))
+            receipt_lines.append(f"RNC: {company_info['rnc']}".center(self.text_width))
         
         if company_info.get('address'):
-            receipt_lines.append(company_info['address'].center(40))
+            receipt_lines.append(company_info['address'].center(self.text_width))
         
         if company_info.get('phone'):
-            receipt_lines.append(f"Tel: {company_info['phone']}".center(40))
+            receipt_lines.append(f"Tel: {company_info['phone']}".center(self.text_width))
         
-        receipt_lines.append("=" * 40)
-        receipt_lines.append("RECIBO FISCAL".center(40))
-        receipt_lines.append("=" * 40)
+        receipt_lines.append("=" * self.text_width)
+        receipt_lines.append("RECIBO FISCAL".center(self.text_width))
+        receipt_lines.append("=" * self.text_width)
         
         # Sale details
         sale_date = sale_data.get('created_at', datetime.now())
@@ -422,11 +450,11 @@ class DominicanReceiptGenerator:
         }.get(payment_method, payment_method.title())
         
         receipt_lines.append(f"Método: {payment_method_es}")
-        receipt_lines.append("-" * 40)
+        receipt_lines.append("-" * self.text_width)
         
         # Items
         receipt_lines.append("ARTÍCULOS")
-        receipt_lines.append("-" * 40)
+        receipt_lines.append("-" * self.text_width)
         
         items = sale_data.get('items', [])
         for item in items:
@@ -435,14 +463,15 @@ class DominicanReceiptGenerator:
             price = item.get('price', 0)
             total = quantity * price
             
-            # Format item line
-            item_line = f"{quantity}x {name[:25]}"
+            # Format item line (adjust name length based on format)
+            name_length = 21 if self.format_type == '58mm' else 25
+            item_line = f"{quantity}x {name[:name_length]}"
             price_line = f"{format_currency_rd(price)} = {format_currency_rd(total)}"
             
             receipt_lines.append(item_line)
-            receipt_lines.append(" " * (40 - len(price_line)) + price_line)
+            receipt_lines.append(" " * (self.text_width - len(price_line)) + price_line)
         
-        receipt_lines.append("-" * 40)
+        receipt_lines.append("-" * self.text_width)
         
         # Totals
         subtotal = sale_data.get('subtotal', 0)
@@ -457,23 +486,23 @@ class DominicanReceiptGenerator:
         tax_line = f"ITBIS (18%): {format_currency_rd(tax_amount)}"
         total_line = f"TOTAL: {format_currency_rd(total)}"
         
-        receipt_lines.append(" " * (40 - len(subtotal_line)) + subtotal_line)
-        receipt_lines.append(" " * (40 - len(tax_line)) + tax_line)
-        receipt_lines.append("=" * 40)
-        receipt_lines.append(" " * (40 - len(total_line)) + total_line)
-        receipt_lines.append("=" * 40)
+        receipt_lines.append(" " * (self.text_width - len(subtotal_line)) + subtotal_line)
+        receipt_lines.append(" " * (self.text_width - len(tax_line)) + tax_line)
+        receipt_lines.append("=" * self.text_width)
+        receipt_lines.append(" " * (self.text_width - len(total_line)) + total_line)
+        receipt_lines.append("=" * self.text_width)
         
         # Footer
         if company_info.get('message'):
-            receipt_lines.append(company_info['message'].center(40))
+            receipt_lines.append(company_info['message'].center(self.text_width))
         
         if company_info.get('footer'):
-            receipt_lines.append(company_info['footer'].center(40))
+            receipt_lines.append(company_info['footer'].center(self.text_width))
         
         receipt_lines.append("")
-        receipt_lines.append("Válido para efectos fiscales - DGII".center(40))
-        receipt_lines.append(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}".center(40))
-        receipt_lines.append("=" * 40)
+        receipt_lines.append("Válido para efectos fiscales - DGII".center(self.text_width))
+        receipt_lines.append(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}".center(self.text_width))
+        receipt_lines.append("=" * self.text_width)
         
         return "\n".join(receipt_lines)
 

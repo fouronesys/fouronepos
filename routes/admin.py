@@ -593,6 +593,10 @@ def create_ncf_sequence():
         if overlapping:
             return jsonify({'error': 'El rango de números se solapa con una secuencia existente'}), 400
         
+        # Ensure cash_register_id is valid
+        if not cash_register_id:
+            return jsonify({'error': 'ID de caja registradora requerido'}), 400
+            
         # Create new NCF sequence
         new_sequence = models.NCFSequence()
         new_sequence.cash_register_id = int(cash_register_id)
@@ -945,7 +949,8 @@ def api_update_company_settings():
         'receipt_footer',
         'receipt_logo',
         'fiscal_printer_enabled',
-        'receipt_copies'
+        'receipt_copies',
+        'receipt_format'
     ]
     
     results = []
@@ -1052,3 +1057,76 @@ def initialize_company_config():
         flash(f'Error: {result["message"]}', 'error')
     
     return redirect(url_for('admin.company_settings'))
+
+
+@bp.route('/api/test-receipt', methods=['POST'])
+def api_test_receipt():
+    """Test receipt generation with sample data"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return jsonify({'error': 'Token de seguridad inválido'}), 400
+    
+    try:
+        from receipt_generator import DominicanReceiptGenerator
+        from datetime import datetime
+        import os
+        
+        # Create sample sale data for testing
+        sample_sale_data = {
+            'id': 9999,
+            'created_at': datetime.now(),
+            'ncf': 'B0100000001',
+            'payment_method': 'efectivo',
+            'total': 118.00,
+            'subtotal': 100.00,
+            'tax': 18.00,
+            'customer_name': 'Cliente de Prueba',
+            'items': [
+                {
+                    'quantity': 1,
+                    'product_name': 'Producto de Prueba 1',
+                    'price': 50.00
+                },
+                {
+                    'quantity': 2,
+                    'product_name': 'Producto de Prueba 2',
+                    'price': 25.00
+                }
+            ]
+        }
+        
+        # Get receipt format preference
+        from utils import get_company_settings
+        company_data = get_company_settings()
+        receipt_format = '80mm'  # Default
+        
+        if company_data['success']:
+            receipt_format = company_data['settings'].get('receipt_format', '80mm')
+        
+        # Generate receipt based on format
+        generator = DominicanReceiptGenerator(format_type=receipt_format)
+        
+        # Generate both PDF and thermal versions
+        pdf_path = generator.generate_fiscal_receipt(sample_sale_data)
+        thermal_text = generator.generate_thermal_receipt(sample_sale_data)
+        
+        # Create relative path for frontend
+        relative_pdf_path = os.path.relpath(pdf_path, 'static')
+        
+        return jsonify({
+            'success': True,
+            'message': f'Recibo de prueba generado exitosamente (formato {receipt_format})',
+            'pdf_path': f'/static/{relative_pdf_path}',
+            'thermal_preview': thermal_text[:500] + '...' if len(thermal_text) > 500 else thermal_text,
+            'format': receipt_format
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error generando recibo de prueba: {str(e)}'
+        }), 500
