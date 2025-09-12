@@ -169,6 +169,10 @@ def finalize_sale(sale_id):
     ncf_type = data.get('ncf_type', 'consumo')
     payment_method = data.get('payment_method', 'efectivo')
     
+    # Get client info for fiscal/government invoices
+    customer_name = data.get('client_name')
+    customer_rnc = data.get('client_rnc')
+    
     # CRITICAL FIX: Idempotent sale finalization with proper locking to prevent NCF race conditions
     # This ensures exactly one NCF per sale even under concurrent finalization requests
     try:
@@ -243,6 +247,11 @@ def finalize_sale(sale_id):
             sale.ncf = ncf_number
             sale.payment_method = payment_method
             sale.status = 'completed'
+            
+            # Add client info for fiscal/government invoices
+            if customer_name and customer_rnc and ncf_type in ['credito_fiscal', 'gubernamental']:
+                sale.customer_name = customer_name
+                sale.customer_rnc = customer_rnc
             
             # Reduce stock for all sale items
             for sale_item in sale_items:

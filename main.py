@@ -60,6 +60,23 @@ def service_worker():
     from flask import send_from_directory
     return send_from_directory('static', 'sw.js', mimetype='application/javascript')
 
+@app.route('/favicon.ico')
+def favicon():
+    """Simple favicon endpoint to prevent 404 errors"""
+    from flask import send_from_directory
+    return send_from_directory('static', 'favicon.ico', mimetype='image/x-icon')
+
+@app.after_request
+def add_cache_headers(response):
+    """Add cache control headers for better development experience"""
+    if request.endpoint == 'static':
+        # Force reload of CSS files for development
+        if request.path.endswith('.css'):
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+    return response
+
 @app.route('/')
 def index():
     if 'user_id' not in session:

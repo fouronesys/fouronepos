@@ -3,7 +3,7 @@
 {% block title %}Punto de Venta - Four One POS{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/pos-style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pos-style.css') }}?v=20250912065500">
 {% endblock %}
 
 {% block content %}
@@ -67,11 +67,27 @@
                         <label for="ncf-type-select" class="form-label">
                             <i class="bi bi-receipt"></i> Tipo de Comprobante
                         </label>
-                        <select class="form-control" id="ncf-type-select">
+                        <select class="form-control" id="ncf-type-select" onchange="toggleClientInfo()">
                             <option value="consumo">Consumo</option>
                             <option value="credito_fiscal">Crédito Fiscal</option>
                             <option value="gubernamental">Gubernamental</option>
                         </select>
+                    </div>
+                    
+                    <!-- Client Information for Fiscal/Government Invoices -->
+                    <div id="client-info-section" style="display: none;">
+                        <div class="mb-3">
+                            <label for="client-name" class="form-label">
+                                <i class="bi bi-person"></i> Nombre/Empresa
+                            </label>
+                            <input type="text" class="form-control" id="client-name" placeholder="Nombre o razón social">
+                        </div>
+                        <div class="mb-3">
+                            <label for="client-rnc" class="form-label">
+                                <i class="bi bi-card-text"></i> RNC/Cédula
+                            </label>
+                            <input type="text" class="form-control" id="client-rnc" placeholder="RNC o número de cédula">
+                        </div>
                     </div>
                     
                     <div id="cart-items">
@@ -96,6 +112,9 @@
                     <div class="d-grid gap-2">
                         <button class="btn btn-success-custom pulse-animation" id="process-sale" onclick="processSale()">
                             <i class="bi bi-check-circle me-2"></i> Procesar Venta
+                        </button>
+                        <button class="btn btn-warning" id="assign-table" onclick="assignToTable()" style="background: linear-gradient(135deg, #ffa500 0%, #ff8c00 100%); color: #000; font-weight: 600;">
+                            <i class="bi bi-table me-2"></i> Asignar a Mesa
                         </button>
                         <button class="btn btn-danger-custom" id="clear-cart" onclick="clearCart()">
                             <i class="bi bi-trash me-2"></i> Limpiar Carrito
@@ -216,6 +235,19 @@ function processSale() {
         return;
     }
     
+    const ncfType = document.getElementById('ncf-type-select').value;
+    
+    // Validate client info for fiscal/government invoices
+    if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
+        const clientName = document.getElementById('client-name').value.trim();
+        const clientRnc = document.getElementById('client-rnc').value.trim();
+        
+        if (!clientName || !clientRnc) {
+            alert('Para comprobantes fiscales y gubernamentales debe completar el nombre/empresa y RNC/cédula');
+            return;
+        }
+    }
+    
     const tableId = document.getElementById('table-select').value || null;
     
     // Create sale first
@@ -254,16 +286,24 @@ function processSale() {
         Promise.all(promises)
         .then(() => {
             // Finalize sale
+            const finalizationData = {
+                payment_method: 'efectivo',
+                ncf_type: ncfType
+            };
+            
+            // Add client info for fiscal/government invoices
+            if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
+                finalizationData.client_name = document.getElementById('client-name').value.trim();
+                finalizationData.client_rnc = document.getElementById('client-rnc').value.trim();
+            }
+            
             return fetch(`/api/sales/${sale.id}/finalize`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 credentials: 'same-origin',
-                body: JSON.stringify({
-                    payment_method: 'efectivo',
-                    ncf_type: document.getElementById('ncf-type-select').value
-                })
+                body: JSON.stringify(finalizationData)
             });
         })
         .then(response => response.json())
@@ -287,11 +327,108 @@ function processSale() {
     });
 }
 
+// Assign order to table without processing
+function assignToTable() {
+    if (cart.length === 0) {
+        alert('El carrito está vacío');
+        return;
+    }
+    
+    const tableId = document.getElementById('table-select').value;
+    if (!tableId) {
+        alert('Debe seleccionar una mesa');
+        return;
+    }
+    
+    // Create sale first
+    fetch('/api/sales', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            table_id: tableId
+        })
+    })
+    .then(response => response.json())
+    .then(sale => {
+        if (sale.error) {
+            alert('Error al crear orden: ' + sale.error);
+            return;
+        }
+        
+        // Add items to sale
+        const promises = cart.map(item => 
+            fetch(`/api/sales/${sale.id}/items`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    product_id: item.id,
+                    quantity: item.quantity
+                })
+            })
+        );
+        
+        Promise.all(promises)
+        .then(() => {
+            // Update table status to occupied
+            return fetch(`/api/tables/${tableId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    status: 'occupied'
+                })
+            });
+        })
+        .then(() => {
+            alert(`Orden asignada exitosamente a Mesa ${tableId}. Estado: Pendiente`);
+            clearCart();
+            loadTables(); // Refresh table list
+        })
+        .catch(error => {
+            console.error('Error assigning to table:', error);
+            alert('Error al asignar orden a la mesa');
+        });
+    })
+    .catch(error => {
+        console.error('Error creating order:', error);
+        alert('Error al crear la orden');
+    });
+}
+
 // Clear cart
 function clearCart() {
     cart = [];
     updateCartDisplay();
     document.getElementById('table-select').value = '';
+}
+
+// Toggle client information fields based on NCF type
+function toggleClientInfo() {
+    const ncfType = document.getElementById('ncf-type-select').value;
+    const clientInfoSection = document.getElementById('client-info-section');
+    
+    if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
+        clientInfoSection.style.display = 'block';
+        // Make fields required
+        document.getElementById('client-name').required = true;
+        document.getElementById('client-rnc').required = true;
+    } else {
+        clientInfoSection.style.display = 'none';
+        // Remove required attribute
+        document.getElementById('client-name').required = false;
+        document.getElementById('client-rnc').required = false;
+        // Clear values
+        document.getElementById('client-name').value = '';
+        document.getElementById('client-rnc').value = '';
+    }
 }
 
 // Load available tables
