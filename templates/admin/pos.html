@@ -456,7 +456,9 @@ async function printReceipt(saleData) {
             
             try {
                 // Fetch the receipt content to verify it's ready
-                const response = await fetch(viewUrl);
+                const response = await fetch(viewUrl, {
+                    credentials: 'same-origin'
+                });
                 if (response.ok) {
                     // On mobile/tablet, redirect with auto_print for automatic printing
                     window.location.href = viewUrl + '&auto_print=true';
@@ -531,6 +533,34 @@ function loadProducts(categoryId) {
                 showNotification('Cargando productos desde caché offline...', 'info');
             }
         });
+}
+
+// Switch between product categories
+function switchCategory(categoryId) {
+    // Remove active class from all category pills
+    document.querySelectorAll('.category-pill').forEach(pill => {
+        pill.classList.remove('active');
+    });
+    
+    // Add active class to clicked category
+    const activePill = document.querySelector(`[data-category-id="${categoryId}"]`);
+    if (activePill) {
+        activePill.classList.add('active');
+    }
+    
+    // Hide all category product sections
+    document.querySelectorAll('.category-products').forEach(section => {
+        section.classList.add('d-none');
+    });
+    
+    // Show selected category products section
+    const selectedSection = document.getElementById(`category-products-${categoryId}`);
+    if (selectedSection) {
+        selectedSection.classList.remove('d-none');
+    }
+    
+    // Load products for the selected category
+    loadProducts(categoryId);
 }
 
 // Add product to cart (using CartManager)
