@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}POS Dominican Republic{% endblock %}</title>
+    <title>{% block title %}Four One POS{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
@@ -35,7 +35,8 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid">
             <a class="navbar-brand" href="/">
-                <i class="bi bi-shop"></i> POS RD
+                <img src="{{ url_for('static', filename='css/logo.png') }}" alt="Four One Solutions" height="32" class="me-2">
+                Four One POS
             </a>
             
             <div class="navbar-nav ms-auto">
