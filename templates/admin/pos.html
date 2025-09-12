@@ -2,9 +2,16 @@
 
 {% block title %}Punto de Venta - Four One POS{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pos-style.css') }}">
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    <h2 class="mb-3"><i class="bi bi-cash-register"></i> Punto de Venta</h2>
+    <div class="pos-header fade-in-up">
+        <h2 class="mb-0"><i class="bi bi-cash-register me-3"></i> Punto de Venta Moderno</h2>
+        <p class="mb-0 mt-2 opacity-75">Sistema POS con Cumplimiento Fiscal Dominicano</p>
+    </div>
     
     <div class="row">
         <!-- Products Section -->
@@ -44,11 +51,8 @@
         
         <!-- Cart Section -->
         <div class="col-md-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-cart"></i> Carrito</h5>
-                </div>
-                <div class="card-body">
+            <div class="cart-section fade-in-up">
+                <h5 class="mb-4"><i class="bi bi-cart me-2"></i> Carrito de Compras</h5>
                     <!-- Table Selection -->
                     <div class="mb-3">
                         <label for="table-select" class="form-label">
@@ -63,16 +67,14 @@
                         <p class="text-muted">No hay productos en el carrito</p>
                     </div>
                     
-                    <hr>
-                    
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between">
-                            <span>Subtotal:</span>
-                            <span id="subtotal">RD$ 0.00</span>
+                    <div class="totals-section">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span><strong>Subtotal:</strong></span>
+                            <span id="subtotal" class="fw-bold">RD$ 0.00</span>
                         </div>
-                        <div class="d-flex justify-content-between">
-                            <span>ITBIS (18%):</span>
-                            <span id="tax">RD$ 0.00</span>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span><strong>ITBIS (18%):</strong></span>
+                            <span id="tax" class="fw-bold">RD$ 0.00</span>
                         </div>
                         <div class="d-flex justify-content-between fw-bold">
                             <span>Total:</span>
@@ -81,11 +83,11 @@
                     </div>
                     
                     <div class="d-grid gap-2">
-                        <button class="btn btn-success btn-touch" id="process-sale" onclick="processSale()">
-                            <i class="bi bi-check-circle"></i> Procesar Venta
+                        <button class="btn btn-success-custom pulse-animation" id="process-sale" onclick="processSale()">
+                            <i class="bi bi-check-circle me-2"></i> Procesar Venta
                         </button>
-                        <button class="btn btn-outline-secondary" id="clear-cart" onclick="clearCart()">
-                            <i class="bi bi-trash"></i> Limpiar
+                        <button class="btn btn-danger-custom" id="clear-cart" onclick="clearCart()">
+                            <i class="bi bi-trash me-2"></i> Limpiar Carrito
                         </button>
                     </div>
                 </div>
@@ -113,11 +115,11 @@ function loadProducts(categoryId) {
             products.forEach(product => {
                 const productCard = `
                     <div class="col-md-4 col-lg-3 mb-3">
-                        <div class="card product-card h-100" onclick="addToCart(${product.id}, '${product.name}', ${product.price})">
-                            <div class="card-body text-center">
-                                <h6 class="card-title">${product.name}</h6>
-                                <p class="card-text">RD$ ${product.price.toFixed(2)}</p>
-                                <small class="text-muted">Stock: ${product.stock}</small>
+                        <div class="product-card fade-in-up" onclick="addToCart(${product.id}, '${product.name}', ${product.price})">
+                            <div class="card-body">
+                                <div class="product-name">${product.name}</div>
+                                <div class="product-price">RD$ ${product.price.toFixed(2)}</div>
+                                <small class="opacity-75">Stock: ${product.stock}</small>
                             </div>
                         </div>
                     </div>
