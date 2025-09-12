@@ -155,26 +155,47 @@ def add_sale_item(sale_id):
     except (ValueError, TypeError):
         return jsonify({'error': 'La cantidad debe ser un número válido'}), 400
     
-    # Check stock availability
-    if product.stock < quantity:
-        return jsonify({'error': f'Stock insuficiente para {product.name}. Disponible: {product.stock}'}), 400
+    # Check for existing sale items of the same product in this sale
+    existing_quantity = db.session.query(db.func.sum(models.SaleItem.quantity)).filter_by(
+        sale_id=sale_id, 
+        product_id=product.id
+    ).scalar() or 0
+    
+    # Calculate total quantity (existing + new)
+    total_quantity = existing_quantity + quantity
+    
+    # Check stock availability against total quantity
+    if product.stock < total_quantity:
+        return jsonify({
+            'error': f'Stock insuficiente para {product.name}. Disponible: {product.stock}, ya en venta: {existing_quantity}, solicitado: {quantity}'
+        }), 400
     
     # Only allow adding items to pending sales
     if sale.status != 'pending':
         return jsonify({'error': 'Solo se pueden modificar ventas pendientes'}), 400
     
-    # Create sale item
-    sale_item = models.SaleItem()
-    sale_item.sale_id = sale_id
-    sale_item.product_id = product.id
-    sale_item.quantity = quantity
-    sale_item.unit_price = product.price
-    sale_item.total_price = product.price * quantity
+    # Check if product already exists in this sale - merge quantities instead of creating duplicate lines
+    existing_item = models.SaleItem.query.filter_by(sale_id=sale_id, product_id=product.id).first()
     
-    db.session.add(sale_item)
+    if existing_item:
+        # Update existing item quantity
+        existing_item.quantity = total_quantity
+        existing_item.total_price = product.price * total_quantity
+        sale_item = existing_item
+    else:
+        # Create new sale item
+        sale_item = models.SaleItem()
+        sale_item.sale_id = sale_id
+        sale_item.product_id = product.id
+        sale_item.quantity = quantity
+        sale_item.unit_price = product.price
+        sale_item.total_price = product.price * quantity
+        
+        db.session.add(sale_item)
     
-    # Update sale totals
-    sale.subtotal += sale_item.total_price
+    # Recalculate sale totals from all items (to handle both new and updated items correctly)
+    total_items_price = sum(item.total_price for item in sale.sale_items)
+    sale.subtotal = total_items_price
     sale.tax_amount = sale.subtotal * 0.18  # 18% ITBIS
     sale.total = sale.subtotal + sale.tax_amount
     
@@ -232,13 +253,31 @@ def finalize_sale(sale_id):
             if sale.status != 'pending':
                 raise ValueError(f'No se puede finalizar una venta con estado {sale.status}')
             
-            # Validate stock availability before proceeding with NCF allocation
-            # Load sale items with their products for stock validation
+            # Validate stock availability before proceeding with NCF allocation with concurrent safety
+            # Load sale items and group by product for aggregate validation
             sale_items = db.session.query(models.SaleItem).filter_by(sale_id=sale_id).all()
+            
+            # Group sale items by product ID and calculate total quantity per product
+            product_quantities = {}
+            product_ids = []
+            
             for sale_item in sale_items:
-                product = sale_item.product
-                if product.stock < sale_item.quantity:
-                    raise ValueError(f'Stock insuficiente para {product.name}')
+                product_id = sale_item.product_id
+                if product_id not in product_quantities:
+                    product_quantities[product_id] = 0
+                    product_ids.append(product_id)
+                product_quantities[product_id] += sale_item.quantity
+            
+            # Lock all involved products to prevent concurrent modifications (CRITICAL for fiscal compliance)
+            locked_products = db.session.query(models.Product).filter(
+                models.Product.id.in_(product_ids)
+            ).with_for_update().all()
+            
+            # Validate stock availability per product (aggregated quantities)
+            for product in locked_products:
+                required_quantity = product_quantities[product.id]
+                if product.stock < required_quantity:
+                    raise ValueError(f'Stock insuficiente para {product.name}. Disponible: {product.stock}, requerido: {required_quantity}')
             
             # SALE REASSIGNMENT: If sale doesn't have cash register (waiter-created), assign finalizing user's cash register
             if not sale.cash_register_id:
@@ -285,10 +324,10 @@ def finalize_sale(sale_id):
                 sale.customer_name = customer_name
                 sale.customer_rnc = customer_rnc
             
-            # Reduce stock for all sale items
-            for sale_item in sale_items:
-                product = sale_item.product
-                product.stock -= sale_item.quantity
+            # Reduce stock for all products (using already locked products to prevent race conditions)
+            for product in locked_products:
+                required_quantity = product_quantities[product.id]
+                product.stock -= required_quantity
             
             # Transaction commits automatically at the end of this block
             # If ANY part fails, everything rolls back and no NCF is consumed
