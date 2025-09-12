@@ -19,6 +19,22 @@ def require_admin():
     return user
 
 
+@bp.route('/products')
+def products():
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Get all products with their categories
+    products = models.Product.query.join(models.Category).filter(
+        models.Product.active == True
+    ).order_by(models.Category.name, models.Product.name).all()
+    
+    categories = models.Category.query.filter_by(active=True).order_by(models.Category.name).all()
+    
+    return render_template('inventory/products.html', products=products, categories=categories)
+
+
 @bp.route('/suppliers')
 def suppliers():
     user = require_admin()
