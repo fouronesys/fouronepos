@@ -87,35 +87,45 @@ def update_table_status(table_id):
 
 @bp.route('/sales', methods=['POST'])
 def create_sale():
-    user = require_login()
-    if not isinstance(user, models.User):
-        return user
-    
-    data = request.get_json()
-    
-    # Create new sale (waiters don't need cash registers initially)
-    sale = models.Sale()
-    sale.user_id = user.id
-    sale.table_id = data.get('table_id')
-    sale.subtotal = 0
-    sale.tax_amount = 0
-    sale.total = 0
-    sale.status = 'pending'
-    
-    # Only assign cash register if user has one (cashiers/admins)
-    cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
-    if cash_register:
-        sale.cash_register_id = cash_register.id
-    
-    db.session.add(sale)
-    db.session.commit()
-    
-    return jsonify({
-        'id': sale.id,
-        'status': sale.status,
-        'cash_register_id': sale.cash_register_id,
-        'created_at': sale.created_at.isoformat()
-    })
+    try:
+        user = require_login()
+        if not isinstance(user, models.User):
+            return user
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Create new sale (waiters don't need cash registers initially)
+        sale = models.Sale()
+        sale.user_id = user.id
+        sale.table_id = data.get('table_id')
+        sale.subtotal = 0
+        sale.tax_amount = 0
+        sale.total = 0
+        sale.status = 'pending'
+        
+        # Only assign cash register if user has one (cashiers/admins)
+        cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
+        if cash_register:
+            sale.cash_register_id = cash_register.id
+        
+        db.session.add(sale)
+        db.session.commit()
+        
+        return jsonify({
+            'id': sale.id,
+            'status': sale.status,
+            'cash_register_id': sale.cash_register_id,
+            'created_at': sale.created_at.isoformat()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error creating sale: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Error al crear la venta', 'details': str(e)}), 500
 
 
 @bp.route('/sales/<int:sale_id>/items', methods=['POST'])
