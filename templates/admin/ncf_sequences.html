@@ -120,12 +120,13 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form id="ncfForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="cashRegister" class="form-label">Caja Registradora</label>
-                                <select class="form-control" id="cashRegister" required>
+                                <select class="form-control" name="cash_register_id" id="cashRegister" required>
                                     <option value="">Seleccionar caja</option>
                                     {% for register in cash_registers %}
                                     <option value="{{ register.id }}">{{ register.name }}</option>
@@ -136,7 +137,7 @@
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="ncfType" class="form-label">Tipo de NCF</label>
-                                <select class="form-control" id="ncfType" required>
+                                <select class="form-control" name="ncf_type" id="ncfType" required>
                                     <option value="">Seleccionar tipo</option>
                                     <option value="consumo">Consumo</option>
                                     <option value="credito_fiscal">Crédito Fiscal</option>
@@ -149,20 +150,20 @@
                         <div class="col-md-4">
                             <div class="mb-3">
                                 <label for="serie" class="form-label">Serie</label>
-                                <input type="text" class="form-control" id="serie" placeholder="B01" maxlength="3" required>
+                                <input type="text" class="form-control" name="serie" id="serie" placeholder="B01" maxlength="3" required>
                                 <div class="form-text">Ej: B01, B02, etc.</div>
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="mb-3">
                                 <label for="startNumber" class="form-label">Número Inicial</label>
-                                <input type="number" class="form-control" id="startNumber" min="1" max="99999999" required>
+                                <input type="number" class="form-control" name="start_number" id="startNumber" min="1" max="99999999" required>
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="mb-3">
                                 <label for="endNumber" class="form-label">Número Final</label>
-                                <input type="number" class="form-control" id="endNumber" min="1" max="99999999" required>
+                                <input type="number" class="form-control" name="end_number" id="endNumber" min="1" max="99999999" required>
                             </div>
                         </div>
                     </div>
@@ -212,8 +213,29 @@ document.getElementById('ncfForm').addEventListener('submit', function(e) {
         return;
     }
     
-    // TODO: Implement form submission
-    alert('Funcionalidad de creación en desarrollo');
+    // Submit form
+    const formData = new FormData(this);
+    
+    fetch('/admin/ncf-sequences/create', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            // Close modal
+            bootstrap.Modal.getInstance(document.getElementById('ncfModal')).hide();
+            // Reload page to show new sequence
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error creando secuencia NCF');
+    });
 });
 
 // Auto-format serie input

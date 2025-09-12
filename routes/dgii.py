@@ -9,9 +9,25 @@ from datetime import datetime, timedelta
 import calendar
 
 from models import db, User, Sale, Purchase, Product, Supplier, NCFSequence
-from utils import require_admin
 
 bp = Blueprint('dgii', __name__, url_prefix='/dgii')
+
+
+def require_admin():
+    """Check if user is authenticated and is an admin"""
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login'))
+    
+    user = User.query.get(session['user_id'])
+    if not user or not user.active:
+        session.clear()
+        return redirect(url_for('auth.login'))
+    
+    if user.role.value != 'administrador':
+        flash('Acceso denegado. Se requieren permisos de administrador.', 'error')
+        return redirect(url_for('admin.dashboard'))
+    
+    return user
 
 # DGII 606 Layout - Compras (Purchases)
 # Layout for purchases from suppliers with tax details
@@ -85,8 +101,8 @@ def reports():
     
     # Current month sales count
     sales_count = Sale.query.filter(
-        Sale.sale_date >= current_month_start,
-        Sale.sale_date < next_month_start
+        Sale.created_at >= current_month_start,
+        Sale.created_at < next_month_start
     ).count()
     
     # Current month purchases count  
@@ -237,8 +253,8 @@ def export_607():
         
         # Get sales for the period
         sales = Sale.query.filter(
-            Sale.sale_date >= start_date,
-            Sale.sale_date < end_date
+            Sale.created_at >= start_date,
+            Sale.created_at < end_date
         ).all()
         
         # Generate CSV
@@ -349,8 +365,8 @@ def preview_607(year, month):
         
         # Get sales for the period
         sales = Sale.query.filter(
-            Sale.sale_date >= start_date,
-            Sale.sale_date < end_date
+            Sale.created_at >= start_date,
+            Sale.created_at < end_date
         ).all()
         
         return render_template('dgii/preview_607.html',

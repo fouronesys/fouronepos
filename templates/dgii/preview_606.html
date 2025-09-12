@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Vista Previa Reporte 606 - Four One POS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-eye"></i> Vista Previa Reporte 606 - Compras</h2>
+        <div>
+            <a href="{{ url_for('dgii.reports') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Volver
+            </a>
+        </div>
+    </div>
+
+    <!-- Period Info -->
+    <div class="alert alert-info mb-4">
+        <i class="bi bi-calendar3"></i>
+        <strong>Período:</strong> {{ period_name }} | 
+        <strong>Total de registros:</strong> {{ purchases|length }}
+    </div>
+
+    {% if purchases %}
+    <!-- Data Preview -->
+    <div class="card">
+        <div class="card-header">
+            <h5>Compras del Período</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>RNC/Cédula</th>
+                            <th>Proveedor</th>
+                            <th>NCF</th>
+                            <th>Fecha</th>
+                            <th>Monto</th>
+                            <th>ITBIS</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for purchase in purchases %}
+                        <tr>
+                            <td>{{ purchase.supplier.rnc or 'N/A' }}</td>
+                            <td>{{ purchase.supplier.name }}</td>
+                            <td>{{ purchase.ncf or 'N/A' }}</td>
+                            <td>{{ purchase.created_at.strftime('%d/%m/%Y') }}</td>
+                            <td>${{ "%.2f"|format(purchase.total) }}</td>
+                            <td>${{ "%.2f"|format(purchase.total * 0.18) }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if purchase.status == 'completed' else 'warning' }}">
+                                    {{ purchase.status.title() }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- No Data -->
+    <div class="alert alert-warning text-center py-5">
+        <i class="bi bi-exclamation-triangle display-1"></i>
+        <h4 class="mt-3">No hay datos para este período</h4>
+        <p class="mb-0">No se encontraron compras registradas para {{ period_name }}.</p>
+    </div>
+    {% endif %}
+
+    <!-- Export Actions -->
+    {% if purchases %}
+    <div class="text-center mt-4">
+        <button class="btn btn-primary btn-lg" onclick="exportToCsv()">
+            <i class="bi bi-download"></i> Exportar a CSV
+        </button>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function exportToCsv() {
+    const period = '{{ year }}-{{ month }}';
+    const [year, month] = period.split('-');
+    
+    fetch('/dgii/export/606', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            year: parseInt(year),
+            month: parseInt(month)
+        })
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.blob();
+        }
+        return response.json().then(err => Promise.reject(err));
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `606_${year}_${month.toString().padStart(2, '0')}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        alert('Reporte 606 exportado exitosamente');
+    })
+    .catch(error => {
+        alert('Error: ' + (error.error || 'No se pudo exportar el reporte'));
+    });
+}
+</script>
+{% endblock %}

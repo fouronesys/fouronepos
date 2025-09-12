@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}Reportes DGII - Four One POS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-file-earmark-spreadsheet"></i> Reportes DGII</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Reportes DGII</li>
+            </ol>
+        </nav>
+    </div>
+
+    <!-- Current Month Summary -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title">Ventas - {{ current_month }}</h4>
+                            <h2 class="mb-0">{{ sales_count }}</h2>
+                            <small>Total de ventas este mes</small>
+                        </div>
+                        <div>
+                            <i class="bi bi-receipt-cutoff display-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title">Compras - {{ current_month }}</h4>
+                            <h2 class="mb-0">{{ purchases_count }}</h2>
+                            <small>Total de compras este mes</small>
+                        </div>
+                        <div>
+                            <i class="bi bi-cart-plus display-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Reports -->
+    <div class="row">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5><i class="bi bi-file-earmark-arrow-down"></i> Reporte 606 - Compras</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        Reporte de compras realizadas a proveedores con detalles fiscales según formato DGII 606.
+                    </p>
+                    <form id="report606Form">
+                        <div class="mb-3">
+                            <label for="period606" class="form-label">Período</label>
+                            <select class="form-select" id="period606" required>
+                                {% for month in available_months %}
+                                <option value="{{ month.value }}">{{ month.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-outline-info" onclick="preview606()">
+                                <i class="bi bi-eye"></i> Vista Previa
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-download"></i> Exportar 606 (CSV)
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5><i class="bi bi-file-earmark-arrow-down"></i> Reporte 607 - Ventas</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        Reporte de ventas realizadas a clientes con detalles fiscales según formato DGII 607.
+                    </p>
+                    <form id="report607Form">
+                        <div class="mb-3">
+                            <label for="period607" class="form-label">Período</label>
+                            <select class="form-select" id="period607" required>
+                                {% for month in available_months %}
+                                <option value="{{ month.value }}">{{ month.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-outline-info" onclick="preview607()">
+                                <i class="bi bi-eye"></i> Vista Previa
+                            </button>
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-download"></i> Exportar 607 (CSV)
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Information -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i>
+                <strong>Información importante:</strong>
+                Los reportes 606 y 607 se generan en formato CSV delimitado por pipe (|) según las especificaciones de la DGII.
+                Asegúrese de revisar los datos antes de enviarlos a la DGII.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('report606Form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const period = document.getElementById('period606').value;
+    const [year, month] = period.split('-');
+    
+    fetch('/dgii/export/606', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            year: parseInt(year),
+            month: parseInt(month)
+        })
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.blob();
+        }
+        return response.json().then(err => Promise.reject(err));
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `606_${year}_${month.padStart(2, '0')}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    })
+    .catch(error => {
+        alert('Error: ' + (error.error || 'No se pudo generar el reporte'));
+    });
+});
+
+document.getElementById('report607Form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const period = document.getElementById('period607').value;
+    const [year, month] = period.split('-');
+    
+    fetch('/dgii/export/607', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            year: parseInt(year),
+            month: parseInt(month)
+        })
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.blob();
+        }
+        return response.json().then(err => Promise.reject(err));
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `607_${year}_${month.padStart(2, '0')}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    })
+    .catch(error => {
+        alert('Error: ' + (error.error || 'No se pudo generar el reporte'));
+    });
+});
+
+function preview606() {
+    const period = document.getElementById('period606').value;
+    const [year, month] = period.split('-');
+    window.open(`/dgii/preview/606/${year}/${month}`, '_blank');
+}
+
+function preview607() {
+    const period = document.getElementById('period607').value;
+    const [year, month] = period.split('-');
+    window.open(`/dgii/preview/607/${year}/${month}`, '_blank');
+}
+</script>
+{% endblock %}

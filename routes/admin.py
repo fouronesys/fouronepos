@@ -376,47 +376,34 @@ def delete_table(table_id):
     return redirect(url_for('admin.tables'))
 
 
-# System Configuration Routes
-@bp.route('/settings')
-def settings():
-    user = require_admin()
-    if not isinstance(user, models.User):
-        return user
-    
-    # Get current logo configuration
-    logo_config = models.SystemConfiguration.query.filter_by(key='receipt_logo').first()
-    current_logo = logo_config.value if logo_config else None
-    
-    return render_template('admin/settings.html', current_logo=current_logo)
-
-@bp.route('/settings/logo', methods=['POST'])
-def update_logo():
+@bp.route('/company-settings/logo', methods=['POST'])
+def company_settings_logo():
     user = require_admin()
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
     # Validate CSRF token
     if not validate_csrf_token():
-        return redirect(url_for('admin.settings'))
+        return redirect(url_for('admin.company_settings'))
     
     try:
         # Check if file was uploaded
         if 'logo_file' not in request.files:
             flash('No se seleccionó ningún archivo', 'error')
-            return redirect(url_for('admin.settings'))
+            return redirect(url_for('admin.company_settings'))
         
         file = request.files['logo_file']
         
         if file.filename == '':
             flash('No se seleccionó ningún archivo', 'error')
-            return redirect(url_for('admin.settings'))
+            return redirect(url_for('admin.company_settings'))
         
         # Validate file type
         allowed_extensions = {'png', 'jpg', 'jpeg', 'gif'}
         filename = file.filename or ''
         if not ('.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions):
             flash('Solo se permiten archivos PNG, JPG, JPEG y GIF', 'error')
-            return redirect(url_for('admin.settings'))
+            return redirect(url_for('admin.company_settings'))
         
         # Validate file size (max 500KB)
         file.seek(0, 2)  # Seek to end of file
@@ -424,7 +411,7 @@ def update_logo():
         file.seek(0)  # Reset to beginning
         if file_size > 500 * 1024:  # 500KB limit
             flash('El archivo es demasiado grande. Máximo 500KB permitido', 'error')
-            return redirect(url_for('admin.settings'))
+            return redirect(url_for('admin.company_settings'))
         
         # Create logos directory if it doesn't exist
         import os
@@ -467,9 +454,9 @@ def update_logo():
         db.session.rollback()
         flash(f'Error al actualizar logo: {str(e)}', 'error')
     
-    return redirect(url_for('admin.settings'))
+    return redirect(url_for('admin.company_settings'))
 
-@bp.route('/settings/logo/remove', methods=['POST'])
+@bp.route('/company-settings/logo/remove', methods=['POST'])
 def remove_logo():
     user = require_admin()
     if not isinstance(user, models.User):
@@ -477,7 +464,7 @@ def remove_logo():
     
     # Validate CSRF token
     if not validate_csrf_token():
-        return redirect(url_for('admin.settings'))
+        return redirect(url_for('admin.company_settings'))
     
     try:
         logo_config = models.SystemConfiguration.query.filter_by(key='receipt_logo').first()
@@ -499,7 +486,7 @@ def remove_logo():
         db.session.rollback()
         flash(f'Error al eliminar logo: {str(e)}', 'error')
     
-    return redirect(url_for('admin.settings'))
+    return redirect(url_for('admin.company_settings'))
 
 
 @bp.route('/reports')
@@ -529,6 +516,105 @@ def ncf_sequences():
     cash_registers = models.CashRegister.query.filter_by(active=True).all()
     
     return render_template('admin/ncf_sequences.html', sequences=sequences, cash_registers=cash_registers)
+
+
+@bp.route('/ncf-sequences/create', methods=['POST'])
+def create_ncf_sequence():
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token for security
+    if not validate_csrf_token():
+        return jsonify({'error': 'Token de seguridad inválido'}), 400
+    
+    try:
+        # Get form data
+        cash_register_id = request.form.get('cash_register_id')
+        ncf_type = request.form.get('ncf_type')
+        serie = request.form.get('serie', '').strip().upper()
+        start_number = request.form.get('start_number')
+        end_number = request.form.get('end_number')
+        
+        # Validate required fields
+        if not all([cash_register_id, ncf_type, serie, start_number, end_number]):
+            return jsonify({'error': 'Todos los campos son obligatorios'}), 400
+        
+        # Validate cash register exists
+        cash_register = models.CashRegister.query.get(cash_register_id)
+        if not cash_register or not cash_register.active:
+            return jsonify({'error': 'Caja registradora inválida'}), 400
+        
+        # Validate NCF type
+        if ncf_type not in ['consumo', 'credito_fiscal', 'gubernamental']:
+            return jsonify({'error': 'Tipo de NCF inválido'}), 400
+        
+        # Validate serie format (3 characters, alphanumeric)
+        if len(serie) != 3 or not serie.isalnum():
+            return jsonify({'error': 'La serie debe tener 3 caracteres alfanuméricos'}), 400
+        
+        # Validate number range
+        try:
+            start_num = int(start_number or 0)
+            end_num = int(end_number or 0)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Los números deben ser enteros válidos'}), 400
+        
+        if start_num <= 0 or end_num <= 0:
+            return jsonify({'error': 'Los números deben ser mayores a 0'}), 400
+        
+        if start_num >= end_num:
+            return jsonify({'error': 'El número final debe ser mayor que el inicial'}), 400
+        
+        # Convert NCF type to enum
+        ncf_type_enum = models.NCFType[ncf_type.upper()]
+        
+        # Check for duplicate series in same cash register and NCF type
+        existing_sequence = models.NCFSequence.query.filter_by(
+            cash_register_id=cash_register_id,
+            ncf_type=ncf_type_enum,
+            serie=serie,
+            active=True
+        ).first()
+        
+        if existing_sequence:
+            return jsonify({'error': f'Ya existe una secuencia activa con serie {serie} para este tipo de NCF y caja'}), 400
+        
+        # Check for overlapping number ranges in same cash register and NCF type
+        overlapping = models.NCFSequence.query.filter_by(
+            cash_register_id=cash_register_id,
+            ncf_type=ncf_type_enum,
+            active=True
+        ).filter(
+            models.NCFSequence.start_number <= end_num,
+            models.NCFSequence.end_number >= start_num
+        ).first()
+        
+        if overlapping:
+            return jsonify({'error': 'El rango de números se solapa con una secuencia existente'}), 400
+        
+        # Create new NCF sequence
+        new_sequence = models.NCFSequence()
+        new_sequence.cash_register_id = int(cash_register_id)
+        new_sequence.ncf_type = ncf_type_enum
+        new_sequence.serie = serie
+        new_sequence.start_number = start_num
+        new_sequence.end_number = end_num
+        new_sequence.current_number = start_num  # Start at the beginning
+        new_sequence.active = True
+        
+        db.session.add(new_sequence)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Secuencia NCF {serie} creada exitosamente',
+            'sequence_id': new_sequence.id
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error creando secuencia: {str(e)}'}), 500
 
 
 # User Management Routes
