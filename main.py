@@ -43,7 +43,7 @@ with app.app_context():
 
 
 # Import routes after app initialization
-from routes import auth, admin, waiter, api, inventory
+from routes import auth, admin, waiter, api, inventory, dgii
 
 
 # Register blueprints
@@ -52,6 +52,7 @@ app.register_blueprint(admin.bp)
 app.register_blueprint(waiter.bp)
 app.register_blueprint(api.bp)
 app.register_blueprint(inventory.bp)
+app.register_blueprint(dgii.bp)
 
 
 @app.route('/sw.js')
