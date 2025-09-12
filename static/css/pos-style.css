@@ -355,9 +355,9 @@ body {
     border: 2px solid #ff4757;
     color: #ff4757;
     background: transparent;
-    min-height: 40px;
-    min-width: 40px;
-    padding: 8px 12px;
+    min-height: 50px;
+    min-width: 50px;
+    padding: 12px 15px;
 }
 
 .btn-outline-danger:hover {
@@ -382,7 +382,7 @@ body {
     }
     
     .product-card {
-        min-height: 120px;
+        min-height: 140px;
         padding: 15px;
         margin-bottom: 15px;
     }
@@ -404,18 +404,18 @@ body {
     .nav-pills .nav-link {
         padding: 12px 20px;
         font-size: 14px;
-        min-height: 45px;
+        min-height: 50px;
         min-width: 100px;
     }
     
     .btn-success-custom {
-        min-height: 55px;
+        min-height: 60px;
         font-size: 18px;
         padding: 15px 35px;
     }
     
     .form-control {
-        min-height: 45px;
+        min-height: 50px;
         padding: 12px 15px;
         font-size: 15px;
     }
@@ -423,18 +423,18 @@ body {
 
 @media (max-width: 576px) {
     .product-card {
-        min-height: 100px;
+        min-height: 140px;
     }
     
     .nav-pills .nav-link {
         padding: 10px 15px;
         font-size: 13px;
-        min-height: 40px;
+        min-height: 50px;
         min-width: 80px;
     }
     
     .btn-success-custom {
-        min-height: 50px;
+        min-height: 60px;
         font-size: 16px;
         padding: 12px 30px;
     }
