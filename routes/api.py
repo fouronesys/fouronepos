@@ -751,6 +751,11 @@ def view_receipt(sale_id):
     if not isinstance(user, models.User):
         return user
     
+    # Get format parameter for device-appropriate sizing
+    receipt_format = request.args.get('format', '80mm')
+    if receipt_format not in ['58mm', '80mm']:
+        receipt_format = '80mm'  # Default to 80mm if invalid format
+    
     # Get sale data
     sale = models.Sale.query.get_or_404(sale_id)
     
@@ -783,7 +788,8 @@ def view_receipt(sale_id):
     
     return render_template('receipt_view.html', 
                          sale_data=sale_data, 
-                         company_info=company_info)
+                         company_info=company_info,
+                         receipt_format=receipt_format)
 
 
 @bp.route('/receipts/<int:sale_id>/pdf')

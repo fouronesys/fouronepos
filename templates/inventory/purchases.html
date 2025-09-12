@@ -79,10 +79,27 @@
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="purchaseNCF" class="form-label">NCF del Proveedor</label>
-                                <input type="text" class="form-control" id="purchaseNCF" placeholder="B0100000001">
+                                <label for="purchaseNCFType" class="form-label">Tipo de Comprobante</label>
+                                <select class="form-select" id="purchaseNCFType" onchange="updateNCFPlaceholder()">
+                                    <option value="">Seleccionar tipo...</option>
+                                    <option value="credito_fiscal">Crédito Fiscal (B)</option>
+                                    <option value="consumo">Consumidor Final (E/F)</option>
+                                    <option value="exterior">Pagos al Exterior (P)</option>
+                                    <option value="gubernamental">Gubernamental (A/G/K/L)</option>
+                                </select>
                             </div>
                         </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="purchaseNCF" class="form-label">NCF del Proveedor</label>
+                                <input type="text" class="form-control" id="purchaseNCF" placeholder="Seleccione un tipo de comprobante primero">
+                                <small class="form-text text-muted" id="ncfHelp">Ingrese el número de comprobante fiscal que aparece en la factura del proveedor</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
                     </div>
                     
                     <div class="mb-3">
@@ -144,6 +161,7 @@ function newPurchase() {
     document.getElementById('purchaseItems').innerHTML = '';
     purchaseItemCounter = 0;
     updatePurchaseTotals();
+    updateNCFPlaceholder(); // Reset NCF placeholder
 }
 
 function addPurchaseItem() {
@@ -190,6 +208,39 @@ function removePurchaseItem(itemId) {
     }
 }
 
+function updateNCFPlaceholder() {
+    const ncfType = document.getElementById('purchaseNCFType').value;
+    const ncfInput = document.getElementById('purchaseNCF');
+    const ncfHelp = document.getElementById('ncfHelp');
+    
+    const placeholders = {
+        'credito_fiscal': {
+            placeholder: 'B0100000001',
+            help: 'Formato: B + serie (01-99) + número (8 dígitos). Ej: B0100000001'
+        },
+        'consumo': {
+            placeholder: 'E0100000001 o F0100000001',
+            help: 'Formato: E/F + serie (01-99) + número (8 dígitos). Ej: E0100000001'
+        },
+        'exterior': {
+            placeholder: 'P0100000001',
+            help: 'Formato: P + serie (01-99) + número (8 dígitos). Ej: P0100000001'
+        },
+        'gubernamental': {
+            placeholder: 'A0100000001',
+            help: 'Formato: A/G/K/L + serie (01-99) + número (8 dígitos). Ej: A0100000001'
+        }
+    };
+    
+    if (ncfType && placeholders[ncfType]) {
+        ncfInput.placeholder = placeholders[ncfType].placeholder;
+        ncfHelp.textContent = placeholders[ncfType].help;
+    } else {
+        ncfInput.placeholder = 'Seleccione un tipo de comprobante primero';
+        ncfHelp.textContent = 'Ingrese el número de comprobante fiscal que aparece en la factura del proveedor';
+    }
+}
+
 function updatePurchaseTotals() {
     let subtotal = 0;
     
@@ -213,11 +264,23 @@ function updatePurchaseTotals() {
 
 async function savePurchase() {
     const supplierId = document.getElementById('purchaseSupplier').value;
-    const ncf = document.getElementById('purchaseNCF').value;
+    const ncfType = document.getElementById('purchaseNCFType').value;
+    const ncf = document.getElementById('purchaseNCF').value.trim();
     const notes = document.getElementById('purchaseNotes').value;
     
     if (!supplierId) {
         alert('Seleccione un proveedor');
+        return;
+    }
+    
+    // Validate NCF if provided
+    if (ncf && !ncfType) {
+        alert('Seleccione el tipo de comprobante antes de ingresar el NCF');
+        return;
+    }
+    
+    if (ncfType && !ncf) {
+        alert('Ingrese el NCF del proveedor para el tipo de comprobante seleccionado');
         return;
     }
     
@@ -248,6 +311,7 @@ async function savePurchase() {
     const purchaseData = {
         supplier_id: parseInt(supplierId),
         ncf_supplier: ncf,
+        ncf_type: ncfType, // Include NCF type for validation
         total_amount: total,
         tax_amount: tax,
         notes: notes,

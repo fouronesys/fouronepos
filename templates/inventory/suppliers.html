@@ -128,11 +128,35 @@ function newSupplier() {
     document.getElementById('supplierForm').reset();
 }
 
-function editSupplier(supplierId) {
+async function editSupplier(supplierId) {
     editingSupplierId = supplierId;
     document.getElementById('supplierModalTitle').textContent = 'Editar Proveedor';
-    // Implementation would load supplier data
-    $('#supplierModal').modal('show');
+    
+    try {
+        // Load supplier data
+        const response = await fetch(`/inventory/api/suppliers/${supplierId}`);
+        
+        if (response.ok) {
+            const supplier = await response.json();
+            
+            // Populate form fields
+            document.getElementById('supplierName').value = supplier.name || '';
+            document.getElementById('supplierRnc').value = supplier.rnc || '';
+            document.getElementById('supplierContact').value = supplier.contact_person || '';
+            document.getElementById('supplierPhone').value = supplier.phone || '';
+            document.getElementById('supplierEmail').value = supplier.email || '';
+            document.getElementById('supplierAddress').value = supplier.address || '';
+            
+            // Show modal using Bootstrap 5 API
+            const modal = new bootstrap.Modal(document.getElementById('supplierModal'));
+            modal.show();
+        } else {
+            alert('Error cargando datos del proveedor');
+        }
+    } catch (error) {
+        console.error('Error loading supplier:', error);
+        alert('Error de conexión');
+    }
 }
 
 async function saveSupplier() {
@@ -151,8 +175,20 @@ async function saveSupplier() {
     }
     
     try {
-        const response = await fetch('/inventory/api/suppliers', {
-            method: 'POST',
+        let url, method;
+        
+        if (editingSupplierId) {
+            // Editing existing supplier
+            url = `/inventory/api/suppliers/${editingSupplierId}`;
+            method = 'PUT';
+        } else {
+            // Creating new supplier
+            url = '/inventory/api/suppliers';
+            method = 'POST';
+        }
+        
+        const response = await fetch(url, {
+            method: method,
             headers: {
                 'Content-Type': 'application/json',
             },
@@ -160,13 +196,15 @@ async function saveSupplier() {
         });
         
         if (response.ok) {
-            alert('Proveedor guardado exitosamente');
+            const result = await response.json();
+            alert(result.message || 'Proveedor guardado exitosamente');
             location.reload();
         } else {
             const error = await response.json();
             alert(error.error || 'Error guardando proveedor');
         }
     } catch (error) {
+        console.error('Error saving supplier:', error);
         alert('Error de conexión');
     }
 }

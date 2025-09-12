@@ -316,6 +316,27 @@ def update_supplier(supplier_id):
         return jsonify({'error': str(e)}), 400
 
 
+@bp.route('/api/suppliers/<int:supplier_id>', methods=['GET'])
+def get_supplier(supplier_id):
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    supplier = models.Supplier.query.get_or_404(supplier_id)
+    
+    return jsonify({
+        'id': supplier.id,
+        'name': supplier.name,
+        'rnc': supplier.rnc,
+        'contact_person': supplier.contact_person,
+        'phone': supplier.phone,
+        'email': supplier.email,
+        'address': supplier.address,
+        'active': supplier.active,
+        'created_at': supplier.created_at.isoformat() if supplier.created_at else None
+    })
+
+
 @bp.route('/api/suppliers/<int:supplier_id>', methods=['DELETE'])
 def delete_supplier(supplier_id):
     user = require_admin()
@@ -379,11 +400,21 @@ def create_purchase():
     
     # Validate NCF if provided
     ncf_supplier = data.get('ncf_supplier', '').strip()
+    ncf_type = data.get('ncf_type', '').strip()
+    
     if ncf_supplier:
-        ncf_validation = utils.validate_ncf(ncf_supplier)
+        # If NCF is provided but type is missing, require type selection
+        if not ncf_type:
+            return jsonify({'error': 'Debe seleccionar el tipo de comprobante antes de ingresar el NCF'}), 400
+        
+        # Validate NCF format and type
+        ncf_validation = utils.validate_ncf(ncf_supplier, ncf_type)
         if not ncf_validation['valid']:
             return jsonify({'error': f'NCF inválido: {ncf_validation["message"]}'}), 400
         ncf_supplier = ncf_validation['formatted']
+    elif ncf_type:
+        # If type is provided but NCF is missing
+        return jsonify({'error': 'Debe ingresar el NCF del proveedor para el tipo de comprobante seleccionado'}), 400
     
     # Validate and calculate items
     items_to_process = []

@@ -344,9 +344,112 @@ class ConnectionManager {
     }
 }
 
+// Device Detection Class
+class DeviceDetector {
+    constructor() {
+        this.deviceInfo = this.detectDevice();
+    }
+    
+    detectDevice() {
+        const userAgent = navigator.userAgent.toLowerCase();
+        const touchSupport = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        const screenWidth = window.screen.width;
+        const screenHeight = window.screen.height;
+        const pixelRatio = window.devicePixelRatio || 1;
+        
+        // Check for mobile/tablet indicators
+        const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+        const isTablet = /(ipad|android(?!.*mobile)|tablet)/i.test(userAgent) || 
+                        (touchSupport && Math.min(screenWidth, screenHeight) >= 768);
+        
+        // Additional checks for touch-capable devices
+        const isTouchDevice = touchSupport && (isMobile || isTablet || 
+            (screenWidth <= 1024 && screenHeight <= 1366)); // Common tablet resolutions
+        
+        // Determine receipt format based on device type
+        const receiptFormat = (isMobile || (isTablet && Math.min(screenWidth, screenHeight) < 800)) ? '58mm' : '80mm';
+        
+        return {
+            isMobile: isMobile,
+            isTablet: isTablet,
+            isTouchDevice: isTouchDevice,
+            isDesktop: !isMobile && !isTablet && !isTouchDevice,
+            receiptFormat: receiptFormat,
+            screenWidth: screenWidth,
+            screenHeight: screenHeight,
+            pixelRatio: pixelRatio,
+            userAgent: userAgent,
+            touchSupport: touchSupport
+        };
+    }
+    
+    getReceiptFormat() {
+        return this.deviceInfo.receiptFormat;
+    }
+    
+    getDeviceInfo() {
+        return this.deviceInfo;
+    }
+    
+    logDeviceInfo() {
+        console.log('[Device] Detected device info:', this.deviceInfo);
+    }
+}
+
+// Automatic Receipt Printing Function
+async function printReceipt(saleData) {
+    try {
+        if (!saleData.sale_id) {
+            throw new Error('Sale ID is required for receipt printing');
+        }
+        
+        const receiptFormat = deviceDetector.getReceiptFormat();
+        const deviceInfo = deviceDetector.getDeviceInfo();
+        console.log(`[Receipt] Printing receipt in ${receiptFormat} format for ${deviceInfo.isMobile ? 'mobile' : deviceInfo.isTablet ? 'tablet' : 'desktop'} device`);
+        
+        // Use existing receipt view endpoint with format parameter
+        const viewUrl = `/api/receipts/${saleData.sale_id}/view?format=${receiptFormat}`;
+        
+        // For mobile/tablet devices, just show success message (thermal printing typically handled by POS hardware)
+        if (deviceInfo.isMobile || deviceInfo.isTablet) {
+            console.log(`[Receipt] ${receiptFormat} receipt ready for thermal printing`);
+            showNotification(`Recibo listo para impresi\u00f3n t\u00e9rmica ${receiptFormat}`, 'success');
+            return true;
+        }
+        
+        // For desktop, open print preview
+        if (deviceInfo.isDesktop) {
+            console.log(`[Receipt] Opening ${receiptFormat} receipt for desktop printing`);
+            const printWindow = window.open(viewUrl, '_blank', 'width=400,height=600,toolbar=no,menubar=no,scrollbars=yes');
+            
+            if (printWindow) {
+                // Wait for window to load then trigger print dialog
+                printWindow.onload = function() {
+                    setTimeout(() => {
+                        printWindow.print();
+                    }, 500);
+                };
+                showNotification(`Recibo abierto en formato ${receiptFormat} - usar Ctrl+P para imprimir`, 'success');
+            } else {
+                showNotification('Ventana de impresi\u00f3n bloqueada - habilitar ventanas emergentes', 'warning');
+            }
+            
+            return true;
+        }
+        
+        return true;
+        
+    } catch (error) {
+        console.error('[Receipt] Error printing receipt:', error);
+        showNotification(`Error al imprimir recibo: ${error.message}`, 'error');
+        return false;
+    }
+}
+
 // Global instances
 let cartManager;
 let connectionManager;
+let deviceDetector;
 
 // Legacy cart variable for backward compatibility
 let cart = [];
@@ -619,6 +722,24 @@ function processSale() {
             showNotification('Venta guardada - se procesará cuando vuelva la conexión', 'warning');
         } else {
             showNotification(`Venta procesada exitosamente. NCF: ${result.ncf}`, 'success');
+            
+            // Automatically print receipt with appropriate format for device
+            if (result.sale_id) {
+                const saleData = {
+                    sale_id: result.sale_id,
+                    table_id: result.table_id || null
+                };
+                printReceipt(saleData).then(printed => {
+                    if (printed) {
+                        console.log('[POS] Receipt printed successfully after sale');
+                    } else {
+                        console.log('[POS] Receipt printing failed, but sale was processed');
+                    }
+                }).catch(error => {
+                    console.error('[POS] Receipt printing error:', error);
+                    // Don't show error to user as sale was successful
+                });
+            }
         }
         
         clearCart();
@@ -836,6 +957,10 @@ async function initializePOS() {
     // Initialize managers
     cartManager = new CartManager();
     connectionManager = new ConnectionManager();
+    deviceDetector = new DeviceDetector();
+    
+    // Log device information for debugging
+    deviceDetector.logDeviceInfo();
     
     // Register service worker
     await registerServiceWorker();
