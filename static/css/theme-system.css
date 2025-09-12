@@ -1,0 +1,127 @@
+/* Theme System - Light/Dark Mode Toggle */
+
+:root {
+    /* Dark Theme (Default) */
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --bg-tertiary: #374151;
+    --text-primary: #ffffff;
+    --text-secondary: #b0b0b0;
+    --text-accent: #00d4ff;
+    --border-color: #444444;
+    --shadow-color: rgba(0, 0, 0, 0.3);
+    --card-hover-shadow: rgba(0, 212, 255, 0.15);
+    --success-bg: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+    --success-hover: linear-gradient(135deg, #00cc6a 0%, #00aa56 100%);
+    --danger-bg: linear-gradient(135deg, #ff4757 0%, #ff3742 100%);
+    --warning-bg: linear-gradient(135deg, #ffa500 0%, #ff8c00 100%);
+}
+
+/* Light Theme */
+html[data-theme="light"] {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #e9ecef;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --text-accent: #0066cc;
+    --border-color: #dee2e6;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+    --card-hover-shadow: rgba(0, 102, 204, 0.15);
+    --success-bg: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    --success-hover: linear-gradient(135deg, #20c997 0%, #198754 100%);
+    --danger-bg: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    --warning-bg: linear-gradient(135deg, #fd7e14 0%, #e68900 100%);
+}
+
+/* Apply CSS Variables to Existing Styles */
+body {
+    background-color: var(--bg-primary) !important;
+    color: var(--text-primary) !important;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Scope container-fluid to main content only, avoid breaking navbar */
+main .container-fluid {
+    background-color: var(--bg-primary) !important;
+}
+
+.pos-header {
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+.pos-header h2 {
+    color: var(--text-accent) !important;
+}
+
+.pos-header p {
+    color: var(--text-secondary) !important;
+}
+
+.card {
+    background-color: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+    box-shadow: 0 8px 32px var(--shadow-color) !important;
+}
+
+.card:hover {
+    box-shadow: 0 12px 40px var(--card-hover-shadow) !important;
+}
+
+.card-header {
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%) !important;
+    color: var(--text-accent) !important;
+}
+
+.card-body {
+    background-color: var(--bg-secondary) !important;
+}
+
+/* Theme Toggle Button */
+.theme-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1050;
+    background: var(--success-bg);
+    border: none;
+    border-radius: 50px;
+    padding: 12px 20px;
+    color: #000;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px var(--shadow-color);
+}
+
+.theme-toggle:hover {
+    background: var(--success-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px var(--card-hover-shadow);
+}
+
+.theme-toggle i {
+    margin-right: 8px;
+    font-size: 16px;
+}
+
+/* Light theme adjustments for text contrast */
+[data-theme="light"] .theme-toggle {
+    color: #ffffff !important;
+}
+
+[data-theme="light"] .btn-success-custom {
+    color: #ffffff !important;
+}
+
+[data-theme="light"] .btn-success-custom:hover {
+    color: #ffffff !important;
+}
+
+/* Smooth transitions for theme switching */
+* {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
