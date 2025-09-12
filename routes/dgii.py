@@ -7,6 +7,13 @@ import tempfile
 import os
 from datetime import datetime, timedelta
 import calendar
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
 
 from models import db, User, Sale, Purchase, Product, Supplier, NCFSequence
 
@@ -388,3 +395,178 @@ def preview_607(year, month):
     except Exception as e:
         flash(f'Error cargando vista previa: {str(e)}', 'error')
         return redirect(url_for('dgii.reports'))
+
+
+# EXPORT TO EXCEL FUNCTIONALITY
+@bp.route('/export/606/excel', methods=['POST'])
+def export_606_excel():
+    """Export DGII 606 (Purchases) to Excel format"""
+    user = require_admin()
+    if not isinstance(user, User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Datos no proporcionados'}), 400
+    
+    year = data.get('year')
+    month = data.get('month')
+    
+    if not year or not month:
+        return jsonify({'error': 'Año y mes son requeridos'}), 400
+    
+    try:
+        year = int(year)
+        month = int(month)
+        
+        # Get purchases for the period
+        start_date = datetime(year, month, 1)
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1)
+        else:
+            end_date = datetime(year, month + 1, 1)
+        
+        purchases = Purchase.query.filter(
+            Purchase.created_at >= start_date,
+            Purchase.created_at < end_date
+        ).join(Supplier).all()
+        
+        # Create Excel workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = f"DGII 606 - {calendar.month_name[month]} {year}"
+        
+        # Add title
+        ws.merge_cells('A1:P1')
+        title_cell = ws['A1']
+        title_cell.value = f"Reporte DGII 606 - Compras - {calendar.month_name[month]} {year}"
+        title_cell.font = Font(size=16, bold=True)
+        title_cell.alignment = Alignment(horizontal='center')
+        title_cell.fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+        title_cell.font = Font(color='FFFFFF', size=16, bold=True)
+        
+        # Add headers
+        for col, header in enumerate(DGII_606_HEADERS, 1):
+            cell = ws.cell(row=3, column=col)
+            cell.value = header
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color='D9E2F3', end_color='D9E2F3', fill_type='solid')
+        
+        # Add data rows
+        row_num = 4
+        for purchase in purchases:
+            supplier = purchase.supplier
+            
+            # Determine identification type
+            if supplier.rnc and len(supplier.rnc) == 9:
+                tipo_id = '1'  # RNC
+                rnc_cedula = supplier.rnc
+            elif supplier.rnc and len(supplier.rnc) == 11:
+                tipo_id = '2'  # Cédula  
+                rnc_cedula = supplier.rnc
+            else:
+                tipo_id = '1'  # Default to RNC
+                rnc_cedula = supplier.rnc or '000000000'
+            
+            # Format dates as YYYYMMDD
+            fecha_comprobante = purchase.created_at.strftime('%Y%m%d')
+            fecha_pago = purchase.created_at.strftime('%Y%m%d')
+            
+            # Calculate amounts
+            monto_facturado = purchase.total_amount
+            itbis_facturado = purchase.tax_amount or 0
+            
+            # Data row
+            row_data = [
+                rnc_cedula, tipo_id, purchase.ncf_supplier or '', '',
+                fecha_comprobante, fecha_pago, f"{monto_facturado:.2f}",
+                f"{itbis_facturado:.2f}", '0.00', '0.00', '0.00', '0.00',
+                '0.00', '', '0.00', ''
+            ]
+            
+            for col, value in enumerate(row_data, 1):
+                ws.cell(row=row_num, column=col, value=value)
+            
+            row_num += 1
+        
+        # Save to temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+        wb.save(temp_file.name)
+        temp_file.close()
+        
+        filename = f"606_{year}_{month:02d}.xlsx"
+        
+        return send_file(temp_file.name, as_attachment=True, download_name=filename,
+                        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        
+    except Exception as e:
+        return jsonify({'error': f'Error generando Excel 606: {str(e)}'}), 400
+
+
+@bp.route('/export/607/excel', methods=['POST'])
+def export_607_excel():
+    """Export DGII 607 (Sales) to Excel format"""
+    user = require_admin()
+    if not isinstance(user, User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    data = request.get_json()
+    year, month = data.get('year'), data.get('month')
+    if not year or not month:
+        return jsonify({'error': 'Año y mes son requeridos'}), 400
+    
+    try:
+        year, month = int(year), int(month)
+        start_date = datetime(year, month, 1)
+        end_date = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+        
+        sales = Sale.query.filter(
+            Sale.created_at >= start_date, Sale.created_at < end_date,
+            Sale.status == 'completed'
+        ).all()
+        
+        # Create Excel workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = f"DGII 607 - {calendar.month_name[month]} {year}"
+        
+        # Add title and headers
+        ws.merge_cells('A1:N1')
+        ws['A1'] = f"Reporte DGII 607 - Ventas - {calendar.month_name[month]} {year}"
+        ws['A1'].font = Font(color='FFFFFF', size=16, bold=True)
+        ws['A1'].fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+        ws['A1'].alignment = Alignment(horizontal='center')
+        
+        for col, header in enumerate(DGII_607_HEADERS, 1):
+            cell = ws.cell(row=3, column=col, value=header)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color='D9E2F3', end_color='D9E2F3', fill_type='solid')
+        
+        # Add data
+        for row_num, sale in enumerate(sales, 4):
+            if sale.customer_rnc and len(sale.customer_rnc) == 9:
+                tipo_id, rnc_cedula = '1', sale.customer_rnc
+            elif sale.customer_rnc and len(sale.customer_rnc) == 11:
+                tipo_id, rnc_cedula = '2', sale.customer_rnc
+            else:
+                tipo_id, rnc_cedula = '2', '00000000000'
+            
+            row_data = [
+                rnc_cedula, tipo_id, sale.ncf, '',
+                sale.created_at.strftime('%Y%m%d'), f"{sale.total:.2f}",
+                f"{sale.tax_amount or 0:.2f}", '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', ''
+            ]
+            
+            for col, value in enumerate(row_data, 1):
+                ws.cell(row=row_num, column=col, value=value)
+        
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+        wb.save(temp_file.name)
+        temp_file.close()
+        
+        return send_file(temp_file.name, as_attachment=True, 
+                        download_name=f"607_{year}_{month:02d}.xlsx",
+                        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        
+    except Exception as e:
+        return jsonify({'error': f'Error generando Excel 607: {str(e)}'}), 400
