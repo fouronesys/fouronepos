@@ -564,3 +564,150 @@ body {
         border-color: #ff4757;
     }
 }
+
+/* === OFFLINE FUNCTIONALITY STYLES === */
+
+/* Connection Status Indicators */
+.connection-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    min-width: 120px;
+    justify-content: center;
+}
+
+.connection-status.online {
+    background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+    color: #000000;
+    border-color: rgba(0, 255, 136, 0.3);
+    box-shadow: 0 4px 15px rgba(0, 255, 136, 0.2);
+}
+
+.connection-status.offline {
+    background: linear-gradient(135deg, #ff4757 0%, #ff3742 100%);
+    color: #ffffff;
+    border-color: rgba(255, 71, 87, 0.3);
+    box-shadow: 0 4px 15px rgba(255, 71, 87, 0.2);
+    animation: pulse-offline 2s infinite;
+}
+
+.sync-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #ffa500 0%, #ff8c00 100%);
+    color: #000000;
+    border: 2px solid rgba(255, 165, 0, 0.3);
+    box-shadow: 0 4px 15px rgba(255, 165, 0, 0.2);
+    animation: pulse-sync 1.5s infinite;
+}
+
+/* Offline Animations */
+@keyframes pulse-offline {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+@keyframes pulse-sync {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* Enhanced Cart Items with Quantity Controls */
+.cart-item .btn-sm {
+    min-width: 32px;
+    min-height: 32px;
+    padding: 6px 8px;
+    font-size: 12px;
+    border-radius: 8px;
+    font-weight: 700;
+}
+
+.cart-item .btn-outline-secondary {
+    border-color: #6b7280;
+    color: #ffffff;
+    background-color: transparent;
+}
+
+.cart-item .btn-outline-secondary:hover {
+    background-color: #6b7280;
+    border-color: #6b7280;
+    color: #000000;
+}
+
+/* Loading States */
+.btn[disabled] {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.btn .bi-spinner-border {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Additional Animations */
+.fade-in-up {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+@keyframes fadeInUp {
+    0% {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.pulse-animation {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 6px 25px rgba(0, 255, 136, 0.3); }
+    50% { box-shadow: 0 6px 25px rgba(0, 255, 136, 0.5); }
+    100% { box-shadow: 0 6px 25px rgba(0, 255, 136, 0.3); }
+}
+
+/* Responsive Design for Offline Features */
+@media (max-width: 768px) {
+    .pos-header .d-flex {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    
+    .pos-header .d-flex:last-child {
+        align-self: stretch;
+        justify-content: space-between;
+    }
+    
+    .connection-status,
+    .sync-status {
+        font-size: 12px;
+        padding: 6px 12px;
+        min-width: auto;
+    }
+}

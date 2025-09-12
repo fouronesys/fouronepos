@@ -9,8 +9,22 @@
 {% block content %}
 <div class="container-fluid">
     <div class="pos-header fade-in-up">
-        <h2 class="mb-0"><i class="bi bi-cash-register me-3"></i> Punto de Venta</h2>
-        <p class="mb-0 mt-2 opacity-75">Sistema POS con Cumplimiento Fiscal Dominicano</p>
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="mb-0"><i class="bi bi-cash-register me-3"></i> Punto de Venta</h2>
+                <p class="mb-0 mt-2 opacity-75">Sistema POS con Cumplimiento Fiscal Dominicano</p>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <!-- Connection Status Indicator -->
+                <div id="connection-status" class="connection-status online">
+                    <i class="bi bi-wifi"></i> En línea
+                </div>
+                <!-- Offline Queue Status -->
+                <div id="sync-status" class="sync-status" style="display: none;">
+                    <i class="bi bi-cloud-upload"></i> <span id="sync-count">0</span> pendiente(s)
+                </div>
+            </div>
+        </div>
     </div>
     
     <div class="row">
@@ -129,10 +143,215 @@
 
 {% block scripts %}
 <script>
-// Basic POS functionality
+// Enhanced POS functionality with offline support and cart persistence
+
+// Cart Management with localStorage
+class CartManager {
+    constructor() {
+        this.storageKey = 'fourone_pos_cart';
+        this.cart = this.loadCartFromStorage();
+        this.setupCrossTabSync();
+        this.setupServiceWorkerCommunication();
+    }
+
+    // Load cart from localStorage
+    loadCartFromStorage() {
+        try {
+            const storedCart = localStorage.getItem(this.storageKey);
+            const cart = storedCart ? JSON.parse(storedCart) : [];
+            console.log('[Cart] Loaded cart from storage:', cart);
+            return cart;
+        } catch (error) {
+            console.error('[Cart] Error loading cart from storage:', error);
+            return [];
+        }
+    }
+
+    // Save cart to localStorage
+    saveCartToStorage() {
+        try {
+            localStorage.setItem(this.storageKey, JSON.stringify(this.cart));
+            console.log('[Cart] Cart saved to storage:', this.cart);
+            
+            // Broadcast cart change for cross-tab sync
+            this.broadcastCartChange();
+        } catch (error) {
+            console.error('[Cart] Error saving cart to storage:', error);
+        }
+    }
+
+    // Setup cross-tab synchronization
+    setupCrossTabSync() {
+        // Listen for storage events from other tabs
+        window.addEventListener('storage', (e) => {
+            if (e.key === this.storageKey && e.newValue !== null) {
+                console.log('[Cart] Cart updated in another tab, syncing...');
+                this.cart = JSON.parse(e.newValue);
+                updateCartDisplay();
+                showNotification('Carrito sincronizado desde otra pestaña', 'info');
+            }
+        });
+
+        // Listen for custom cart change events within the same tab
+        window.addEventListener('cartChanged', () => {
+            updateCartDisplay();
+        });
+    }
+
+    // Broadcast cart changes using Broadcast Channel API
+    broadcastCartChange() {
+        if ('BroadcastChannel' in window) {
+            const channel = new BroadcastChannel('cart_sync');
+            channel.postMessage({
+                type: 'CART_UPDATED',
+                cart: this.cart,
+                timestamp: Date.now()
+            });
+        }
+
+        // Dispatch custom event for same-tab components
+        window.dispatchEvent(new CustomEvent('cartChanged'));
+    }
+
+    // Add item to cart
+    addItem(productId, productName, price) {
+        const existingItem = this.cart.find(item => item.id === productId);
+        
+        if (existingItem) {
+            existingItem.quantity += 1;
+        } else {
+            this.cart.push({
+                id: productId,
+                name: productName,
+                price: price,
+                quantity: 1,
+                addedAt: Date.now()
+            });
+        }
+        
+        this.saveCartToStorage();
+        showNotification(`${productName} agregado al carrito`, 'success');
+    }
+
+    // Remove item from cart
+    removeItem(productId) {
+        const item = this.cart.find(item => item.id === productId);
+        this.cart = this.cart.filter(item => item.id !== productId);
+        this.saveCartToStorage();
+        
+        if (item) {
+            showNotification(`${item.name} removido del carrito`, 'warning');
+        }
+    }
+
+    // Update item quantity
+    updateQuantity(productId, quantity) {
+        const item = this.cart.find(item => item.id === productId);
+        if (item) {
+            if (quantity > 0) {
+                item.quantity = quantity;
+                this.saveCartToStorage();
+            } else {
+                this.removeItem(productId);
+            }
+        }
+    }
+
+    // Clear cart
+    clear() {
+        this.cart = [];
+        this.saveCartToStorage();
+        showNotification('Carrito limpiado', 'info');
+    }
+
+    // Get cart items
+    getItems() {
+        return this.cart;
+    }
+
+    // Get cart totals
+    getTotals() {
+        const subtotal = this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const tax = subtotal * 0.18;
+        const total = subtotal + tax;
+        return { subtotal, tax, total };
+    }
+
+    // Setup service worker communication
+    setupServiceWorkerCommunication() {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                if (event.data.type === 'offline-request-queued') {
+                    showNotification('Operación guardada - se procesará cuando vuelva la conexión', 'warning');
+                } else if (event.data.type === 'offline-request-synced') {
+                    showNotification('Operación sincronizada exitosamente', 'success');
+                }
+            });
+        }
+    }
+}
+
+// Connection Status Manager
+class ConnectionManager {
+    constructor() {
+        this.isOnline = navigator.onLine;
+        this.setupConnectionListeners();
+        this.updateConnectionStatus();
+    }
+
+    setupConnectionListeners() {
+        window.addEventListener('online', () => {
+            this.isOnline = true;
+            this.updateConnectionStatus();
+            this.onConnectionRestored();
+        });
+
+        window.addEventListener('offline', () => {
+            this.isOnline = false;
+            this.updateConnectionStatus();
+            this.onConnectionLost();
+        });
+    }
+
+    updateConnectionStatus() {
+        const statusIndicator = document.getElementById('connection-status');
+        if (statusIndicator) {
+            if (this.isOnline) {
+                statusIndicator.className = 'connection-status online';
+                statusIndicator.innerHTML = '<i class="bi bi-wifi"></i> En línea';
+            } else {
+                statusIndicator.className = 'connection-status offline';
+                statusIndicator.innerHTML = '<i class="bi bi-wifi-off"></i> Offline';
+            }
+        }
+    }
+
+    onConnectionRestored() {
+        showNotification('Conexión restaurada - sincronizando datos...', 'success');
+        
+        // Force sync with service worker
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({ type: 'FORCE_SYNC' });
+        }
+        
+        // Refresh data
+        loadTables();
+        refreshProductData();
+    }
+
+    onConnectionLost() {
+        showNotification('Conexión perdida - trabajando offline', 'warning');
+    }
+}
+
+// Global instances
+let cartManager;
+let connectionManager;
+
+// Legacy cart variable for backward compatibility
 let cart = [];
 
-// Load products for category
+// Load products for category with offline support
 function loadProducts(categoryId) {
     fetch(`/api/products?category_id=${categoryId}`, {
         credentials: 'same-origin'
@@ -156,32 +375,26 @@ function loadProducts(categoryId) {
                 `;
                 container.innerHTML += productCard;
             });
+        })
+        .catch(error => {
+            console.error('[POS] Error loading products:', error);
+            if (!navigator.onLine) {
+                showNotification('Cargando productos desde caché offline...', 'info');
+            }
         });
 }
 
-// Add product to cart
+// Add product to cart (using CartManager)
 function addToCart(productId, productName, price) {
-    const existingItem = cart.find(item => item.id === productId);
-    
-    if (existingItem) {
-        existingItem.quantity += 1;
-    } else {
-        cart.push({
-            id: productId,
-            name: productName,
-            price: price,
-            quantity: 1
-        });
-    }
-    
-    updateCartDisplay();
+    cartManager.addItem(productId, productName, price);
 }
 
 // Update cart display
 function updateCartDisplay() {
     const cartItems = document.getElementById('cart-items');
+    const items = cartManager.getItems();
     
-    if (cart.length === 0) {
+    if (items.length === 0) {
         cartItems.innerHTML = '<p class="text-muted">No hay productos en el carrito</p>';
         document.getElementById('subtotal').textContent = 'RD$ 0.00';
         document.getElementById('tax').textContent = 'RD$ 0.00';
@@ -190,17 +403,21 @@ function updateCartDisplay() {
     }
     
     let html = '';
-    let subtotal = 0;
+    const totals = cartManager.getTotals();
     
-    cart.forEach(item => {
+    items.forEach(item => {
         const itemTotal = item.price * item.quantity;
-        subtotal += itemTotal;
         
         html += `
-            <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="cart-item d-flex justify-content-between align-items-center mb-2">
                 <div>
                     <div class="fw-bold">${item.name}</div>
-                    <small class="text-muted">${item.quantity} x RD$ ${item.price.toFixed(2)}</small>
+                    <small class="text-muted">
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="updateItemQuantity(${item.id}, ${item.quantity - 1})">-</button>
+                        ${item.quantity}
+                        <button class="btn btn-sm btn-outline-secondary ms-1 me-2" onclick="updateItemQuantity(${item.id}, ${item.quantity + 1})">+</button>
+                        x RD$ ${item.price.toFixed(2)}
+                    </small>
                 </div>
                 <div>
                     <span class="me-2">RD$ ${itemTotal.toFixed(2)}</span>
@@ -214,24 +431,102 @@ function updateCartDisplay() {
     
     cartItems.innerHTML = html;
     
-    const tax = subtotal * 0.18;
-    const total = subtotal + tax;
+    document.getElementById('subtotal').textContent = `RD$ ${totals.subtotal.toFixed(2)}`;
+    document.getElementById('tax').textContent = `RD$ ${totals.tax.toFixed(2)}`;
+    document.getElementById('total').textContent = `RD$ ${totals.total.toFixed(2)}`;
     
-    document.getElementById('subtotal').textContent = `RD$ ${subtotal.toFixed(2)}`;
-    document.getElementById('tax').textContent = `RD$ ${tax.toFixed(2)}`;
-    document.getElementById('total').textContent = `RD$ ${total.toFixed(2)}`;
+    // Update legacy cart variable for backward compatibility
+    cart = items;
 }
 
-// Remove item from cart
+// Remove item from cart (using CartManager)
 function removeFromCart(productId) {
-    cart = cart.filter(item => item.id !== productId);
-    updateCartDisplay();
+    cartManager.removeItem(productId);
 }
 
-// Process sale
+// Update item quantity
+function updateItemQuantity(productId, newQuantity) {
+    cartManager.updateQuantity(productId, newQuantity);
+}
+
+// Clear cart (using CartManager)
+function clearCart() {
+    cartManager.clear();
+    document.getElementById('table-select').value = '';
+    document.getElementById('ncf-type-select').value = 'consumo';
+    toggleClientInfo(); // Reset client info section
+}
+
+// Show notification to user
+function showNotification(message, type = 'info') {
+    // Create or update notification element
+    let notification = document.getElementById('notification');
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.id = 'notification';
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            z-index: 9999;
+            font-weight: 600;
+            max-width: 300px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            transition: all 0.3s ease;
+            transform: translateX(100%);
+        `;
+        document.body.appendChild(notification);
+    }
+    
+    // Set notification style based on type
+    const colors = {
+        success: 'background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%); color: #000;',
+        error: 'background: linear-gradient(135deg, #ff4757 0%, #ff3742 100%); color: #fff;',
+        warning: 'background: linear-gradient(135deg, #ffa500 0%, #ff8c00 100%); color: #000;',
+        info: 'background: linear-gradient(135deg, #00d4ff 0%, #0ea5e9 100%); color: #000;'
+    };
+    
+    notification.style.cssText += colors[type] || colors.info;
+    notification.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <i class="bi bi-${type === 'success' ? 'check-circle' : type === 'error' ? 'x-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'}"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    // Show notification
+    setTimeout(() => notification.style.transform = 'translateX(0)', 100);
+    
+    // Hide notification after 5 seconds
+    setTimeout(() => {
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => notification.remove(), 300);
+    }, 5000);
+}
+
+// Refresh product data for offline caching
+function refreshProductData() {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = (event) => {
+            if (event.data.success) {
+                console.log('[POS] Product data cached successfully');
+            }
+        };
+        
+        navigator.serviceWorker.controller.postMessage({ 
+            type: 'CACHE_API_DATA' 
+        }, [channel.port2]);
+    }
+}
+
+// Process sale (updated for offline support)
 function processSale() {
-    if (cart.length === 0) {
-        alert('El carrito está vacío');
+    const items = cartManager.getItems();
+    if (items.length === 0) {
+        showNotification('El carrito está vacío', 'warning');
         return;
     }
     
@@ -243,13 +538,19 @@ function processSale() {
         const clientRnc = document.getElementById('client-rnc').value.trim();
         
         if (!clientName || !clientRnc) {
-            alert('Para comprobantes fiscales y gubernamentales debe completar el nombre/empresa y RNC/cédula');
+            showNotification('Para comprobantes fiscales y gubernamentales debe completar el nombre/empresa y RNC/cédula', 'error');
             return;
         }
     }
     
     const tableId = document.getElementById('table-select').value || null;
     
+    // Disable button during processing
+    const processButton = document.getElementById('process-sale');
+    const originalText = processButton.innerHTML;
+    processButton.disabled = true;
+    processButton.innerHTML = '<i class="bi bi-spinner-border me-2"></i> Procesando...';
+    
     // Create sale first
     fetch('/api/sales', {
         method: 'POST',
@@ -264,12 +565,12 @@ function processSale() {
     .then(response => response.json())
     .then(sale => {
         if (sale.error) {
-            alert('Error al crear venta: ' + sale.error);
-            return;
+            showNotification('Error al crear venta: ' + sale.error, 'error');
+            return Promise.reject(sale.error);
         }
         
-        // Add items to sale
-        const promises = cart.map(item => 
+        // Add items to sale - using cart items for compatibility
+        const promises = items.map(item => 
             fetch(`/api/sales/${sale.id}/items`, {
                 method: 'POST',
                 headers: {
@@ -283,62 +584,76 @@ function processSale() {
             })
         );
         
-        Promise.all(promises)
-        .then(() => {
-            // Finalize sale
-            const finalizationData = {
-                payment_method: 'efectivo',
-                ncf_type: ncfType
-            };
-            
-            // Add client info for fiscal/government invoices
-            if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
-                finalizationData.client_name = document.getElementById('client-name').value.trim();
-                finalizationData.client_rnc = document.getElementById('client-rnc').value.trim();
-            }
-            
-            return fetch(`/api/sales/${sale.id}/finalize`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'same-origin',
-                body: JSON.stringify(finalizationData)
-            });
-        })
-        .then(response => response.json())
-        .then(result => {
-            if (result.error) {
-                alert('Error al finalizar venta: ' + result.error);
-                return;
-            }
-            alert(`Venta procesada exitosamente. NCF: ${result.ncf}`);
-            clearCart();
-            loadTables(); // Refresh table list
-        })
-        .catch(error => {
-            console.error('Error processing sale:', error);
-            alert('Error al procesar la venta');
+        return Promise.all(promises).then(() => sale);
+    })
+    .then(sale => {
+        // Finalize sale
+        const finalizationData = {
+            payment_method: 'efectivo',
+            ncf_type: ncfType
+        };
+        
+        // Add client info for fiscal/government invoices
+        if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
+            finalizationData.client_name = document.getElementById('client-name').value.trim();
+            finalizationData.client_rnc = document.getElementById('client-rnc').value.trim();
+        }
+        
+        return fetch(`/api/sales/${sale.id}/finalize`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(finalizationData)
         });
     })
+    .then(response => response.json())
+    .then(result => {
+        if (result.error) {
+            showNotification('Error al finalizar venta: ' + result.error, 'error');
+            return;
+        }
+        
+        if (result.offline_queued) {
+            showNotification('Venta guardada - se procesará cuando vuelva la conexión', 'warning');
+        } else {
+            showNotification(`Venta procesada exitosamente. NCF: ${result.ncf}`, 'success');
+        }
+        
+        clearCart();
+        loadTables(); // Refresh table list
+    })
     .catch(error => {
-        console.error('Error creating sale:', error);
-        alert('Error al crear la venta');
+        console.error('Error processing sale:', error);
+        showNotification('Error al procesar la venta', 'error');
+    })
+    .finally(() => {
+        // Re-enable button
+        processButton.disabled = false;
+        processButton.innerHTML = originalText;
     });
 }
 
-// Assign order to table without processing
+// Assign order to table without processing (updated for offline support)
 function assignToTable() {
-    if (cart.length === 0) {
-        alert('El carrito está vacío');
+    const items = cartManager.getItems();
+    if (items.length === 0) {
+        showNotification('El carrito está vacío', 'warning');
         return;
     }
     
     const tableId = document.getElementById('table-select').value;
     if (!tableId) {
-        alert('Debe seleccionar una mesa');
+        showNotification('Debe seleccionar una mesa', 'warning');
         return;
     }
+    
+    // Disable button during processing
+    const assignButton = document.getElementById('assign-table');
+    const originalText = assignButton.innerHTML;
+    assignButton.disabled = true;
+    assignButton.innerHTML = '<i class="bi bi-spinner-border me-2"></i> Asignando...';
     
     // Create sale first
     fetch('/api/sales', {
@@ -354,12 +669,12 @@ function assignToTable() {
     .then(response => response.json())
     .then(sale => {
         if (sale.error) {
-            alert('Error al crear orden: ' + sale.error);
-            return;
+            showNotification('Error al crear orden: ' + sale.error, 'error');
+            return Promise.reject(sale.error);
         }
         
-        // Add items to sale
-        const promises = cart.map(item => 
+        // Add items to sale - using cart items for compatibility
+        const promises = items.map(item => 
             fetch(`/api/sales/${sale.id}/items`, {
                 method: 'POST',
                 headers: {
@@ -373,33 +688,38 @@ function assignToTable() {
             })
         );
         
-        Promise.all(promises)
-        .then(() => {
-            // Update table status to occupied
-            return fetch(`/api/tables/${tableId}/status`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'same-origin',
-                body: JSON.stringify({
-                    status: 'occupied'
-                })
-            });
-        })
-        .then(() => {
-            alert(`Orden asignada exitosamente a Mesa ${tableId}. Estado: Pendiente`);
-            clearCart();
-            loadTables(); // Refresh table list
-        })
-        .catch(error => {
-            console.error('Error assigning to table:', error);
-            alert('Error al asignar orden a la mesa');
-        });
+        return Promise.all(promises).then(() => sale);
+    })
+    .then(sale => {
+        // Update table status to occupied
+        return fetch(`/api/tables/${tableId}/status`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                status: 'occupied'
+            })
+        }).then(() => sale);
+    })
+    .then(sale => {
+        if (sale.offline_queued) {
+            showNotification('Orden guardada - se procesará cuando vuelva la conexión', 'warning');
+        } else {
+            showNotification(`Orden asignada exitosamente a Mesa ${tableId}. Estado: Pendiente`, 'success');
+        }
+        clearCart();
+        loadTables(); // Refresh table list
     })
     .catch(error => {
-        console.error('Error creating order:', error);
-        alert('Error al crear la orden');
+        console.error('Error assigning to table:', error);
+        showNotification('Error al asignar orden a la mesa', 'error');
+    })
+    .finally(() => {
+        // Re-enable button
+        assignButton.disabled = false;
+        assignButton.innerHTML = originalText;
     });
 }
 
@@ -453,8 +773,76 @@ function loadTables() {
         });
 }
 
-// Load initial products and tables
-document.addEventListener('DOMContentLoaded', function() {
+// Load available tables with offline support
+function loadTables() {
+    fetch('/api/tables?status=available', {
+        credentials: 'same-origin'
+    })
+        .then(response => response.json())
+        .then(tables => {
+            const tableSelect = document.getElementById('table-select');
+            tableSelect.innerHTML = '<option value="">Sin mesa asignada</option>';
+            
+            tables.forEach(table => {
+                const option = document.createElement('option');
+                option.value = table.id;
+                option.textContent = `Mesa ${table.number}${table.name ? ' - ' + table.name : ''}`;
+                tableSelect.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('[POS] Error loading tables:', error);
+            if (!navigator.onLine) {
+                showNotification('Cargando mesas desde caché offline...', 'info');
+            }
+        });
+}
+
+// Service Worker Registration
+async function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        try {
+            const registration = await navigator.serviceWorker.register('/static/sw.js');
+            console.log('[SW] Service Worker registered successfully:', registration);
+            
+            // Listen for updates
+            registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        showNotification('Nueva versión disponible - recarga para actualizar', 'info');
+                    }
+                });
+            });
+            
+            // Cache initial API data
+            if (navigator.serviceWorker.controller) {
+                refreshProductData();
+            }
+            
+            return registration;
+        } catch (error) {
+            console.error('[SW] Service Worker registration failed:', error);
+        }
+    } else {
+        console.log('[SW] Service Worker not supported');
+    }
+}
+
+// Initialize POS System
+async function initializePOS() {
+    console.log('[POS] Initializing POS system...');
+    
+    // Initialize managers
+    cartManager = new CartManager();
+    connectionManager = new ConnectionManager();
+    
+    // Register service worker
+    await registerServiceWorker();
+    
+    // Load initial cart state
+    updateCartDisplay();
+    
     // Load products for the first category (default)
     const firstCategory = document.querySelector('[data-bs-toggle="pill"]');
     if (firstCategory) {
@@ -467,13 +855,38 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load available tables
     loadTables();
-});
+    
+    console.log('[POS] POS system initialized successfully');
+    showNotification('Sistema POS iniciado - Modo offline disponible', 'success');
+}
+
+// Document ready event
+document.addEventListener('DOMContentLoaded', initializePOS);
 
 // Handle category tab changes
 document.addEventListener('shown.bs.tab', function(e) {
     if (e.target.getAttribute('data-bs-toggle') === 'pill') {
         const categoryId = e.target.getAttribute('data-bs-target').replace('#category-', '');
         loadProducts(categoryId);
+    }
+});
+
+// Handle page visibility change (for better power management)
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') {
+        // Page became visible, check connection and refresh if needed
+        if (navigator.onLine && connectionManager) {
+            connectionManager.onConnectionRestored();
+        }
+    }
+});
+
+// Prevent data loss on page unload
+window.addEventListener('beforeunload', function(e) {
+    // Cart is automatically saved via localStorage, but let's ensure it
+    if (cartManager && cartManager.getItems().length > 0) {
+        e.preventDefault();
+        e.returnValue = 'Tienes productos en el carrito. ¿Estás seguro de que quieres salir?';
     }
 });
 </script>
