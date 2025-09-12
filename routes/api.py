@@ -88,12 +88,23 @@ def update_table_status(table_id):
 @bp.route('/sales', methods=['POST'])
 def create_sale():
     try:
+        print(f"\n=== CREATE SALE DEBUG START ===")
+        print(f"Request method: {request.method}")
+        print(f"Request content type: {request.content_type}")
+        print(f"Request data: {request.data}")
+        
         user = require_login()
         if not isinstance(user, models.User):
+            print(f"Auth failed: {user}")
             return user
         
+        print(f"User: {user.username} (ID: {user.id})")
+        
         data = request.get_json()
+        print(f"Parsed JSON data: {data}")
+        
         if data is None:
+            print("ERROR: No data provided - this is causing the 400!")
             return jsonify({'error': 'No data provided'}), 400
         
         # Create new sale (waiters don't need cash registers initially)
