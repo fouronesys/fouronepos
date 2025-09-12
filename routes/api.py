@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, render_template, send_file, abort
 import models
 from models import db
 from datetime import datetime
@@ -6,6 +6,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import text
 import time
 import random
+import os
+from receipt_generator import generate_pdf_receipt, generate_thermal_receipt_text
+from utils import get_company_info_for_receipt
 
 bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -637,3 +640,208 @@ def get_tables():
         'capacity': table.capacity,
         'status': table.status.value
     } for table in tables])
+
+
+# Receipt Generation Routes
+@bp.route('/receipts/<int:sale_id>/view')
+def view_receipt(sale_id):
+    """Show receipt in HTML format for viewing/printing"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Get sale data
+    sale = models.Sale.query.get_or_404(sale_id)
+    
+    # FISCAL COMPLIANCE: Only allow receipts for completed sales with NCF
+    if sale.status != 'completed':
+        return jsonify({'error': 'Solo se pueden generar recibos para ventas completadas'}), 400
+    
+    if not sale.ncf:
+        return jsonify({'error': 'Esta venta no tiene NCF válido para generar recibo fiscal'}), 400
+    
+    # SECURITY: Verify user has access to this sale
+    if user.role.value not in ['administrador', 'cajero']:
+        return jsonify({'error': 'No tienes permisos para ver recibos'}), 403
+    
+    if user.role.value == 'cajero':
+        # For cashiers, verify cash register ownership and it exists
+        if not sale.cash_register:
+            return jsonify({'error': 'Esta venta no tiene caja registradora asignada'}), 400
+        if sale.cash_register.user_id != user.id:
+            return jsonify({'error': 'No tienes acceso a esta venta'}), 403
+    
+    # Get sale items
+    sale_items = models.SaleItem.query.filter_by(sale_id=sale_id).all()
+    
+    # Prepare sale data
+    sale_data = _prepare_sale_data_for_receipt(sale, sale_items)
+    
+    # Get company info
+    company_info = get_company_info_for_receipt()
+    
+    return render_template('receipt_view.html', 
+                         sale_data=sale_data, 
+                         company_info=company_info)
+
+
+@bp.route('/receipts/<int:sale_id>/pdf')
+def generate_receipt_pdf(sale_id):
+    """Generate and download PDF receipt"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Get sale data
+    sale = models.Sale.query.get_or_404(sale_id)
+    
+    # FISCAL COMPLIANCE: Only allow receipts for completed sales with NCF
+    if sale.status != 'completed':
+        return jsonify({'error': 'Solo se pueden generar recibos para ventas completadas'}), 400
+    
+    if not sale.ncf:
+        return jsonify({'error': 'Esta venta no tiene NCF válido para generar recibo fiscal'}), 400
+    
+    # SECURITY: Verify user has access to this sale
+    if user.role.value not in ['administrador', 'cajero']:
+        return jsonify({'error': 'No tienes permisos para generar recibos'}), 403
+    
+    if user.role.value == 'cajero':
+        # For cashiers, verify cash register ownership and it exists
+        if not sale.cash_register:
+            return jsonify({'error': 'Esta venta no tiene caja registradora asignada'}), 400
+        if sale.cash_register.user_id != user.id:
+            return jsonify({'error': 'No tienes acceso a esta venta'}), 403
+    
+    # Get sale items
+    sale_items = models.SaleItem.query.filter_by(sale_id=sale_id).all()
+    
+    # Prepare sale data for PDF generation
+    sale_data = _prepare_sale_data_for_receipt(sale, sale_items)
+    
+    try:
+        # Generate PDF
+        pdf_path = generate_pdf_receipt(sale_data)
+        
+        # Send file
+        return send_file(
+            pdf_path,
+            as_attachment=True,
+            download_name=f'recibo_fiscal_{sale_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf',
+            mimetype='application/pdf'
+        )
+        
+    except Exception as e:
+        return jsonify({'error': f'Error generando PDF: {str(e)}'}), 500
+
+
+@bp.route('/receipts/<int:sale_id>/thermal')
+def generate_receipt_thermal(sale_id):
+    """Generate thermal receipt text for ESC/POS printers"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Get sale data
+    sale = models.Sale.query.get_or_404(sale_id)
+    
+    # FISCAL COMPLIANCE: Only allow receipts for completed sales with NCF
+    if sale.status != 'completed':
+        return jsonify({'error': 'Solo se pueden generar recibos para ventas completadas'}), 400
+    
+    if not sale.ncf:
+        return jsonify({'error': 'Esta venta no tiene NCF válido para generar recibo fiscal'}), 400
+    
+    # SECURITY: Verify user has access to this sale
+    if user.role.value not in ['administrador', 'cajero']:
+        return jsonify({'error': 'No tienes permisos para generar recibos'}), 403
+    
+    if user.role.value == 'cajero':
+        # For cashiers, verify cash register ownership and it exists  
+        if not sale.cash_register:
+            return jsonify({'error': 'Esta venta no tiene caja registradora asignada'}), 400
+        if sale.cash_register.user_id != user.id:
+            return jsonify({'error': 'No tienes acceso a esta venta'}), 403
+    
+    # Get sale items
+    sale_items = models.SaleItem.query.filter_by(sale_id=sale_id).all()
+    
+    # Prepare sale data
+    sale_data = _prepare_sale_data_for_receipt(sale, sale_items)
+    
+    try:
+        # Generate thermal receipt text
+        receipt_text = generate_thermal_receipt_text(sale_data)
+        
+        return jsonify({
+            'success': True,
+            'receipt_text': receipt_text,
+            'sale_id': sale_id
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error generando recibo térmico: {str(e)}'}), 500
+
+
+def _prepare_sale_data_for_receipt(sale, sale_items):
+    """Helper function to prepare sale data for receipt generation"""
+    
+    # Calculate totals
+    subtotal = sum(item.quantity * item.price for item in sale_items)
+    tax_amount = subtotal * 0.18  # 18% ITBIS
+    total = subtotal + tax_amount
+    
+    # Prepare sale data
+    sale_data = {
+        'id': sale.id,
+        'created_at': sale.created_at,
+        'ncf': sale.ncf,
+        'total': total,
+        'subtotal': subtotal,
+        'tax_amount': tax_amount,
+        'payment_method': sale.payment_method,
+        'payment_method_display': {
+            'efectivo': 'Efectivo',
+            'tarjeta': 'Tarjeta',
+            'transferencia': 'Transferencia'
+        }.get(sale.payment_method, sale.payment_method.title()),
+        'cashier_name': sale.user.name if sale.user else None,
+        'ncf_type_display': _get_ncf_type_display(sale.ncf) if sale.ncf else None,
+        'items': []
+    }
+    
+    # Add items
+    for item in sale_items:
+        sale_data['items'].append({
+            'quantity': item.quantity,
+            'product_name': item.product.name,
+            'name': item.product.name,  # Alternative name field
+            'price': item.price
+        })
+    
+    return sale_data
+
+
+def _get_ncf_type_display(ncf):
+    """Helper function to get NCF type display name"""
+    if not ncf:
+        return None
+    
+    if ncf.startswith('B'):
+        return 'Crédito Fiscal'
+    elif ncf.startswith('E'):
+        return 'Consumidor Final'
+    elif ncf.startswith('P'):
+        return 'Pagos al Exterior'
+    elif ncf.startswith('A'):
+        return 'Comprobante de Ingreso'
+    elif ncf.startswith('F'):
+        return 'Facturas de Consumo'
+    elif ncf.startswith('G'):
+        return 'Gastos Menores'
+    elif ncf.startswith('K'):
+        return 'Único de Ingresos'
+    elif ncf.startswith('L'):
+        return 'Liquidación'
+    else:
+        return 'Comprobante Fiscal'

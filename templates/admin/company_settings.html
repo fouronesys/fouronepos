@@ -1,0 +1,358 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración de Empresa - Four One POS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-building"></i> Configuración de Empresa</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Configuración de Empresa</li>
+            </ol>
+        </nav>
+    </div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Company Information Form -->
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-info-circle"></i> Información de la Empresa</h5>
+                </div>
+                <div class="card-body">
+                    <form id="companySettingsForm" method="POST" action="/admin/api/company-settings">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="company_name" class="form-label">
+                                    <i class="bi bi-building"></i> Nombre de la Empresa *
+                                </label>
+                                <input type="text" class="form-control" id="company_name" name="company_name" 
+                                       value="{{ company_settings.get('company_name', '') }}" required 
+                                       placeholder="Mi Empresa S.R.L.">
+                                <div class="form-text">Nombre que aparecerá en los recibos fiscales</div>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label for="company_rnc" class="form-label">
+                                    <i class="bi bi-card-text"></i> RNC (Registro Nacional de Contribuyente)
+                                </label>
+                                <input type="text" class="form-control" id="company_rnc" name="company_rnc" 
+                                       value="{{ company_settings.get('company_rnc', '') }}" 
+                                       placeholder="000-00000-0 o 00000000000"
+                                       pattern="[0-9\-]*">
+                                <div class="form-text">RNC de la empresa según la DGII</div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="company_address" class="form-label">
+                                <i class="bi bi-geo-alt"></i> Dirección
+                            </label>
+                            <textarea class="form-control" id="company_address" name="company_address" 
+                                      rows="2" placeholder="Dirección física de la empresa">{{ company_settings.get('company_address', '') }}</textarea>
+                            <div class="form-text">Dirección que aparecerá en los recibos</div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="company_phone" class="form-label">
+                                    <i class="bi bi-telephone"></i> Teléfono
+                                </label>
+                                <input type="tel" class="form-control" id="company_phone" name="company_phone" 
+                                       value="{{ company_settings.get('company_phone', '') }}" 
+                                       placeholder="(809) 123-4567">
+                                <div class="form-text">Teléfono de contacto</div>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label for="company_email" class="form-label">
+                                    <i class="bi bi-envelope"></i> Email
+                                </label>
+                                <input type="email" class="form-control" id="company_email" name="company_email" 
+                                       value="{{ company_settings.get('company_email', '') }}" 
+                                       placeholder="contacto@miempresa.com">
+                                <div class="form-text">Email de contacto</div>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <h6><i class="bi bi-receipt"></i> Configuración de Recibos</h6>
+                        
+                        <div class="mb-3">
+                            <label for="receipt_message" class="form-label">
+                                <i class="bi bi-chat-quote"></i> Mensaje del Recibo
+                            </label>
+                            <input type="text" class="form-control" id="receipt_message" name="receipt_message" 
+                                   value="{{ company_settings.get('receipt_message', 'Gracias por su compra') }}" 
+                                   placeholder="Gracias por su compra">
+                            <div class="form-text">Mensaje personalizado que aparece en los recibos</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="receipt_footer" class="form-label">
+                                <i class="bi bi-layout-text-window-reverse"></i> Pie del Recibo
+                            </label>
+                            <input type="text" class="form-control" id="receipt_footer" name="receipt_footer" 
+                                   value="{{ company_settings.get('receipt_footer', '') }}" 
+                                   placeholder="www.miempresa.com">
+                            <div class="form-text">Información adicional en el pie del recibo</div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="receipt_copies" class="form-label">
+                                    <i class="bi bi-files"></i> Copias del Recibo
+                                </label>
+                                <select class="form-select" id="receipt_copies" name="receipt_copies">
+                                    <option value="1" {{ 'selected' if company_settings.get('receipt_copies', '1') == '1' }}>1 Copia</option>
+                                    <option value="2" {{ 'selected' if company_settings.get('receipt_copies', '1') == '2' }}>2 Copias</option>
+                                    <option value="3" {{ 'selected' if company_settings.get('receipt_copies', '1') == '3' }}>3 Copias</option>
+                                </select>
+                                <div class="form-text">Número de copias a imprimir</div>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label for="fiscal_printer_enabled" class="form-label">
+                                    <i class="bi bi-printer"></i> Impresión Automática
+                                </label>
+                                <select class="form-select" id="fiscal_printer_enabled" name="fiscal_printer_enabled">
+                                    <option value="false" {{ 'selected' if company_settings.get('fiscal_printer_enabled', 'false') == 'false' }}>Deshabilitada</option>
+                                    <option value="true" {{ 'selected' if company_settings.get('fiscal_printer_enabled', 'false') == 'true' }}>Habilitada</option>
+                                </select>
+                                <div class="form-text">Imprimir recibos automáticamente</div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <button type="button" class="btn btn-secondary" onclick="window.history.back()">
+                                <i class="bi bi-arrow-left"></i> Volver
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> Guardar Configuración
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Logo Configuration -->
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-image"></i> Logo de Recibos</h5>
+                </div>
+                <div class="card-body">
+                    {% if company_settings.get('receipt_logo') %}
+                        <div class="text-center mb-3">
+                            <img src="{{ url_for('static', filename=company_settings.get('receipt_logo').replace('static/', '')) }}" 
+                                 alt="Logo actual" class="img-fluid" style="max-height: 150px;">
+                            <div class="mt-2">
+                                <small class="text-muted">Logo actual</small>
+                            </div>
+                        </div>
+                        <form method="POST" action="{{ url_for('admin.remove_logo') }}" class="mb-3">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <button type="submit" class="btn btn-outline-danger btn-sm w-100" 
+                                    onclick="return confirm('¿Estás seguro de que quieres eliminar el logo?')">
+                                <i class="bi bi-trash"></i> Eliminar Logo
+                            </button>
+                        </form>
+                    {% else %}
+                        <div class="text-center mb-3 p-3 border border-dashed rounded">
+                            <i class="bi bi-image fs-1 text-muted"></i>
+                            <div class="text-muted">Sin logo configurado</div>
+                        </div>
+                    {% endif %}
+
+                    <form method="POST" action="{{ url_for('admin.update_logo') }}" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <div class="mb-3">
+                            <label for="logo_file" class="form-label">Subir Nuevo Logo</label>
+                            <input type="file" class="form-control" id="logo_file" name="logo_file" 
+                                   accept="image/png,image/jpeg,image/jpg,image/gif">
+                            <div class="form-text">Máximo 500KB. Formatos: PNG, JPG, JPEG, GIF</div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-upload"></i> {{ 'Actualizar Logo' if company_settings.get('receipt_logo') else 'Subir Logo' }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5><i class="bi bi-tools"></i> Acciones</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin.initialize_company_config') }}" class="mb-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <button type="submit" class="btn btn-outline-info w-100">
+                            <i class="bi bi-arrow-clockwise"></i> Restablecer Valores por Defecto
+                        </button>
+                    </form>
+                    
+                    <button type="button" class="btn btn-outline-success w-100" onclick="testReceiptGeneration()">
+                        <i class="bi bi-receipt"></i> Probar Generación de Recibo
+                    </button>
+                </div>
+            </div>
+
+            <!-- Preview -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5><i class="bi bi-eye"></i> Vista Previa</h5>
+                </div>
+                <div class="card-body">
+                    <div class="receipt-preview border rounded p-3 text-center" style="font-family: monospace; background-color: #f8f9fa;">
+                        <div id="preview-name" style="font-weight: bold; font-size: 14px;">
+                            {{ company_settings.get('company_name', 'Mi Empresa') }}
+                        </div>
+                        <div id="preview-rnc" style="font-size: 11px;">
+                            {% if company_settings.get('company_rnc') %}
+                                RNC: {{ company_settings.get('company_rnc') }}
+                            {% endif %}
+                        </div>
+                        <div id="preview-address" style="font-size: 10px;">
+                            {{ company_settings.get('company_address', '') }}
+                        </div>
+                        <div id="preview-phone" style="font-size: 10px;">
+                            {% if company_settings.get('company_phone') %}
+                                Tel: {{ company_settings.get('company_phone') }}
+                            {% endif %}
+                        </div>
+                        <hr style="margin: 8px 0;">
+                        <div style="font-size: 10px;">RECIBO FISCAL</div>
+                        <hr style="margin: 8px 0;">
+                        <div style="font-size: 9px;">
+                            1x Producto Ejemplo<br>
+                            RD$ 100.00<br>
+                            Subtotal: RD$ 100.00<br>
+                            ITBIS: RD$ 18.00<br>
+                            <strong>Total: RD$ 118.00</strong>
+                        </div>
+                        <hr style="margin: 8px 0;">
+                        <div id="preview-message" style="font-size: 9px;">
+                            {{ company_settings.get('receipt_message', 'Gracias por su compra') }}
+                        </div>
+                        <div id="preview-footer" style="font-size: 8px;">
+                            {{ company_settings.get('receipt_footer', '') }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Real-time preview updates
+document.addEventListener('DOMContentLoaded', function() {
+    const fields = ['company_name', 'company_rnc', 'company_address', 'company_phone', 'receipt_message', 'receipt_footer'];
+    
+    fields.forEach(field => {
+        const input = document.getElementById(field);
+        if (input) {
+            input.addEventListener('input', updatePreview);
+        }
+    });
+    
+    function updatePreview() {
+        const name = document.getElementById('company_name').value || 'Mi Empresa';
+        const rnc = document.getElementById('company_rnc').value;
+        const address = document.getElementById('company_address').value;
+        const phone = document.getElementById('company_phone').value;
+        const message = document.getElementById('receipt_message').value || 'Gracias por su compra';
+        const footer = document.getElementById('receipt_footer').value;
+        
+        document.getElementById('preview-name').textContent = name;
+        document.getElementById('preview-rnc').innerHTML = rnc ? `RNC: ${rnc}` : '';
+        document.getElementById('preview-address').textContent = address;
+        document.getElementById('preview-phone').innerHTML = phone ? `Tel: ${phone}` : '';
+        document.getElementById('preview-message').textContent = message;
+        document.getElementById('preview-footer').textContent = footer;
+    }
+});
+
+// Form submission
+document.getElementById('companySettingsForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {};
+    
+    // Convert FormData to JSON
+    for (let [key, value] of formData.entries()) {
+        if (key !== 'csrf_token') {
+            data[key] = value;
+        }
+    }
+    
+    // Get CSRF token
+    const csrfToken = formData.get('csrf_token');
+    
+    fetch('/admin/api/company-settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', data.message);
+        } else {
+            showAlert('danger', data.message || 'Error al guardar la configuración');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', 'Error de conexión al guardar la configuración');
+    });
+});
+
+function showAlert(type, message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    
+    const container = document.querySelector('.container-fluid');
+    const firstChild = container.children[1]; // After the header
+    container.insertBefore(alertDiv, firstChild);
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+
+function testReceiptGeneration() {
+    showAlert('info', 'Función de prueba de recibo - Implementar según necesidades específicas');
+}
+</script>
+{% endblock %}

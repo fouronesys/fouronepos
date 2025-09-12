@@ -502,3 +502,233 @@ def validate_json_structure(data: dict, required_fields: list, optional_fields: 
         'valid': True,
         'message': 'Estructura JSON válida'
     }
+
+
+def initialize_company_settings():
+    """
+    Initialize default company settings in SystemConfiguration table
+    
+    Returns:
+        Dict with initialization status
+    """
+    from models import SystemConfiguration, db
+    
+    # Default company settings for Dominican Republic business
+    default_settings = {
+        'company_name': {
+            'value': 'Mi Empresa',
+            'description': 'Nombre de la empresa que aparece en los recibos'
+        },
+        'company_rnc': {
+            'value': '',
+            'description': 'RNC (Registro Nacional de Contribuyente) de la empresa'
+        },
+        'company_address': {
+            'value': '',
+            'description': 'Dirección física de la empresa'
+        },
+        'company_phone': {
+            'value': '',
+            'description': 'Teléfono de contacto de la empresa'
+        },
+        'company_email': {
+            'value': '',
+            'description': 'Email de contacto de la empresa'
+        },
+        'receipt_message': {
+            'value': 'Gracias por su compra',
+            'description': 'Mensaje personalizado que aparece en los recibos'
+        },
+        'receipt_footer': {
+            'value': 'www.miempresa.com',
+            'description': 'Información adicional en el pie del recibo'
+        },
+        'fiscal_printer_enabled': {
+            'value': 'false',
+            'description': 'Habilitar impresión fiscal automática'
+        },
+        'receipt_copies': {
+            'value': '1',
+            'description': 'Número de copias del recibo a imprimir'
+        }
+    }
+    
+    created_count = 0
+    updated_count = 0
+    
+    try:
+        for key, config in default_settings.items():
+            # Check if setting already exists
+            existing_setting = SystemConfiguration.query.filter_by(key=key).first()
+            
+            if existing_setting:
+                # Update description if it has changed
+                if existing_setting.description != config['description']:
+                    existing_setting.description = config['description']
+                    updated_count += 1
+            else:
+                # Create new setting
+                new_setting = SystemConfiguration()
+                new_setting.key = key
+                new_setting.value = config['value']
+                new_setting.description = config['description']
+                db.session.add(new_setting)
+                created_count += 1
+        
+        db.session.commit()
+        
+        return {
+            'success': True,
+            'created': created_count,
+            'updated': updated_count,
+            'message': f'Configuraciones inicializadas: {created_count} creadas, {updated_count} actualizadas'
+        }
+        
+    except Exception as e:
+        db.session.rollback()
+        return {
+            'success': False,
+            'message': f'Error al inicializar configuraciones: {str(e)}'
+        }
+
+
+def get_company_settings() -> Dict[str, Any]:
+    """
+    Get all company settings from SystemConfiguration
+    
+    Returns:
+        Dict with company settings
+    """
+    from models import SystemConfiguration
+    
+    # Company setting keys
+    company_keys = [
+        'company_name',
+        'company_rnc', 
+        'company_address',
+        'company_phone',
+        'company_email',
+        'receipt_message',
+        'receipt_footer',
+        'receipt_logo',
+        'fiscal_printer_enabled',
+        'receipt_copies'
+    ]
+    
+    settings = {}
+    
+    try:
+        for key in company_keys:
+            config = SystemConfiguration.query.filter_by(key=key).first()
+            settings[key] = config.value if config else ''
+        
+        return {
+            'success': True,
+            'settings': settings
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error al obtener configuraciones: {str(e)}',
+            'settings': {}
+        }
+
+
+def update_company_setting(key: str, value: str) -> Dict[str, Any]:
+    """
+    Update a specific company setting
+    
+    Args:
+        key: Setting key to update
+        value: New value for the setting
+        
+    Returns:
+        Dict with update status
+    """
+    from models import SystemConfiguration, db
+    
+    # Validate RNC if updating company RNC
+    if key == 'company_rnc' and value:
+        rnc_validation = validate_rnc(value)
+        if not rnc_validation['valid']:
+            return {
+                'success': False,
+                'message': f'RNC inválido: {rnc_validation["message"]}'
+            }
+        # Use formatted RNC
+        value = rnc_validation['formatted']
+    
+    # Validate phone if updating company phone
+    if key == 'company_phone' and value:
+        phone_validation = validate_phone_rd(value)
+        if not phone_validation['valid']:
+            return {
+                'success': False,
+                'message': f'Teléfono inválido: {phone_validation["message"]}'
+            }
+        # Use formatted phone
+        value = phone_validation['formatted']
+    
+    try:
+        # Find existing setting or create new one
+        setting = SystemConfiguration.query.filter_by(key=key).first()
+        
+        if setting:
+            setting.value = value
+        else:
+            setting = SystemConfiguration()
+            setting.key = key
+            setting.value = value
+            setting.description = f'Configuración: {key}'
+            db.session.add(setting)
+        
+        db.session.commit()
+        
+        return {
+            'success': True,
+            'message': f'Configuración {key} actualizada correctamente'
+        }
+        
+    except Exception as e:
+        db.session.rollback()
+        return {
+            'success': False,
+            'message': f'Error al actualizar configuración: {str(e)}'
+        }
+
+
+def get_company_info_for_receipt() -> Dict[str, str]:
+    """
+    Get formatted company information for receipt generation
+    
+    Returns:
+        Dict with formatted company information
+    """
+    company_data = get_company_settings()
+    
+    if not company_data['success']:
+        # Return default values if there's an error
+        return {
+            'name': 'Mi Empresa',
+            'rnc': '',
+            'address': '',
+            'phone': '',
+            'email': '',
+            'message': 'Gracias por su compra',
+            'footer': '',
+            'logo': ''
+        }
+    
+    settings = company_data['settings']
+    
+    return {
+        'name': settings.get('company_name', 'Mi Empresa') or 'Mi Empresa',
+        'rnc': settings.get('company_rnc', '') or '',
+        'address': settings.get('company_address', '') or '',
+        'phone': settings.get('company_phone', '') or '',
+        'email': settings.get('company_email', '') or '',
+        'message': settings.get('receipt_message', 'Gracias por su compra') or 'Gracias por su compra',
+        'footer': settings.get('receipt_footer', '') or '',
+        'logo': settings.get('receipt_logo', '') or ''
+    }

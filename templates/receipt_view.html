@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block title %}Recibo Fiscal - Four One POS{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    @media print {
+        body * {
+            visibility: hidden;
+        }
+        .receipt-container, .receipt-container * {
+            visibility: visible;
+        }
+        .receipt-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+        }
+        .no-print {
+            display: none !important;
+        }
+        .page-break {
+            page-break-after: always;
+        }
+    }
+    
+    .receipt-paper {
+        background: white;
+        max-width: 320px;
+        margin: 0 auto;
+        padding: 15px;
+        border: 1px solid #ddd;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        line-height: 1.4;
+    }
+    
+    .receipt-header {
+        text-align: center;
+        border-bottom: 1px dashed #333;
+        padding-bottom: 10px;
+        margin-bottom: 10px;
+    }
+    
+    .company-name {
+        font-size: 16px;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    
+    .company-info {
+        font-size: 11px;
+        margin-bottom: 3px;
+    }
+    
+    .receipt-title {
+        font-size: 14px;
+        font-weight: bold;
+        text-align: center;
+        margin: 10px 0;
+        border-top: 1px dashed #333;
+        border-bottom: 1px dashed #333;
+        padding: 5px 0;
+    }
+    
+    .receipt-details {
+        margin-bottom: 10px;
+        font-size: 11px;
+    }
+    
+    .items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+    }
+    
+    .items-table th,
+    .items-table td {
+        padding: 3px 2px;
+        text-align: left;
+        font-size: 10px;
+        border-bottom: 1px dotted #ccc;
+    }
+    
+    .items-table th {
+        font-weight: bold;
+        border-bottom: 1px solid #333;
+    }
+    
+    .item-qty {
+        width: 15%;
+        text-align: center;
+    }
+    
+    .item-desc {
+        width: 50%;
+    }
+    
+    .item-price,
+    .item-total {
+        width: 17.5%;
+        text-align: right;
+    }
+    
+    .totals-section {
+        border-top: 1px dashed #333;
+        padding-top: 8px;
+        margin-bottom: 10px;
+    }
+    
+    .total-line {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 3px;
+        font-size: 11px;
+    }
+    
+    .total-line.final {
+        font-weight: bold;
+        font-size: 12px;
+        border-top: 1px solid #333;
+        padding-top: 5px;
+        margin-top: 5px;
+    }
+    
+    .fiscal-info {
+        border-top: 1px dashed #333;
+        padding-top: 8px;
+        margin-bottom: 10px;
+        font-size: 10px;
+        text-align: center;
+    }
+    
+    .receipt-footer {
+        text-align: center;
+        font-size: 10px;
+        border-top: 1px dashed #333;
+        padding-top: 8px;
+        margin-top: 10px;
+    }
+    
+    .footer-message {
+        margin-bottom: 5px;
+        font-style: italic;
+    }
+    
+    .footer-info {
+        margin-bottom: 3px;
+    }
+    
+    .fiscal-disclaimer {
+        margin-top: 8px;
+        font-size: 8px;
+        color: #666;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4 no-print">
+        <h2><i class="bi bi-receipt"></i> Recibo Fiscal</h2>
+        <div>
+            <button type="button" class="btn btn-secondary me-2" onclick="window.history.back()">
+                <i class="bi bi-arrow-left"></i> Volver
+            </button>
+            <button type="button" class="btn btn-primary me-2" onclick="window.print()">
+                <i class="bi bi-printer"></i> Imprimir
+            </button>
+            <button type="button" class="btn btn-success" onclick="downloadPDF()">
+                <i class="bi bi-file-earmark-pdf"></i> Descargar PDF
+            </button>
+        </div>
+    </div>
+
+    <!-- Receipt Container -->
+    <div class="receipt-container">
+        <div class="receipt-paper">
+            <!-- Company Header -->
+            <div class="receipt-header">
+                {% if company_info.logo %}
+                    <div class="company-logo mb-2">
+                        <img src="{{ company_info.logo }}" alt="Logo" style="max-height: 40px; max-width: 120px;">
+                    </div>
+                {% endif %}
+                
+                <div class="company-name">{{ company_info.name }}</div>
+                
+                {% if company_info.rnc %}
+                    <div class="company-info">RNC: {{ company_info.rnc }}</div>
+                {% endif %}
+                
+                {% if company_info.address %}
+                    <div class="company-info">{{ company_info.address }}</div>
+                {% endif %}
+                
+                {% if company_info.phone %}
+                    <div class="company-info">Tel: {{ company_info.phone }}</div>
+                {% endif %}
+                
+                {% if company_info.email %}
+                    <div class="company-info">{{ company_info.email }}</div>
+                {% endif %}
+            </div>
+
+            <!-- Receipt Title -->
+            <div class="receipt-title">RECIBO FISCAL</div>
+
+            <!-- Receipt Details -->
+            <div class="receipt-details">
+                <div>Fecha: {{ sale_data.created_at.strftime('%d/%m/%Y %H:%M:%S') if sale_data.created_at else 'N/A' }}</div>
+                <div>Venta No: {{ sale_data.id or 'N/A' }}</div>
+                {% if sale_data.ncf %}
+                    <div>NCF: {{ sale_data.ncf }}</div>
+                {% endif %}
+                <div>Método: {{ sale_data.payment_method_display or 'Efectivo' }}</div>
+                {% if sale_data.cashier_name %}
+                    <div>Cajero: {{ sale_data.cashier_name }}</div>
+                {% endif %}
+            </div>
+
+            <!-- Items Table -->
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th class="item-qty">Cant.</th>
+                        <th class="item-desc">Descripción</th>
+                        <th class="item-price">Precio</th>
+                        <th class="item-total">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in sale_data.items %}
+                        <tr>
+                            <td class="item-qty">{{ item.quantity }}</td>
+                            <td class="item-desc">
+                                {{ item.product_name[:25] }}
+                                {% if item.product_name|length > 25 %}...{% endif %}
+                            </td>
+                            <td class="item-price">{{ "RD$ %.2f"|format(item.price) }}</td>
+                            <td class="item-total">{{ "RD$ %.2f"|format(item.quantity * item.price) }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Totals Section -->
+            <div class="totals-section">
+                <div class="total-line">
+                    <span>Subtotal:</span>
+                    <span>{{ "RD$ %.2f"|format(sale_data.subtotal or 0) }}</span>
+                </div>
+                <div class="total-line">
+                    <span>ITBIS (18%):</span>
+                    <span>{{ "RD$ %.2f"|format(sale_data.tax_amount or 0) }}</span>
+                </div>
+                <div class="total-line final">
+                    <span>TOTAL:</span>
+                    <span>{{ "RD$ %.2f"|format(sale_data.total or 0) }}</span>
+                </div>
+            </div>
+
+            <!-- Fiscal Information -->
+            {% if sale_data.ncf or company_info.rnc %}
+                <div class="fiscal-info">
+                    <div><strong>INFORMACIÓN FISCAL</strong></div>
+                    {% if company_info.rnc %}
+                        <div>RNC Empresa: {{ company_info.rnc }}</div>
+                    {% endif %}
+                    {% if sale_data.ncf %}
+                        <div>NCF: {{ sale_data.ncf }}</div>
+                        <div>Tipo: {{ sale_data.ncf_type_display or 'Comprobante Fiscal' }}</div>
+                    {% endif %}
+                    <div>Generado: {{ moment().format('DD/MM/YYYY HH:mm:ss') }}</div>
+                </div>
+            {% endif %}
+
+            <!-- Footer -->
+            <div class="receipt-footer">
+                {% if company_info.message %}
+                    <div class="footer-message">{{ company_info.message }}</div>
+                {% endif %}
+                
+                {% if company_info.footer %}
+                    <div class="footer-info">{{ company_info.footer }}</div>
+                {% endif %}
+                
+                <div class="fiscal-disclaimer">
+                    Este recibo es válido para efectos fiscales según<br>
+                    las regulaciones de la DGII
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function downloadPDF() {
+    const saleId = {{ sale_data.id or 'null' }};
+    if (saleId) {
+        window.open(`/api/receipts/${saleId}/pdf`, '_blank');
+    } else {
+        alert('No se puede generar PDF: ID de venta no válido');
+    }
+}
+
+// Optional: Auto-focus for better print experience
+document.addEventListener('DOMContentLoaded', function() {
+    // Make sure the page is ready for printing
+    setTimeout(() => {
+        if (window.location.hash === '#print') {
+            window.print();
+        }
+    }, 500);
+});
+</script>
+{% endblock %}

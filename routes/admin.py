@@ -7,6 +7,12 @@ import bcrypt
 import secrets
 from flask_wtf.csrf import validate_csrf
 from werkzeug.exceptions import BadRequest
+from utils import (
+    initialize_company_settings, 
+    get_company_settings, 
+    update_company_setting,
+    get_company_info_for_receipt
+)
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -14,7 +20,24 @@ bp = Blueprint('admin', __name__, url_prefix='/admin')
 def validate_csrf_token():
     """Validate CSRF token for POST requests"""
     try:
-        validate_csrf(request.form.get('csrf_token'))
+        # Support CSRF token from form, JSON body, or header
+        csrf_token = None
+        
+        # Try form data first (for HTML forms)
+        if request.form.get('csrf_token'):
+            csrf_token = request.form.get('csrf_token')
+        # Try JSON body (for API calls)
+        elif request.is_json and request.get_json() and request.get_json().get('csrf_token'):
+            csrf_token = request.get_json().get('csrf_token')
+        # Try header (for API calls)
+        elif request.headers.get('X-CSRFToken'):
+            csrf_token = request.headers.get('X-CSRFToken')
+        
+        if not csrf_token:
+            flash('Token de seguridad requerido.', 'error')
+            return False
+            
+        validate_csrf(csrf_token)
     except BadRequest:
         flash('Token de seguridad inválido. Inténtalo de nuevo.', 'error')
         return False
@@ -755,3 +778,191 @@ def edit_cash_register(register_id):
         flash(f'Error al actualizar caja registradora: {str(e)}', 'error')
     
     return redirect(url_for('admin.cash_registers'))
+
+
+# Company Configuration Routes
+@bp.route('/company-settings')
+def company_settings():
+    """Show company configuration page"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Initialize company settings if they don't exist
+    init_result = initialize_company_settings()
+    if not init_result['success']:
+        flash(f'Error al inicializar configuraciones: {init_result["message"]}', 'error')
+    
+    # Get current company settings
+    company_data = get_company_settings()
+    if not company_data['success']:
+        flash(f'Error al cargar configuraciones: {company_data["message"]}', 'error')
+        company_data['settings'] = {}
+    
+    return render_template('admin/company_settings.html', 
+                         company_settings=company_data['settings'])
+
+
+@bp.route('/api/company-settings', methods=['GET'])
+def api_get_company_settings():
+    """API endpoint to get company settings"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Initialize settings if they don't exist
+    initialize_company_settings()
+    
+    # Get current settings
+    result = get_company_settings()
+    
+    if result['success']:
+        return jsonify({
+            'success': True,
+            'settings': result['settings']
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'message': result['message']
+        }), 500
+
+
+@bp.route('/api/company-settings', methods=['POST'])
+def api_update_company_settings():
+    """API endpoint to update company settings"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token for security
+    if not validate_csrf_token():
+        return jsonify({'error': 'Token de seguridad inválido'}), 400
+    
+    # Support both JSON and form data
+    if request.is_json:
+        data = request.get_json()
+    else:
+        data = request.form.to_dict()
+    
+    if not data:
+        return jsonify({'error': 'No se proporcionaron datos'}), 400
+    
+    # Valid company setting keys
+    valid_keys = [
+        'company_name',
+        'company_rnc',
+        'company_address', 
+        'company_phone',
+        'company_email',
+        'receipt_message',
+        'receipt_footer',
+        'receipt_logo',
+        'fiscal_printer_enabled',
+        'receipt_copies'
+    ]
+    
+    results = []
+    errors = []
+    
+    for key, value in data.items():
+        if key not in valid_keys:
+            errors.append(f'Campo no válido: {key}')
+            continue
+        
+        # Skip CSRF token
+        if key == 'csrf_token':
+            continue
+            
+        # Additional validation for RNC
+        if key == 'company_rnc' and value:
+            from utils import validate_rnc
+            rnc_validation = validate_rnc(value)
+            if not rnc_validation['valid']:
+                errors.append(f'RNC inválido: {rnc_validation["message"]}')
+                continue
+        
+        # Update each setting
+        result = update_company_setting(key, str(value))
+        
+        if result['success']:
+            results.append(f'{key} actualizado')
+        else:
+            errors.append(f'{key}: {result["message"]}')
+    
+    if errors:
+        return jsonify({
+            'success': False,
+            'message': 'Algunos campos no se pudieron actualizar',
+            'errors': errors,
+            'updated': results
+        }), 400
+    else:
+        return jsonify({
+            'success': True,
+            'message': f'Configuración actualizada: {len(results)} campos',
+            'updated': results
+        })
+
+
+@bp.route('/api/company-settings/<setting_key>', methods=['PUT'])
+def api_update_single_company_setting(setting_key):
+    """API endpoint to update a single company setting"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    data = request.get_json()
+    if not data or 'value' not in data:
+        return jsonify({'error': 'Valor requerido'}), 400
+    
+    # Update the setting
+    result = update_company_setting(setting_key, str(data['value']))
+    
+    if result['success']:
+        return jsonify({
+            'success': True,
+            'message': result['message']
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'message': result['message']
+        }), 400
+
+
+@bp.route('/api/company-info', methods=['GET'])
+def api_get_company_info():
+    """Get formatted company information for receipts"""
+    user = require_admin_or_cashier()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Get company info formatted for receipts
+    company_info = get_company_info_for_receipt()
+    
+    return jsonify({
+        'success': True,
+        'company_info': company_info
+    })
+
+
+@bp.route('/company-settings/initialize', methods=['POST'])
+def initialize_company_config():
+    """Initialize company settings with defaults"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.company_settings'))
+    
+    result = initialize_company_settings()
+    
+    if result['success']:
+        flash(f'Configuraciones inicializadas: {result["message"]}', 'success')
+    else:
+        flash(f'Error: {result["message"]}', 'error')
+    
+    return redirect(url_for('admin.company_settings'))
