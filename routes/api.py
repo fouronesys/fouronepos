@@ -900,7 +900,7 @@ def _prepare_sale_data_for_receipt(sale, sale_items):
     """Helper function to prepare sale data for receipt generation"""
     
     # Calculate totals
-    subtotal = sum(item.quantity * item.price for item in sale_items)
+    subtotal = sum(item.quantity * item.unit_price for item in sale_items)
     tax_amount = subtotal * 0.18  # 18% ITBIS
     total = subtotal + tax_amount
     
@@ -929,7 +929,7 @@ def _prepare_sale_data_for_receipt(sale, sale_items):
             'quantity': item.quantity,
             'product_name': item.product.name,
             'name': item.product.name,  # Alternative name field
-            'price': item.price
+            'price': item.unit_price
         })
     
     return sale_data
