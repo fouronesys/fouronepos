@@ -102,7 +102,9 @@ let cart = [];
 
 // Load products for category
 function loadProducts(categoryId) {
-    fetch(`/api/products?category_id=${categoryId}`)
+    fetch(`/api/products?category_id=${categoryId}`, {
+        credentials: 'same-origin'
+    })
         .then(response => response.json())
         .then(products => {
             const container = document.getElementById(`products-${categoryId}`);
@@ -209,6 +211,7 @@ function processSale() {
         headers: {
             'Content-Type': 'application/json',
         },
+        credentials: 'same-origin',
         body: JSON.stringify({
             table_id: tableId
         })
@@ -227,6 +230,7 @@ function processSale() {
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                credentials: 'same-origin',
                 body: JSON.stringify({
                     product_id: item.id,
                     quantity: item.quantity
@@ -242,6 +246,7 @@ function processSale() {
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                credentials: 'same-origin',
                 body: JSON.stringify({
                     payment_method: 'efectivo',
                     ncf_type: 'consumo'
@@ -278,7 +283,9 @@ function clearCart() {
 
 // Load available tables
 function loadTables() {
-    fetch('/api/tables?status=available')
+    fetch('/api/tables?status=available', {
+        credentials: 'same-origin'
+    })
         .then(response => response.json())
         .then(tables => {
             const tableSelect = document.getElementById('table-select');

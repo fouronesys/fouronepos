@@ -12,7 +12,12 @@ from utils import get_company_info_for_receipt
 
 bp = Blueprint('api', __name__, url_prefix='/api')
 
-
+# HEAD handlers to prevent log spam from monitoring services
+@bp.route('', methods=['HEAD'])
+@bp.route('/', methods=['HEAD'])
+def api_head():
+    """Handle HEAD requests to /api and /api/ - likely from monitoring service"""
+    return '', 200
 
 
 def require_login():
