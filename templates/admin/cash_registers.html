@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Cajas Registradoras - Four One POS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-cash-register"></i> Gestión de Cajas Registradoras</h2>
+        <div>
+            <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Volver
+            </a>
+            <button class="btn btn-primary btn-touch" data-bs-toggle="modal" data-bs-target="#registerModal" onclick="newRegister()">
+                <i class="bi bi-plus-circle"></i> Nueva Caja
+            </button>
+        </div>
+    </div>
+
+    <!-- Info Alert -->
+    <div class="alert alert-info" role="alert">
+        <i class="bi bi-info-circle"></i>
+        <strong>Información:</strong> Cada cajero debe tener una caja registradora asignada para poder procesar ventas.
+        Solo un usuario puede estar asignado a cada caja activa.
+    </div>
+
+    <!-- Cash Registers Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>Usuario Asignado</th>
+                            <th>Estado</th>
+                            <th>Fecha Creación</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for register in registers %}
+                        <tr>
+                            <td>{{ register.id }}</td>
+                            <td><strong>{{ register.name }}</strong></td>
+                            <td>
+                                {% if register.user %}
+                                <span class="badge bg-primary">{{ register.user.name }}</span>
+                                <small class="text-muted d-block">{{ register.user.username }} ({{ register.user.role.value.title() }})</small>
+                                {% else %}
+                                <span class="text-muted">Sin asignar</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if register.active %}
+                                <span class="badge bg-success">Activa</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactiva</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ register.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="editRegister({{ register.id }})" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-info" onclick="assignRegister({{ register.id }})" title="Asignar Usuario">
+                                        <i class="bi bi-person-check"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cash Register Modal -->
+<div class="modal fade" id="registerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="registerModalTitle">Nueva Caja Registradora</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="registerForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Nombre de la Caja</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                        <div class="form-text">Ejemplo: Caja Principal, Caja 1, Caja Delivery, etc.</div>
+                    </div>
+                    
+                    <div class="form-check" id="activeField" style="display: none;">
+                        <input class="form-check-input" type="checkbox" id="active" name="active" value="true" checked>
+                        <label class="form-check-label" for="active">
+                            Caja Activa
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Assign User Modal -->
+<div class="modal fade" id="assignModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Asignar Usuario a Caja</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="assignForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="user_id" class="form-label">Usuario</label>
+                        <select class="form-select" id="user_id" name="user_id">
+                            <option value="">Desasignar caja</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.name }} ({{ user.username }}) - {{ user.role.value.title() }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            Seleccione un usuario para asignar a esta caja. 
+                            Solo administradores y cajeros pueden ser asignados a cajas.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Asignar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentRegisterId = null;
+let isEditing = false;
+
+function newRegister() {
+    isEditing = false;
+    currentRegisterId = null;
+    document.getElementById('registerModalTitle').textContent = 'Nueva Caja Registradora';
+    document.getElementById('registerForm').action = '{{ url_for("admin.create_cash_register") }}';
+    document.getElementById('registerForm').reset();
+    document.getElementById('activeField').style.display = 'none';
+}
+
+function editRegister(registerId) {
+    isEditing = true;
+    currentRegisterId = registerId;
+    
+    // Find register data from the table
+    const row = event.target.closest('tr');
+    const cells = row.cells;
+    
+    document.getElementById('registerModalTitle').textContent = 'Editar Caja Registradora';
+    document.getElementById('registerForm').action = `/admin/cash-registers/${registerId}/edit`;
+    
+    // Fill form
+    document.getElementById('name').value = cells[1].textContent.trim();
+    
+    // Set active status
+    const isActive = cells[3].textContent.trim() === 'Activa';
+    document.getElementById('active').checked = isActive;
+    document.getElementById('activeField').style.display = 'block';
+    
+    // Show modal
+    new bootstrap.Modal(document.getElementById('registerModal')).show();
+}
+
+function assignRegister(registerId) {
+    currentRegisterId = registerId;
+    document.getElementById('assignForm').action = `/admin/cash-registers/${registerId}/assign`;
+    
+    // Find current assigned user from the table
+    const row = event.target.closest('tr');
+    const assignedUserCell = row.cells[2];
+    
+    // Reset select
+    document.getElementById('user_id').value = '';
+    
+    // If there's an assigned user, try to find and select them
+    const badge = assignedUserCell.querySelector('.badge');
+    if (badge) {
+        const userText = assignedUserCell.textContent.trim();
+        const usernameMatch = userText.match(/\(([^)]+)\)/);
+        if (usernameMatch) {
+            const username = usernameMatch[1];
+            const options = document.getElementById('user_id').options;
+            for (let i = 0; i < options.length; i++) {
+                if (options[i].textContent.includes(username)) {
+                    document.getElementById('user_id').value = options[i].value;
+                    break;
+                }
+            }
+        }
+    }
+    
+    new bootstrap.Modal(document.getElementById('assignModal')).show();
+}
+</script>
+{% endblock %}

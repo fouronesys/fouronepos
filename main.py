@@ -2,6 +2,7 @@ import os
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import bcrypt
 from datetime import datetime
+from flask_wtf.csrf import CSRFProtect
 
 # create the app
 app = Flask(__name__)
@@ -12,6 +13,10 @@ if not app.secret_key:
         raise RuntimeError("SESSION_SECRET environment variable must be set in production")
     else:
         app.secret_key = "dev-secret-key-change-in-production"
+
+# Configure CSRF protection
+csrf = CSRFProtect(app)
+app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 hour token lifetime
 # configure the database, relative to the app instance folder
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {

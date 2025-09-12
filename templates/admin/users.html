@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Usuarios - Four One POS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-people"></i> Gestión de Usuarios</h2>
+        <div>
+            <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Volver
+            </a>
+            <button class="btn btn-primary btn-touch" data-bs-toggle="modal" data-bs-target="#userModal" onclick="newUser()">
+                <i class="bi bi-person-plus"></i> Nuevo Usuario
+            </button>
+        </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Usuario</th>
+                            <th>Nombre</th>
+                            <th>Email</th>
+                            <th>Rol</th>
+                            <th>Estado</th>
+                            <th>Último Acceso</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                        <tr>
+                            <td>{{ user.id }}</td>
+                            <td>
+                                <strong>{{ user.username }}</strong>
+                                {% if user.must_change_password %}
+                                <span class="badge bg-warning ms-1">Cambiar Contraseña</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ user.name }}</td>
+                            <td>{{ user.email }}</td>
+                            <td>
+                                <span class="badge 
+                                    {% if user.role.value == 'administrador' %}bg-danger
+                                    {% elif user.role.value == 'cajero' %}bg-primary
+                                    {% else %}bg-success{% endif %}">
+                                    {{ user.role.value.title() }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if user.active %}
+                                <span class="badge bg-success">Activo</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactivo</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if user.last_login %}
+                                {{ user.last_login.strftime('%d/%m/%Y %H:%M') }}
+                                {% else %}
+                                <span class="text-muted">Nunca</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="editUser({{ user.id }})" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-warning" onclick="resetPassword({{ user.id }})" title="Cambiar Contraseña">
+                                        <i class="bi bi-key"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- User Modal -->
+<div class="modal fade" id="userModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="userModalTitle">Nuevo Usuario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="userForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Usuario</label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Nombre Completo</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="role" class="form-label">Rol</label>
+                        <select class="form-select" id="role" name="role" required>
+                            <option value="">Seleccionar rol...</option>
+                            <option value="administrador">Administrador</option>
+                            <option value="cajero">Cajero</option>
+                            <option value="mesero">Mesero</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="passwordField">
+                        <label for="password" class="form-label">Contraseña</label>
+                        <input type="password" class="form-control" id="password" name="password" minlength="6">
+                        <div class="form-text">Mínimo 6 caracteres</div>
+                    </div>
+                    
+                    <div class="form-check" id="activeField" style="display: none;">
+                        <input class="form-check-input" type="checkbox" id="active" name="active" value="true" checked>
+                        <label class="form-check-label" for="active">
+                            Usuario Activo
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Password Reset Modal -->
+<div class="modal fade" id="passwordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Cambiar Contraseña</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="passwordForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="newPassword" class="form-label">Nueva Contraseña</label>
+                        <input type="password" class="form-control" id="newPassword" name="password" required minlength="6">
+                        <div class="form-text">Mínimo 6 caracteres</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning">Cambiar Contraseña</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentUserId = null;
+let isEditing = false;
+
+function newUser() {
+    isEditing = false;
+    currentUserId = null;
+    document.getElementById('userModalTitle').textContent = 'Nuevo Usuario';
+    document.getElementById('userForm').action = '{{ url_for("admin.create_user") }}';
+    document.getElementById('userForm').reset();
+    document.getElementById('passwordField').style.display = 'block';
+    document.getElementById('password').required = true;
+    document.getElementById('activeField').style.display = 'none';
+    document.getElementById('username').disabled = false;
+}
+
+function editUser(userId) {
+    isEditing = true;
+    currentUserId = userId;
+    
+    // Find user data from the table
+    const row = event.target.closest('tr');
+    const cells = row.cells;
+    
+    document.getElementById('userModalTitle').textContent = 'Editar Usuario';
+    document.getElementById('userForm').action = `/admin/users/${userId}/edit`;
+    
+    // Fill form
+    document.getElementById('username').value = cells[1].textContent.trim().split('\n')[0];
+    document.getElementById('name').value = cells[2].textContent.trim();
+    document.getElementById('email').value = cells[3].textContent.trim();
+    
+    // Set role
+    const roleText = cells[4].textContent.trim().toLowerCase();
+    document.getElementById('role').value = roleText;
+    
+    // Set active status
+    const isActive = cells[5].textContent.trim() === 'Activo';
+    document.getElementById('active').checked = isActive;
+    
+    // Hide password field for editing
+    document.getElementById('passwordField').style.display = 'none';
+    document.getElementById('password').required = false;
+    document.getElementById('activeField').style.display = 'block';
+    document.getElementById('username').disabled = true;
+    
+    // Show modal
+    new bootstrap.Modal(document.getElementById('userModal')).show();
+}
+
+function resetPassword(userId) {
+    currentUserId = userId;
+    document.getElementById('passwordForm').action = `/admin/users/${userId}/reset_password`;
+    document.getElementById('newPassword').value = '';
+    new bootstrap.Modal(document.getElementById('passwordModal')).show();
+}
+</script>
+{% endblock %}

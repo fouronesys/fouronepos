@@ -13,6 +13,7 @@
                 </div>
                 <div class="card-body">
                     <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="mb-3">
                             <label for="username" class="form-label">
                                 <i class="bi bi-person"></i> Usuario
@@ -32,6 +33,12 @@
                         <button type="submit" class="btn btn-primary btn-lg w-100 btn-touch">
                             <i class="bi bi-box-arrow-in-right"></i> Iniciar Sesión
                         </button>
+                        
+                        <div class="text-center mt-3">
+                            <a href="{{ url_for('auth.forgot_password') }}" class="text-decoration-none">
+                                <small>¿Olvidaste tu contraseña?</small>
+                            </a>
+                        </div>
                     </form>
                 </div>
                 <div class="card-footer text-center text-muted">

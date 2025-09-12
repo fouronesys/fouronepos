@@ -103,6 +103,12 @@
                 </div>
                 <div class="card-body">
                     <div class="d-grid gap-2">
+                        <a href="{{ url_for('admin.users') }}" class="btn btn-outline-danger btn-touch">
+                            <i class="bi bi-people"></i> Gestionar Usuarios
+                        </a>
+                        <a href="{{ url_for('admin.cash_registers') }}" class="btn btn-outline-primary btn-touch">
+                            <i class="bi bi-cash-register"></i> Cajas Registradoras
+                        </a>
                         <a href="{{ url_for('admin.products') }}" class="btn btn-outline-primary btn-touch">
                             <i class="bi bi-box"></i> Gestionar Productos
                         </a>

@@ -44,15 +44,19 @@ class User(db.Model):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_login: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
     # Relationships
     sales = relationship("Sale", back_populates="user")
     cash_registers = relationship("CashRegister", back_populates="user")
+    password_reset_tokens = relationship("PasswordResetToken", back_populates="user")
 
 
 class CashRegister(db.Model):
@@ -254,3 +258,18 @@ class StockAdjustment(db.Model):
     # Relationships
     product = relationship("Product")
     user = relationship("User")
+
+
+class PasswordResetToken(db.Model):
+    __tablename__ = 'password_reset_tokens'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    token: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    ip_address: Mapped[str] = mapped_column(String(45), nullable=True)  # IPv4 or IPv6
+    
+    # Relationships
+    user = relationship("User", back_populates="password_reset_tokens")
