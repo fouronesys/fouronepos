@@ -2,8 +2,14 @@ from flask import Blueprint, request, jsonify, session
 import models
 from main import db
 from datetime import datetime
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import text
+import time
+import random
 
 bp = Blueprint('api', __name__, url_prefix='/api')
+
+
 
 
 def require_login():
@@ -79,20 +85,19 @@ def create_sale():
     
     data = request.get_json()
     
-    # Get cash register for this user
-    cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
-    if not cash_register:
-        return jsonify({'error': 'No tienes una caja asignada. Contacta al administrador.'}), 400
-    
-    # Create new sale
+    # Create new sale (waiters don't need cash registers initially)
     sale = models.Sale()
     sale.user_id = user.id
-    sale.cash_register_id = cash_register.id
     sale.table_id = data.get('table_id')
     sale.subtotal = 0
     sale.tax_amount = 0
     sale.total = 0
     sale.status = 'pending'
+    
+    # Only assign cash register if user has one (cashiers/admins)
+    cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
+    if cash_register:
+        sale.cash_register_id = cash_register.id
     
     db.session.add(sale)
     db.session.commit()
@@ -100,7 +105,7 @@ def create_sale():
     return jsonify({
         'id': sale.id,
         'status': sale.status,
-        'cash_register_id': cash_register.id,
+        'cash_register_id': sale.cash_register_id,
         'created_at': sale.created_at.isoformat()
     })
 
@@ -150,62 +155,119 @@ def finalize_sale(sale_id):
     if not isinstance(user, models.User):
         return user
     
-    sale = models.Sale.query.get_or_404(sale_id)
     data = request.get_json()
-    
-    # Check if sale is already finalized
-    if sale.status == 'completed':
-        return jsonify({'error': 'La venta ya está finalizada'}), 400
     
     # Get NCF type from request (default to consumo)
     ncf_type = data.get('ncf_type', 'consumo')
     payment_method = data.get('payment_method', 'efectivo')
     
-    # Get appropriate NCF sequence for this cash register and type
-    cash_register = models.CashRegister.query.get(sale.cash_register_id)
-    ncf_sequence = models.NCFSequence.query.filter_by(
-        cash_register_id=cash_register.id,
-        ncf_type=models.NCFType(ncf_type),
-        active=True
-    ).first()
-    
-    if not ncf_sequence:
-        return jsonify({'error': f'No hay secuencia NCF activa para tipo {ncf_type} en esta caja'}), 400
-    
-    # Check if sequence has available numbers
-    if ncf_sequence.current_number >= ncf_sequence.end_number:
-        return jsonify({'error': 'Secuencia NCF agotada. Contacta al administrador.'}), 400
-    
-    # Generate NCF number
-    ncf_number = f"{ncf_sequence.serie}{ncf_sequence.current_number:08d}"
-    
-    # Update sale with NCF and finalize
-    sale.ncf_sequence_id = ncf_sequence.id
-    sale.ncf = ncf_number
-    sale.payment_method = payment_method
-    sale.status = 'completed'
-    
-    # Increment NCF sequence counter
-    ncf_sequence.current_number += 1
-    
-    # Reduce stock for all sale items
-    for sale_item in sale.sale_items:
-        product = sale_item.product
-        if product.stock >= sale_item.quantity:
-            product.stock -= sale_item.quantity
+    # CRITICAL FIX: Idempotent sale finalization with proper locking to prevent NCF race conditions
+    # This ensures exactly one NCF per sale even under concurrent finalization requests
+    try:
+        with db.session.begin():
+            # Get sale with row-level lock to prevent concurrent modifications
+            sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
+            
+            if not sale:
+                raise ValueError('Venta no encontrada')
+            
+            # IDEMPOTENCY CHECK: If sale is already completed, return existing data
+            # This prevents duplicate NCF allocation for the same sale
+            if sale.status == 'completed':
+                return jsonify({
+                    'id': sale.id,
+                    'ncf': sale.ncf,
+                    'total': sale.total,
+                    'status': sale.status,
+                    'payment_method': sale.payment_method,
+                    'created_at': sale.created_at.isoformat(),
+                    'message': 'Venta ya estaba finalizada'
+                })
+            
+            # Validate that sale is in pending status (only pending sales can be finalized)
+            if sale.status != 'pending':
+                raise ValueError(f'No se puede finalizar una venta con estado {sale.status}')
+            
+            # Validate stock availability before proceeding with NCF allocation
+            # Load sale items with their products for stock validation
+            sale_items = db.session.query(models.SaleItem).filter_by(sale_id=sale_id).all()
+            for sale_item in sale_items:
+                product = sale_item.product
+                if product.stock < sale_item.quantity:
+                    raise ValueError(f'Stock insuficiente para {product.name}')
+            
+            # SALE REASSIGNMENT: If sale doesn't have cash register (waiter-created), assign finalizing user's cash register
+            if not sale.cash_register_id:
+                # Get cash register for the finalizing user (must be cashier/admin)
+                user_cash_register = db.session.query(models.CashRegister).filter_by(
+                    user_id=user.id, 
+                    active=True
+                ).first()
+                
+                if not user_cash_register:
+                    raise ValueError('Solo usuarios con caja asignada pueden finalizar ventas. Contacta al administrador.')
+                
+                # Assign the cash register to the sale for NCF generation
+                sale.cash_register_id = user_cash_register.id
+            
+            # Get NCF sequence with row-level lock to prevent concurrent access
+            ncf_sequence = db.session.query(models.NCFSequence).filter_by(
+                cash_register_id=sale.cash_register_id,
+                ncf_type=models.NCFType(ncf_type),
+                active=True
+            ).with_for_update().first()
+            
+            if not ncf_sequence:
+                raise ValueError(f'No hay secuencia NCF activa para tipo {ncf_type} en esta caja')
+            
+            # Check if sequence is exhausted (treat end_number as inclusive)
+            if ncf_sequence.current_number > ncf_sequence.end_number:
+                raise ValueError('Secuencia NCF agotada. Contacta al administrador.')
+            
+            # Generate NCF number using current number
+            ncf_number = f"{ncf_sequence.serie}{ncf_sequence.current_number:08d}"
+            
+            # Increment counter for next use
+            ncf_sequence.current_number += 1
+            
+            # Update sale with NCF and finalize (atomic state transition from pending to completed)
+            sale.ncf_sequence_id = ncf_sequence.id
+            sale.ncf = ncf_number
+            sale.payment_method = payment_method
+            sale.status = 'completed'
+            
+            # Reduce stock for all sale items
+            for sale_item in sale_items:
+                product = sale_item.product
+                product.stock -= sale_item.quantity
+            
+            # Transaction commits automatically at the end of this block
+            # If ANY part fails, everything rolls back and no NCF is consumed
+        
+        # Return success response
+        return jsonify({
+            'id': sale.id,
+            'ncf': sale.ncf,
+            'total': sale.total,
+            'status': sale.status,
+            'payment_method': sale.payment_method,
+            'created_at': sale.created_at.isoformat()
+        })
+        
+    except ValueError as e:
+        # Handle business logic errors (no sale, wrong status, no NCF sequence, exhausted sequence, stock issues)
+        return jsonify({'error': str(e)}), 400
+        
+    except IntegrityError as e:
+        # Handle database constraint violations
+        if 'unique constraint' in str(e).lower() and 'ncf' in str(e).lower():
+            return jsonify({'error': 'Error de concurrencia al generar NCF. Intente nuevamente.'}), 500
         else:
-            return jsonify({'error': f'Stock insuficiente para {product.name}'}), 400
-    
-    db.session.commit()
-    
-    return jsonify({
-        'id': sale.id,
-        'ncf': sale.ncf,
-        'total': sale.total,
-        'status': sale.status,
-        'payment_method': sale.payment_method,
-        'created_at': sale.created_at.isoformat()
-    })
+            return jsonify({'error': f'Error de integridad de datos: {str(e)}'}), 500
+            
+    except Exception as e:
+        # Handle other unexpected errors
+        return jsonify({'error': f'Error interno: {str(e)}'}), 500
 
 
 @bp.route('/sales/<int:sale_id>/cancel', methods=['POST'])
@@ -214,26 +276,333 @@ def cancel_sale(sale_id):
     if not isinstance(user, models.User):
         return user
     
-    sale = models.Sale.query.get_or_404(sale_id)
-    data = request.get_json()
+    data = request.get_json() or {}
+    reason = data.get('reason', 'Cancelación de venta')
     
-    if sale.status == 'completed' and sale.ncf:
-        # If sale was completed and has NCF, we need to register the cancelled NCF
-        cancelled_ncf = models.CancelledNCF()
-        cancelled_ncf.ncf = sale.ncf
-        cancelled_ncf.ncf_type = sale.ncf_sequence.ncf_type
-        cancelled_ncf.reason = data.get('reason', 'Cancelación de venta')
-        cancelled_ncf.cancelled_by = user.id
+    # CRITICAL FIX: Atomic cancellation with proper locking to prevent race conditions with finalize_sale
+    # This ensures DGII fiscal audit compliance by preventing NCF state inconsistencies
+    try:
+        with db.session.begin():
+            # Get sale with row-level lock to prevent concurrent modifications
+            sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
+            
+            if not sale:
+                raise ValueError('Venta no encontrada')
+            
+            # IDEMPOTENCY CHECK: If sale is already cancelled, return existing state
+            # This prevents duplicate CancelledNCF records and ensures safe retry behavior
+            if sale.status == 'cancelled':
+                # Check if CancelledNCF record exists for this sale's NCF
+                cancelled_ncf_exists = False
+                if sale.ncf:
+                    existing_cancelled = db.session.query(models.CancelledNCF).filter_by(ncf=sale.ncf).first()
+                    cancelled_ncf_exists = existing_cancelled is not None
+                
+                return jsonify({
+                    'id': sale.id,
+                    'status': sale.status,
+                    'ncf': sale.ncf,
+                    'cancelled_ncf_exists': cancelled_ncf_exists,
+                    'message': 'Venta ya estaba cancelada'
+                })
+            
+            # Validate that sale can be cancelled (only pending or completed sales)
+            if sale.status not in ['pending', 'completed']:
+                raise ValueError(f'No se puede cancelar una venta con estado {sale.status}')
+            
+            # FISCAL AUDIT COMPLIANCE: Create CancelledNCF record if sale has NCF
+            # This is CRITICAL for DGII compliance - every NCF cancellation must be recorded
+            cancelled_ncf_created = False
+            if sale.status == 'completed' and sale.ncf:
+                # Check if CancelledNCF already exists (handle edge cases)
+                existing_cancelled = db.session.query(models.CancelledNCF).filter_by(ncf=sale.ncf).first()
+                
+                if not existing_cancelled:
+                    # Create new CancelledNCF record for fiscal audit trail
+                    cancelled_ncf = models.CancelledNCF()
+                    cancelled_ncf.ncf = sale.ncf
+                    cancelled_ncf.ncf_type = sale.ncf_sequence.ncf_type
+                    cancelled_ncf.reason = reason
+                    cancelled_ncf.cancelled_by = user.id
+                    
+                    db.session.add(cancelled_ncf)
+                    cancelled_ncf_created = True
+            
+            # Atomic state transition to cancelled
+            sale.status = 'cancelled'
+            
+            # Transaction commits automatically at the end of this block
+            # If ANY part fails, everything rolls back and no inconsistent state occurs
         
-        db.session.add(cancelled_ncf)
+        # Return success response with fiscal audit information
+        return jsonify({
+            'id': sale.id,
+            'status': sale.status,
+            'ncf': sale.ncf,
+            'cancelled_ncf_created': cancelled_ncf_created,
+            'message': 'Venta cancelada exitosamente'
+        })
+        
+    except ValueError as e:
+        # Handle business logic errors (no sale, wrong status)
+        return jsonify({'error': str(e)}), 400
+        
+    except IntegrityError as e:
+        # Handle database constraint violations (e.g., duplicate CancelledNCF)
+        if 'unique constraint' in str(e).lower() and 'cancelled_ncfs' in str(e).lower():
+            return jsonify({'error': 'NCF ya fue cancelado previamente. Operación duplicada detectada.'}), 409
+        else:
+            return jsonify({'error': f'Error de integridad de datos: {str(e)}'}), 500
+            
+    except Exception as e:
+        # Handle other unexpected errors
+        return jsonify({'error': f'Error interno: {str(e)}'}), 500
+
+
+@bp.route('/sales/<int:sale_id>/items/<int:item_id>', methods=['DELETE'])
+def remove_sale_item(sale_id, item_id):
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
     
-    # Update sale status
-    sale.status = 'cancelled'
+    try:
+        with db.session.begin():
+            # Get sale and item with locks
+            sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
+            sale_item = db.session.query(models.SaleItem).filter_by(id=item_id, sale_id=sale_id).with_for_update().first()
+            
+            if not sale:
+                raise ValueError('Venta no encontrada')
+            
+            if not sale_item:
+                raise ValueError('Producto no encontrado en la venta')
+            
+            # Only allow removing items from pending sales
+            if sale.status != 'pending':
+                raise ValueError('Solo se pueden modificar ventas pendientes')
+            
+            # Remove item and update totals
+            item_total = sale_item.total_price
+            db.session.delete(sale_item)
+            
+            # Recalculate sale totals
+            sale.subtotal -= item_total
+            sale.tax_amount = sale.subtotal * 0.18
+            sale.total = sale.subtotal + sale.tax_amount
+            
+            # Ensure totals don't go negative
+            if sale.subtotal < 0:
+                sale.subtotal = 0
+                sale.tax_amount = 0
+                sale.total = 0
+        
+        return jsonify({'success': True, 'new_total': sale.total})
     
-    db.session.commit()
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'Error interno: {str(e)}'}), 500
+
+
+@bp.route('/sales/<int:sale_id>/items/<int:item_id>/quantity', methods=['PUT'])
+def update_item_quantity(sale_id, item_id):
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
     
-    return jsonify({
-        'id': sale.id,
-        'status': sale.status,
-        'message': 'Venta cancelada exitosamente'
-    })
+    data = request.get_json()
+    new_quantity = data.get('quantity', 1)
+    
+    if new_quantity <= 0:
+        return jsonify({'error': 'La cantidad debe ser mayor a 0'}), 400
+    
+    try:
+        with db.session.begin():
+            # Get sale and item with locks
+            sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
+            sale_item = db.session.query(models.SaleItem).filter_by(id=item_id, sale_id=sale_id).with_for_update().first()
+            
+            if not sale:
+                raise ValueError('Venta no encontrada')
+            
+            if not sale_item:
+                raise ValueError('Producto no encontrado en la venta')
+            
+            # Only allow modifying pending sales
+            if sale.status != 'pending':
+                raise ValueError('Solo se pueden modificar ventas pendientes')
+            
+            # Check stock availability
+            product = sale_item.product
+            if product.stock < new_quantity:
+                raise ValueError(f'Stock insuficiente para {product.name}. Disponible: {product.stock}')
+            
+            # Update quantity and totals
+            old_total = sale_item.total_price
+            sale_item.quantity = new_quantity
+            sale_item.total_price = sale_item.unit_price * new_quantity
+            
+            # Update sale totals
+            sale.subtotal = sale.subtotal - old_total + sale_item.total_price
+            sale.tax_amount = sale.subtotal * 0.18
+            sale.total = sale.subtotal + sale.tax_amount
+        
+        return jsonify({
+            'success': True,
+            'new_quantity': sale_item.quantity,
+            'new_item_total': sale_item.total_price,
+            'new_sale_total': sale.total
+        })
+    
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'Error interno: {str(e)}'}), 500
+
+
+@bp.route('/tables/<int:table_id>/close', methods=['POST'])
+def close_table_properly(table_id):
+    """Properly close a table by finalizing or cancelling its pending sale"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    data = request.get_json() or {}
+    action = data.get('action', 'finalize')  # 'finalize' or 'cancel'
+    
+    try:
+        with db.session.begin():
+            # Get table and any pending sale
+            table = db.session.query(models.Table).filter_by(id=table_id).with_for_update().first()
+            pending_sale = db.session.query(models.Sale).filter_by(
+                table_id=table_id, 
+                status='pending'
+            ).with_for_update().first()
+            
+            if not table:
+                raise ValueError('Mesa no encontrada')
+            
+            if not pending_sale:
+                # No pending sale, just mark table as available
+                table.status = models.TableStatus.AVAILABLE
+                return jsonify({
+                    'success': True,
+                    'message': 'Mesa liberada (no había venta pendiente)',
+                    'table_status': 'available'
+                })
+            
+            # Handle based on action
+            if action == 'cancel':
+                # Cancel the sale
+                pending_sale.status = 'cancelled'
+                table.status = models.TableStatus.AVAILABLE
+                return jsonify({
+                    'success': True,
+                    'message': 'Venta cancelada y mesa liberada',
+                    'table_status': 'available',
+                    'sale_status': 'cancelled'
+                })
+            else:
+                # For finalization, only cashiers/admins can do this
+                # Waiters must hand over to cashier for finalization
+                if user.role.value == 'mesero':
+                    raise ValueError('Los meseros deben entregar la mesa al cajero para finalizar. Use "Enviar a Caja" en su lugar.')
+                
+                # This is just the table closing part - actual sale finalization happens via /sales/{id}/finalize
+                # Just mark the table as ready for finalization
+                return jsonify({
+                    'success': True,
+                    'message': 'Mesa lista para finalización por cajero',
+                    'sale_id': pending_sale.id,
+                    'requires_finalization': True
+                })
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'Error interno: {str(e)}'}), 500
+
+
+@bp.route('/sales/<int:sale_id>/kitchen-status', methods=['PUT'])
+def update_kitchen_status(sale_id):
+    """Update the kitchen/order status of a sale"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    data = request.get_json()
+    new_status = data.get('order_status')
+    
+    if not new_status:
+        return jsonify({'error': 'order_status es requerido'}), 400
+    
+    # Validate order status
+    valid_statuses = [status.value for status in models.OrderStatus]
+    if new_status not in valid_statuses:
+        return jsonify({'error': f'Estado inválido. Debe ser uno de: {valid_statuses}'}), 400
+    
+    try:
+        with db.session.begin():
+            sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
+            
+            if not sale:
+                raise ValueError('Venta no encontrada')
+            
+            # Only allow updating order status for pending sales
+            if sale.status != 'pending':
+                raise ValueError('Solo se puede actualizar el estado de pedidos pendientes')
+            
+            # Update order status
+            sale.order_status = models.OrderStatus(new_status)
+            
+        return jsonify({
+            'success': True,
+            'sale_id': sale.id,
+            'order_status': sale.order_status.value,
+            'message': f'Estado del pedido actualizado a: {sale.order_status.value}'
+        })
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'Error interno: {str(e)}'}), 500
+
+
+@bp.route('/sales/<int:sale_id>/send-to-kitchen', methods=['POST'])
+def send_to_kitchen(sale_id):
+    """Send sale to kitchen - updates order status to sent_to_kitchen"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    try:
+        with db.session.begin():
+            sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
+            
+            if not sale:
+                raise ValueError('Venta no encontrada')
+            
+            # Only allow sending pending sales to kitchen
+            if sale.status != 'pending':
+                raise ValueError('Solo se pueden enviar a cocina pedidos pendientes')
+            
+            # Check if sale has items
+            if not sale.sale_items:
+                raise ValueError('No se puede enviar un pedido vacío a cocina')
+            
+            # Update order status to sent_to_kitchen
+            sale.order_status = models.OrderStatus.SENT_TO_KITCHEN
+            
+        return jsonify({
+            'success': True,
+            'sale_id': sale.id,
+            'order_status': sale.order_status.value,
+            'table_id': sale.table_id,
+            'total': sale.total,
+            'message': 'Pedido enviado a cocina exitosamente'
+        })
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'Error interno: {str(e)}'}), 500

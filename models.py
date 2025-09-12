@@ -23,6 +23,14 @@ class TableStatus(enum.Enum):
     RESERVED = "reserved"
 
 
+class OrderStatus(enum.Enum):
+    NOT_SENT = "not_sent"
+    SENT_TO_KITCHEN = "sent_to_kitchen"
+    IN_PREPARATION = "in_preparation"
+    READY = "ready"
+    SERVED = "served"
+
+
 class User(db.Model):
     __tablename__ = 'users'
     
@@ -170,16 +178,17 @@ class Sale(db.Model):
     __tablename__ = 'sales'
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    cash_register_id: Mapped[int] = mapped_column(Integer, ForeignKey('cash_registers.id'))
+    cash_register_id: Mapped[int] = mapped_column(Integer, ForeignKey('cash_registers.id'), nullable=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'))
     table_id: Mapped[int] = mapped_column(Integer, ForeignKey('tables.id'), nullable=True)
     ncf_sequence_id: Mapped[int] = mapped_column(Integer, ForeignKey('ncf_sequences.id'), nullable=True)
-    ncf: Mapped[str] = mapped_column(String(20), nullable=True)
+    ncf: Mapped[str] = mapped_column(String(20), nullable=True, unique=True)
     subtotal: Mapped[float] = mapped_column(Float, nullable=False)
     tax_amount: Mapped[float] = mapped_column(Float, default=0.0)
     total: Mapped[float] = mapped_column(Float, nullable=False)
     payment_method: Mapped[str] = mapped_column(String(50), default="efectivo")
-    status: Mapped[str] = mapped_column(String(20), default="completed")  # completed, pending, cancelled
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # completed, pending, cancelled
+    order_status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.NOT_SENT)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
     # Relationships
