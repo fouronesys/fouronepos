@@ -98,7 +98,9 @@ def create_sale():
         # Create new sale (waiters don't need cash registers initially)
         sale = models.Sale()
         sale.user_id = user.id
-        sale.table_id = data.get('table_id')  # Will be None if no table_id provided
+        table_id = data.get('table_id')
+        if table_id is not None:
+            sale.table_id = int(table_id)
         sale.subtotal = 0
         sale.tax_amount = 0
         sale.total = 0
@@ -956,3 +958,62 @@ def _get_ncf_type_display(ncf):
         return 'Liquidación'
     else:
         return 'Comprobante Fiscal'
+
+
+@bp.route('/sales/<int:sale_id>/details')
+def get_sale_details(sale_id):
+    """Get detailed information about a specific sale"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Get sale data
+    sale = models.Sale.query.get_or_404(sale_id)
+    
+    # SECURITY: Verify user has access to this sale
+    if user.role.value not in ['administrador', 'cajero']:
+        return jsonify({'error': 'No tienes permisos para ver esta venta'}), 403
+    
+    if user.role.value == 'cajero':
+        # For cashiers, verify cash register ownership and it exists
+        if not sale.cash_register:
+            return jsonify({'error': 'Esta venta no tiene caja registradora asignada'}), 400
+        if sale.cash_register.user_id != user.id:
+            return jsonify({'error': 'No tienes acceso a esta venta'}), 403
+    
+    # Get sale items with product information
+    sale_items = models.SaleItem.query.filter_by(sale_id=sale_id).all()
+    
+    # Prepare sale data
+    sale_data = {
+        'id': sale.id,
+        'ncf': sale.ncf,
+        'created_at': sale.created_at.isoformat(),
+        'customer_name': sale.customer_name,
+        'customer_rnc': sale.customer_rnc,
+        'payment_method': sale.payment_method,
+        'status': sale.status,
+        'order_status': sale.order_status.value if sale.order_status else None,
+        'subtotal': float(sale.subtotal),
+        'tax_amount': float(sale.tax_amount),
+        'total': float(sale.total),
+        'user_name': sale.user.name if sale.user else None,
+        'cash_register_name': sale.cash_register.name if sale.cash_register else None,
+        'items': []
+    }
+    
+    # Add items with product details
+    for item in sale_items:
+        sale_data['items'].append({
+            'id': item.id,
+            'product_id': item.product_id,
+            'product_name': item.product.name if item.product else 'Producto eliminado',
+            'quantity': item.quantity,
+            'unit_price': float(item.unit_price),
+            'total_price': float(item.total_price)
+        })
+    
+    return jsonify({
+        'success': True,
+        'sale': sale_data
+    })

@@ -502,6 +502,120 @@ def reports():
     return render_template('admin/reports.html')
 
 
+@bp.route('/invoices')
+def invoices():
+    """Vista para mostrar la lista de facturas/ventas"""
+    user = require_admin_or_cashier()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Obtener parámetros de filtro
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    search = request.args.get('search', '', type=str)
+    status_filter = request.args.get('status', '', type=str)
+    date_from = request.args.get('date_from', '', type=str)
+    date_to = request.args.get('date_to', '', type=str)
+    
+    # Construir query base
+    query = models.Sale.query
+    
+    # Aplicar filtros
+    if search:
+        query = query.filter(
+            models.Sale.ncf.ilike(f'%{search}%') |
+            models.Sale.customer_name.ilike(f'%{search}%') |
+            models.Sale.customer_rnc.ilike(f'%{search}%')
+        )
+    
+    if status_filter:
+        query = query.filter(models.Sale.status == status_filter)
+    
+    if date_from:
+        try:
+            from_date = datetime.strptime(date_from, '%Y-%m-%d')
+            query = query.filter(models.Sale.created_at >= from_date)
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            to_date = datetime.strptime(date_to, '%Y-%m-%d')
+            # Agregar un día para incluir todo el día seleccionado
+            to_date = to_date.replace(hour=23, minute=59, second=59)
+            query = query.filter(models.Sale.created_at <= to_date)
+        except ValueError:
+            pass
+    
+    # Para cajeros, solo mostrar ventas de su caja registradora
+    if user.role.value == 'cajero':
+        cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
+        if not cash_register:
+            # Si el cajero no tiene caja registradora activa, no puede ver ninguna venta
+            flash('No tienes una caja registradora asignada. Contacta al administrador.', 'error')
+            return redirect(url_for('admin.dashboard'))
+        query = query.filter(models.Sale.cash_register_id == cash_register.id)
+    
+    # Ordenar por fecha de creación (más recientes primero)
+    query = query.order_by(models.Sale.created_at.desc())
+    
+    # Paginación
+    sales = query.paginate(
+        page=page,
+        per_page=per_page,
+        error_out=False
+    )
+    
+    # Crear una consulta para estadísticas que respete todos los filtros aplicados
+    stats_query = models.Sale.query
+    
+    # Aplicar todos los mismos filtros que se usaron para la consulta principal
+    if search:
+        stats_query = stats_query.filter(
+            models.Sale.ncf.ilike(f'%{search}%') |
+            models.Sale.customer_name.ilike(f'%{search}%') |
+            models.Sale.customer_rnc.ilike(f'%{search}%')
+        )
+    
+    if status_filter:
+        stats_query = stats_query.filter(models.Sale.status == status_filter)
+    
+    if date_from:
+        try:
+            from_date = datetime.strptime(date_from, '%Y-%m-%d')
+            stats_query = stats_query.filter(models.Sale.created_at >= from_date)
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            to_date = datetime.strptime(date_to, '%Y-%m-%d')
+            to_date = to_date.replace(hour=23, minute=59, second=59)
+            stats_query = stats_query.filter(models.Sale.created_at <= to_date)
+        except ValueError:
+            pass
+    
+    # Para cajeros, aplicar mismo filtro de caja registradora
+    if user.role.value == 'cajero':
+        cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
+        if cash_register:
+            stats_query = stats_query.filter(models.Sale.cash_register_id == cash_register.id)
+    
+    # Calcular estadísticas solo de ventas completadas con los filtros aplicados
+    completed_stats_query = stats_query.filter(models.Sale.status == 'completed')
+    total_sales = completed_stats_query.count()
+    total_amount = completed_stats_query.with_entities(func.sum(models.Sale.total)).scalar() or 0
+    
+    return render_template('admin/invoices.html',
+                         sales=sales,
+                         total_sales=total_sales,
+                         total_amount=total_amount,
+                         search=search,
+                         status_filter=status_filter,
+                         date_from=date_from,
+                         date_to=date_to)
+
+
 @bp.route('/ncf-sequences')
 def ncf_sequences():
     user = require_admin_or_cashier()
