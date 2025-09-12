@@ -852,12 +852,7 @@ function assignToTable() {
     });
 }
 
-// Clear cart
-function clearCart() {
-    cart = [];
-    updateCartDisplay();
-    document.getElementById('table-select').value = '';
-}
+// Clear cart - removed duplicate function, using CartManager version only
 
 // Toggle client information fields based on NCF type
 function toggleClientInfo() {
