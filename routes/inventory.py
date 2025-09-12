@@ -32,7 +32,14 @@ def products():
     
     categories = models.Category.query.filter_by(active=True).order_by(models.Category.name).all()
     
-    return render_template('inventory/products.html', products=products, categories=categories)
+    # Calculate low stock count for inventoriable products
+    low_stock_count = sum(1 for product in products 
+                         if product.product_type == 'inventariable' and product.stock <= product.min_stock)
+    
+    return render_template('inventory/products.html', 
+                         products=products, 
+                         categories=categories,
+                         low_stock_count=low_stock_count)
 
 
 @bp.route('/suppliers')

@@ -37,7 +37,7 @@
                     <h6>Resumen de Inventario</h6>
                     <p class="mb-0"><strong>Total de productos:</strong> {{ products|length }}</p>
                     <p class="mb-0"><strong>Productos con stock bajo:</strong> 
-                        <span id="lowStockCount">{{ products|selectattr('stock', 'lessthan', 'min_stock')|list|length }}</span>
+                        <span id="lowStockCount">{{ low_stock_count }}</span>
                     </p>
                 </div>
             </div>
