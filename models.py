@@ -117,6 +117,7 @@ class Product(db.Model):
     tax_rate: Mapped[float] = mapped_column(Float, default=0.18)  # 18% ITBIS by default
     stock: Mapped[int] = mapped_column(Integer, default=0)
     min_stock: Mapped[int] = mapped_column(Integer, default=5)
+    product_type: Mapped[str] = mapped_column(String(20), default='inventariable')  # 'inventariable' o 'consumible'
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     

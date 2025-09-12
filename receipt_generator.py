@@ -25,9 +25,8 @@ from utils import format_currency_rd, calculate_itbis, get_company_info_for_rece
 
 class DominicanReceiptGenerator:
     """
-    Generador simplificado de recibos fiscales para RD
+    Generador de recibos fiscales para RD
     Optimizado para impresoras térmicas 58mm y 80mm
-    Información fiscal solo al inicio, sin tablas complicadas
     """
 
     def __init__(self, format_type='80mm'):
@@ -44,22 +43,53 @@ class DominicanReceiptGenerator:
         self.styles = self._create_styles()
 
     def _create_styles(self):
-        """Create paragraph styles for the receipt"""
-        from reportlab.lib.styles import StyleSheet1
-        
-        # Create a new stylesheet to avoid conflicts
-        styles = StyleSheet1()
-        
-        # Add base styles
-        styles.add(ParagraphStyle('Normal', fontSize=8, fontName='Helvetica'))
-        styles.add(ParagraphStyle('Title', fontSize=12, alignment=TA_CENTER, fontName='Helvetica-Bold'))
-        styles.add(ParagraphStyle('Info', fontSize=7, alignment=TA_CENTER, fontName='Helvetica'))
-        styles.add(ParagraphStyle('Item', fontSize=8, alignment=TA_LEFT, fontName='Helvetica'))
-        styles.add(ParagraphStyle('Total', fontSize=10, alignment=TA_RIGHT, fontName='Helvetica-Bold'))
-        styles.add(ParagraphStyle('Footer', fontSize=7, alignment=TA_CENTER, fontName='Helvetica'))
+        styles = getSampleStyleSheet()
+
+        styles.add(ParagraphStyle(
+            name='CompanyName',
+            fontSize=13,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold',
+            spaceAfter=4
+        ))
+        styles.add(ParagraphStyle(
+            name='CompanyInfo',
+            fontSize=7,
+            alignment=TA_CENTER,
+            fontName='Helvetica'
+        ))
+        styles.add(ParagraphStyle(
+            name='ReceiptHeader',
+            fontSize=10,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold',
+            spaceBefore=4,
+            spaceAfter=4
+        ))
+        styles.add(ParagraphStyle(
+            name='Item',
+            fontSize=8,
+            alignment=TA_LEFT,
+            fontName='Helvetica'
+        ))
+        styles.add(ParagraphStyle(
+            name='Total',
+            fontSize=10,
+            alignment=TA_RIGHT,
+            fontName='Helvetica-Bold',
+            textColor=colors.black,
+            spaceBefore=4,
+            spaceAfter=4
+        ))
+        styles.add(ParagraphStyle(
+            name='Footer',
+            fontSize=7,
+            alignment=TA_CENTER,
+            fontName='Helvetica'
+        ))
         return styles
 
-    # ----------- RECIBO PDF -----------
+    # ----------- CONSTRUCCIÓN DEL RECIBO PDF -----------
 
     def generate_fiscal_receipt(self, sale_data: Dict[str, Any], output_path: Optional[str] = None) -> str:
         company_info = get_company_info_for_receipt()
@@ -81,56 +111,89 @@ class DominicanReceiptGenerator:
         )
 
         content = []
-        content.extend(self._build_header(company_info, sale_data))
-        content.extend(self._build_items(sale_data))
-        content.extend(self._build_totals(sale_data))
+        content.extend(self._build_company_header(company_info))
+        content.extend(self._build_receipt_details(sale_data))
+        content.extend(self._build_items_list(sale_data))
+        content.extend(self._build_totals_section(sale_data))
+        content.extend(self._build_fiscal_info(sale_data, company_info))
         content.extend(self._build_footer(company_info))
 
         doc.build(content)
         return output_path
 
-    def _build_header(self, company_info: Dict[str, str], sale_data: Dict[str, Any]) -> List:
+    def _build_company_header(self, company_info: Dict[str, str]) -> List:
         content = []
-        # Información fiscal al inicio
-        content.append(Paragraph(company_info['name'], self.styles['Title']))
-        if company_info.get('rnc'):
-            content.append(Paragraph(f"RNC: {company_info['rnc']}", self.styles['Info']))
-        if company_info.get('address'):
-            content.append(Paragraph(company_info['address'], self.styles['Info']))
-        if company_info.get('phone'):
-            content.append(Paragraph(f"Tel: {company_info['phone']}", self.styles['Info']))
-        content.append(Spacer(1, 2*mm))
 
-        # Recibo
-        content.append(Paragraph("RECIBO FISCAL", self.styles['Title']))
+        if company_info.get('logo') and os.path.exists(company_info['logo']):
+            try:
+                logo_w, logo_h = (14*mm, 10*mm) if self.format_type == '58mm' else (20*mm, 15*mm)
+                logo = Image(company_info['logo'], width=logo_w, height=logo_h)
+                logo.hAlign = 'CENTER'
+                content.append(logo)
+                content.append(Spacer(1, 2*mm))
+            except:
+                pass
 
-        # Datos de la venta
+        content.append(Paragraph(company_info['name'], self.styles['CompanyName']))
+
+        for field in ['rnc', 'address', 'phone', 'email']:
+            if company_info.get(field):
+                value = company_info[field]
+                label = "RNC: " if field == 'rnc' else "Tel: " if field == 'phone' else ""
+                content.append(Paragraph(f"{label}{value}", self.styles['CompanyInfo']))
+
+        content.append(Spacer(1, 3*mm))
+        return content
+
+    def _build_receipt_details(self, sale_data: Dict[str, Any]) -> List:
+        content = [Paragraph("RECIBO FISCAL", self.styles['ReceiptHeader'])]
+
         sale_date = sale_data.get('created_at', datetime.now())
         if isinstance(sale_date, str):
             sale_date = datetime.fromisoformat(sale_date.replace('Z', '+00:00'))
+
         content.append(Paragraph(f"Fecha: {sale_date.strftime('%d/%m/%Y %H:%M:%S')}", self.styles['Item']))
         content.append(Paragraph(f"Venta No: {sale_data.get('id', 'N/A')}", self.styles['Item']))
+
         if sale_data.get('ncf'):
             content.append(Paragraph(f"NCF: {sale_data['ncf']}", self.styles['Item']))
 
-        payment_method = sale_data.get('payment_method', 'efectivo').title()
-        content.append(Paragraph(f"Método de pago: {payment_method}", self.styles['Item']))
-        content.append(Spacer(1, 2*mm))
+        metodo = {
+            'efectivo': 'Efectivo',
+            'tarjeta': 'Tarjeta',
+            'transferencia': 'Transferencia'
+        }.get(sale_data.get('payment_method', 'efectivo'), sale_data.get('payment_method', 'Efectivo'))
+
+        content.append(Paragraph(f"Método de pago: {metodo}", self.styles['Item']))
         return content
 
-    def _build_items(self, sale_data: Dict[str, Any]) -> List:
-        content = [Paragraph("DETALLE DE COMPRA", self.styles['Title'])]
-        for item in sale_data.get('items', []):
-            qty = item.get('quantity', 1)
-            name = item.get('product_name', item.get('name', 'Producto'))
-            price = item.get('price', 0)
+    def _build_items_list(self, sale_data: Dict[str, Any]) -> List:
+        """Build items list without table - optimized for thermal printing"""
+        content = []
+        
+        content.append(Paragraph("DETALLE DE COMPRA", self.styles['ReceiptHeader']))
+        content.append(Paragraph("-" * (self.text_width if hasattr(self, 'text_width') else 32), self.styles['Item']))
+        
+        items = sale_data.get('items', [])
+        for item in items:
+            qty = item.get("quantity", 1)
+            name = item.get("product_name", item.get("name", "Producto"))
+            price = item.get("price", 0)
             total = qty * price
-            line = f"{qty} x {name}  @ {format_currency_rd(price)} = {format_currency_rd(total)}"
-            content.append(Paragraph(line, self.styles['Item']))
-        content.append(Spacer(1, 2*mm))
+            
+            # Truncate name based on format
+            max_name_len = 20 if self.format_type == '58mm' else 25
+            if len(name) > max_name_len:
+                name = name[:max_name_len-3] + "..."
+            
+            # Format item line
+            content.append(Paragraph(f"{qty}x {name}", self.styles['Item']))
+            content.append(Paragraph(f"    {format_currency_rd(price)} c/u = {format_currency_rd(total)}", self.styles['Item']))
+        
+        content.append(Paragraph("-" * (self.text_width if hasattr(self, 'text_width') else 32), self.styles['Item']))
         return content
 
-    def _build_totals(self, sale_data: Dict[str, Any]) -> List:
+    def _build_totals_section(self, sale_data: Dict[str, Any]) -> List:
         content = []
         subtotal = sale_data.get('subtotal', 0)
         tax = sale_data.get('tax_amount', calculate_itbis(subtotal))
@@ -138,71 +201,85 @@ class DominicanReceiptGenerator:
 
         content.append(Paragraph(f"Subtotal: {format_currency_rd(subtotal)}", self.styles['Item']))
         content.append(Paragraph(f"ITBIS (18%): {format_currency_rd(tax)}", self.styles['Item']))
-        content.append(Paragraph(f"TOTAL: {format_currency_rd(total)}", self.styles['Total']))
-        content.append(Spacer(1, 2*mm))
+        content.append(Paragraph(f"<b>TOTAL: {format_currency_rd(total)}</b>", self.styles['Total']))
+        return content
+
+    def _build_fiscal_info(self, sale_data: Dict[str, Any], company_info: Dict[str, str]) -> List:
+        content = [Paragraph("INFORMACIÓN FISCAL", self.styles['ReceiptHeader'])]
+
+        if company_info.get('rnc'):
+            content.append(Paragraph(f"RNC Empresa: {company_info['rnc']}", self.styles['Footer']))
+
+        if sale_data.get('ncf'):
+            ncf = sale_data['ncf']
+            tipo = "Crédito Fiscal" if ncf.startswith("B") else "Consumidor Final" if ncf.startswith("E") else "Comprobante Fiscal"
+            content.append(Paragraph(f"NCF: {ncf}", self.styles['Footer']))
+            content.append(Paragraph(f"Tipo: {tipo}", self.styles['Footer']))
+
+        content.append(Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", self.styles['Footer']))
         return content
 
     def _build_footer(self, company_info: Dict[str, str]) -> List:
         content = []
         if company_info.get('message'):
             content.append(Paragraph(company_info['message'], self.styles['Footer']))
-        content.append(Paragraph("Válido para efectos fiscales - DGII", self.styles['Footer']))
-        content.append(Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", self.styles['Footer']))
+        if company_info.get('footer'):
+            content.append(Paragraph(company_info['footer'], self.styles['Footer']))
+
+        content.append(Paragraph("Este recibo es válido para efectos fiscales según la DGII", self.styles['Footer']))
         return content
 
-    # ----------- RECIBO TÉRMICO -----------
+    # ----------- RECIBO EN TEXTO PARA IMPRESORAS TÉRMICAS -----------
 
     def generate_thermal_receipt(self, sale_data: Dict[str, Any]) -> str:
         company_info = get_company_info_for_receipt()
-        lines = []
-        width = self.text_width
-        c = lambda t: t.center(width)
+        r = []
+        c = lambda t: t.center(self.text_width)
 
-        # Encabezado fiscal
-        lines.append(c(company_info['name']))
-        if company_info.get('rnc'):
-            lines.append(c(f"RNC: {company_info['rnc']}"))
-        if company_info.get('address'):
-            lines.append(c(company_info['address']))
-        if company_info.get('phone'):
-            lines.append(c(f"Tel: {company_info['phone']}"))
-        lines.append("-"*width)
-        lines.append(c("RECIBO FISCAL"))
+        r.append("=" * self.text_width)
+        r.append(c(company_info['name']))
+        if company_info.get('rnc'): r.append(c(f"RNC: {company_info['rnc']}"))
+        if company_info.get('address'): r.append(c(company_info['address']))
+        if company_info.get('phone'): r.append(c(f"Tel: {company_info['phone']}"))
+        r.append("=" * self.text_width)
+        r.append(c("RECIBO FISCAL"))
+        r.append("-" * self.text_width)
 
-        # Venta
         sale_date = sale_data.get('created_at', datetime.now())
         if isinstance(sale_date, str):
             sale_date = datetime.fromisoformat(sale_date.replace('Z', '+00:00'))
-        lines.append(f"Fecha: {sale_date.strftime('%d/%m/%Y %H:%M:%S')}")
-        lines.append(f"Venta No: {sale_data.get('id','N/A')}")
-        if sale_data.get('ncf'):
-            lines.append(f"NCF: {sale_data['ncf']}")
-        lines.append(f"Método: {sale_data.get('payment_method','Efectivo').title()}")
-        lines.append("-"*width)
+        r.append(f"Fecha: {sale_date.strftime('%d/%m/%Y %H:%M:%S')}")
+        r.append(f"Venta No: {sale_data.get('id','N/A')}")
+        if sale_data.get('ncf'): r.append(f"NCF: {sale_data['ncf']}")
+        r.append(f"Método: {sale_data.get('payment_method','Efectivo').title()}")
+        r.append("-" * self.text_width)
+        r.append("Cant  Descripción           Total")
+        r.append("-" * self.text_width)
 
-        # Items
         for item in sale_data.get('items', []):
             qty = item.get('quantity', 1)
-            name = item.get('product_name', item.get('name', 'Producto'))[:20]
-            total = qty * item.get('price',0)
-            lines.append(f"{qty} x {name} = {format_currency_rd(total)}")
+            name = item.get('product_name', item.get('name', 'Producto'))[:18]
+            total = qty * item.get('price', 0)
+            line = f"{qty:<3} {name:<18}{format_currency_rd(total):>8}"
+            r.append(line)
 
-        # Totales
+        r.append("-" * self.text_width)
         subtotal = sale_data.get('subtotal', 0)
         tax = sale_data.get('tax_amount', calculate_itbis(subtotal))
         total = sale_data.get('total', subtotal + tax)
-        lines.append("-"*width)
-        lines.append(f"Subtotal: {format_currency_rd(subtotal)}")
-        lines.append(f"ITBIS (18%): {format_currency_rd(tax)}")
-        lines.append(f"TOTAL: {format_currency_rd(total)}")
-        lines.append("-"*width)
 
-        if company_info.get('message'):
-            lines.append(c(company_info['message']))
-        lines.append(c("Válido para efectos fiscales - DGII"))
-        lines.append(c(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"))
+        r.append(f"{'Subtotal:':<20}{format_currency_rd(subtotal):>12}")
+        r.append(f"{'ITBIS (18%):':<20}{format_currency_rd(tax):>12}")
+        r.append("=" * self.text_width)
+        r.append(f"{'TOTAL:':<20}{format_currency_rd(total):>12}")
+        r.append("=" * self.text_width)
 
-        return "\n".join(lines)
+        if company_info.get('message'): r.append(c(company_info['message']))
+        if company_info.get('footer'): r.append(c(company_info['footer']))
+        r.append(c("Válido para efectos fiscales - DGII"))
+        r.append(c(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"))
+        r.append("=" * self.text_width)
+        return "\n".join(r)
 
 # Helper functions for easy use
 def generate_pdf_receipt(sale_data: Dict[str, Any], output_path: Optional[str] = None) -> str:

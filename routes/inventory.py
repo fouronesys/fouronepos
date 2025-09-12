@@ -69,16 +69,18 @@ def stock_alerts():
     if not isinstance(user, models.User):
         return user
     
-    # Get products with low stock
+    # Get products with low stock (only inventariables)
     low_stock_products = models.Product.query.filter(
         models.Product.stock <= models.Product.min_stock,
-        models.Product.active == True
+        models.Product.active == True,
+        models.Product.product_type == 'inventariable'
     ).all()
     
-    # Get products with very low stock (less than half of minimum)
+    # Get products with very low stock (less than half of minimum, only inventariables)
     critical_stock_products = models.Product.query.filter(
         models.Product.stock <= (models.Product.min_stock / 2),
-        models.Product.active == True
+        models.Product.active == True,
+        models.Product.product_type == 'inventariable'
     ).all()
     
     return render_template('inventory/stock_alerts.html', 
@@ -93,6 +95,11 @@ def create_product():
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
+    # Validar CSRF
+    from routes.admin import validate_csrf_token
+    if not validate_csrf_token():
+        return jsonify({'error': 'Token de seguridad inválido'}), 400
+    
     data = request.get_json()
     
     try:
@@ -103,8 +110,16 @@ def create_product():
         product.cost = float(data['cost'])
         product.price = float(data['price'])
         product.tax_rate = float(data.get('tax_rate', 0.18))
-        product.stock = int(data.get('stock', 0))
-        product.min_stock = int(data.get('min_stock', 5))
+        product.product_type = data.get('product_type', 'inventariable')
+        
+        # Solo manejar stock para productos inventariables
+        if product.product_type == 'inventariable':
+            product.stock = int(data.get('stock', 0))
+            product.min_stock = int(data.get('min_stock', 5))
+        else:  # consumible
+            product.stock = 0
+            product.min_stock = 0
+            
         product.active = data.get('active', True)
         
         db.session.add(product)
@@ -132,6 +147,11 @@ def update_product(product_id):
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
+    # Validar CSRF
+    from routes.admin import validate_csrf_token
+    if not validate_csrf_token():
+        return jsonify({'error': 'Token de seguridad inválido'}), 400
+    
     product = models.Product.query.get_or_404(product_id)
     data = request.get_json()
     
@@ -142,8 +162,16 @@ def update_product(product_id):
         product.cost = float(data['cost'])
         product.price = float(data['price'])
         product.tax_rate = float(data.get('tax_rate', 0.18))
-        product.stock = int(data.get('stock', 0))
-        product.min_stock = int(data.get('min_stock', 5))
+        product.product_type = data.get('product_type', 'inventariable')
+        
+        # Solo manejar stock para productos inventariables
+        if product.product_type == 'inventariable':
+            product.stock = int(data.get('stock', 0))
+            product.min_stock = int(data.get('min_stock', 5))
+        else:  # consumible
+            product.stock = 0
+            product.min_stock = 0
+            
         product.active = data.get('active', True)
         
         db.session.commit()
