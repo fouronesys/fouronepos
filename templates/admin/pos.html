@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Punto de Venta - POS RD{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-3"><i class="bi bi-cash-register"></i> Punto de Venta</h2>
+    
+    <div class="row">
+        <!-- Products Section -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-grid"></i> Productos</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Category Tabs -->
+                    <ul class="nav nav-pills mb-3" id="category-tabs">
+                        {% for category in categories %}
+                        <li class="nav-item">
+                            <button class="nav-link {% if loop.first %}active{% endif %}" 
+                                    data-bs-toggle="pill" 
+                                    data-bs-target="#category-{{ category.id }}">
+                                {{ category.name }}
+                            </button>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    
+                    <!-- Product Grid -->
+                    <div class="tab-content">
+                        {% for category in categories %}
+                        <div class="tab-pane fade {% if loop.first %}show active{% endif %}" 
+                             id="category-{{ category.id }}">
+                            <div class="row" id="products-{{ category.id }}">
+                                <!-- Products will be loaded via JavaScript -->
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Cart Section -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-cart"></i> Carrito</h5>
+                </div>
+                <div class="card-body">
+                    <div id="cart-items">
+                        <p class="text-muted">No hay productos en el carrito</p>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Subtotal:</span>
+                            <span id="subtotal">RD$ 0.00</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>ITBIS (18%):</span>
+                            <span id="tax">RD$ 0.00</span>
+                        </div>
+                        <div class="d-flex justify-content-between fw-bold">
+                            <span>Total:</span>
+                            <span id="total">RD$ 0.00</span>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-success btn-touch" id="process-sale">
+                            <i class="bi bi-check-circle"></i> Procesar Venta
+                        </button>
+                        <button class="btn btn-outline-secondary" id="clear-cart">
+                            <i class="bi bi-trash"></i> Limpiar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Basic POS functionality
+let cart = [];
+
+// Load products for category
+function loadProducts(categoryId) {
+    fetch(`/api/products?category_id=${categoryId}`)
+        .then(response => response.json())
+        .then(products => {
+            const container = document.getElementById(`products-${categoryId}`);
+            container.innerHTML = '';
+            
+            products.forEach(product => {
+                const productCard = `
+                    <div class="col-md-4 col-lg-3 mb-3">
+                        <div class="card product-card h-100" onclick="addToCart(${product.id}, '${product.name}', ${product.price})">
+                            <div class="card-body text-center">
+                                <h6 class="card-title">${product.name}</h6>
+                                <p class="card-text">RD$ ${product.price.toFixed(2)}</p>
+                                <small class="text-muted">Stock: ${product.stock}</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += productCard;
+            });
+        });
+}
+
+// Add product to cart
+function addToCart(productId, productName, price) {
+    const existingItem = cart.find(item => item.id === productId);
+    
+    if (existingItem) {
+        existingItem.quantity += 1;
+    } else {
+        cart.push({
+            id: productId,
+            name: productName,
+            price: price,
+            quantity: 1
+        });
+    }
+    
+    updateCartDisplay();
+}
+
+// Update cart display
+function updateCartDisplay() {
+    const cartItems = document.getElementById('cart-items');
+    
+    if (cart.length === 0) {
+        cartItems.innerHTML = '<p class="text-muted">No hay productos en el carrito</p>';
+        document.getElementById('subtotal').textContent = 'RD$ 0.00';
+        document.getElementById('tax').textContent = 'RD$ 0.00';
+        document.getElementById('total').textContent = 'RD$ 0.00';
+        return;
+    }
+    
+    let html = '';
+    let subtotal = 0;
+    
+    cart.forEach(item => {
+        const itemTotal = item.price * item.quantity;
+        subtotal += itemTotal;
+        
+        html += `
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                    <div class="fw-bold">${item.name}</div>
+                    <small class="text-muted">${item.quantity} x RD$ ${item.price.toFixed(2)}</small>
+                </div>
+                <div>
+                    <span class="me-2">RD$ ${itemTotal.toFixed(2)}</span>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeFromCart(${item.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    cartItems.innerHTML = html;
+    
+    const tax = subtotal * 0.18;
+    const total = subtotal + tax;
+    
+    document.getElementById('subtotal').textContent = `RD$ ${subtotal.toFixed(2)}`;
+    document.getElementById('tax').textContent = `RD$ ${tax.toFixed(2)}`;
+    document.getElementById('total').textContent = `RD$ ${total.toFixed(2)}`;
+}
+
+// Remove item from cart
+function removeFromCart(productId) {
+    cart = cart.filter(item => item.id !== productId);
+    updateCartDisplay();
+}
+
+// Load initial products
+document.addEventListener('DOMContentLoaded', function() {
+    const firstCategory = document.querySelector('[data-bs-toggle="pill"]');
+    if (firstCategory) {
+        const categoryId = firstCategory.getAttribute('data-bs-target').replace('#category-', '');
+        loadProducts(categoryId);
+    }
+    
+    // Load products when switching categories
+    document.addEventListener('shown.bs.tab', function(e) {
+        const categoryId = e.target.getAttribute('data-bs-target').replace('#category-', '');
+        loadProducts(categoryId);
+    });
+});
+</script>
+{% endblock %}

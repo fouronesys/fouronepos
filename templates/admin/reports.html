@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Reportes - POS RD{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4"><i class="bi bi-file-earmark-text"></i> Reportes y Análisis</h2>
+
+    <!-- Report Filters -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="bi bi-funnel"></i> Filtros de Reporte</h5>
+        </div>
+        <div class="card-body">
+            <form id="reportFilters">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label for="startDate" class="form-label">Fecha Inicio</label>
+                            <input type="date" class="form-control" id="startDate" value="{{ today }}">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label for="endDate" class="form-label">Fecha Fin</label>
+                            <input type="date" class="form-control" id="endDate" value="{{ today }}">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label for="reportType" class="form-label">Tipo de Reporte</label>
+                            <select class="form-control" id="reportType">
+                                <option value="sales">Ventas por Período</option>
+                                <option value="products">Productos Más Vendidos</option>
+                                <option value="ncf">Comprobantes NCF</option>
+                                <option value="users">Ventas por Usuario</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label>&nbsp;</label>
+                            <button type="submit" class="btn btn-primary d-block w-100">
+                                <i class="bi bi-search"></i> Generar Reporte
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Quick Reports -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="bi bi-calendar-day fs-1 text-primary"></i>
+                    <h5 class="mt-2">Reporte Diario</h5>
+                    <p class="text-muted">Ventas del día actual</p>
+                    <button class="btn btn-outline-primary" onclick="generateDailyReport()">
+                        <i class="bi bi-download"></i> Generar
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="bi bi-calendar-week fs-1 text-success"></i>
+                    <h5 class="mt-2">Reporte Semanal</h5>
+                    <p class="text-muted">Ventas de los últimos 7 días</p>
+                    <button class="btn btn-outline-success" onclick="generateWeeklyReport()">
+                        <i class="bi bi-download"></i> Generar
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="bi bi-calendar-month fs-1 text-warning"></i>
+                    <h5 class="mt-2">Reporte Mensual</h5>
+                    <p class="text-muted">Ventas del mes actual</p>
+                    <button class="btn btn-outline-warning" onclick="generateMonthlyReport()">
+                        <i class="bi bi-download"></i> Generar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NCF Reports -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="bi bi-file-earmark-ruled"></i> Reportes NCF (Comprobantes Fiscales)</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Reporte 606 - Compras</h6>
+                    <p class="text-muted">Informe de compras con comprobantes válidos para crédito fiscal</p>
+                    <button class="btn btn-info" onclick="generate606Report()">
+                        <i class="bi bi-file-earmark-excel"></i> Generar 606
+                    </button>
+                </div>
+                <div class="col-md-6">
+                    <h6>Reporte 607 - Ventas</h6>
+                    <p class="text-muted">Informe de ventas con comprobantes emitidos</p>
+                    <button class="btn btn-info" onclick="generate607Report()">
+                        <i class="bi bi-file-earmark-excel"></i> Generar 607
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Results -->
+    <div class="card" id="reportResults" style="display: none;">
+        <div class="card-header">
+            <h5><i class="bi bi-table"></i> Resultados del Reporte</h5>
+        </div>
+        <div class="card-body">
+            <div id="reportContent">
+                <!-- Report content will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('reportFilters').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    const reportType = document.getElementById('reportType').value;
+    
+    generateCustomReport(startDate, endDate, reportType);
+});
+
+function generateCustomReport(startDate, endDate, reportType) {
+    // TODO: Implement custom report generation
+    showReportPlaceholder(`Reporte de ${reportType} desde ${startDate} hasta ${endDate}`);
+}
+
+function generateDailyReport() {
+    // TODO: Implement daily report generation
+    showReportPlaceholder('Reporte Diario');
+}
+
+function generateWeeklyReport() {
+    // TODO: Implement weekly report generation
+    showReportPlaceholder('Reporte Semanal');
+}
+
+function generateMonthlyReport() {
+    // TODO: Implement monthly report generation
+    showReportPlaceholder('Reporte Mensual');
+}
+
+function generate606Report() {
+    // TODO: Implement 606 report generation
+    alert('Reporte 606 en desarrollo - Este reporte incluirá todas las compras con NCF válidos');
+}
+
+function generate607Report() {
+    // TODO: Implement 607 report generation
+    alert('Reporte 607 en desarrollo - Este reporte incluirá todas las ventas con NCF emitidos');
+}
+
+function showReportPlaceholder(title) {
+    document.getElementById('reportResults').style.display = 'block';
+    document.getElementById('reportContent').innerHTML = `
+        <div class="text-center p-4">
+            <i class="bi bi-hourglass-split fs-1 text-muted"></i>
+            <h5 class="mt-3">${title}</h5>
+            <p class="text-muted">Funcionalidad en desarrollo</p>
+            <p class="small">Los reportes incluirán estadísticas detalladas de ventas, productos y comprobantes fiscales NCF.</p>
+        </div>
+    `;
+    
+    document.getElementById('reportResults').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+{% endblock %}

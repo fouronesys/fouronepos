@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Panel Administrativo - POS RD{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4"><i class="bi bi-speedometer2"></i> Panel Administrativo</h2>
+    
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5>Ventas del Día</h5>
+                            <h3>RD$ {{ "%.2f"|format(daily_sales) }}</h3>
+                        </div>
+                        <i class="bi bi-currency-dollar fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5>Transacciones</h5>
+                            <h3>{{ daily_transactions }}</h3>
+                        </div>
+                        <i class="bi bi-receipt fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5>Stock Bajo</h5>
+                            <h3>{{ low_stock_products|length }}</h3>
+                        </div>
+                        <i class="bi bi-exclamation-triangle fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body text-center">
+                    <a href="{{ url_for('admin.pos') }}" class="text-white text-decoration-none">
+                        <i class="bi bi-cash-register fs-1 d-block"></i>
+                        <h5>Ir a Caja</h5>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Access -->
+    <div class="row">
+        <div class="col-md-8">
+            {% if low_stock_products %}
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-exclamation-triangle text-warning"></i> Productos con Stock Bajo</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Stock Actual</th>
+                                    <th>Stock Mínimo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for product in low_stock_products %}
+                                <tr>
+                                    <td>{{ product.name }}</td>
+                                    <td><span class="badge bg-danger">{{ product.stock }}</span></td>
+                                    <td>{{ product.min_stock }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-gear"></i> Acciones Rápidas</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('admin.products') }}" class="btn btn-outline-primary btn-touch">
+                            <i class="bi bi-box"></i> Gestionar Productos
+                        </a>
+                        <a href="{{ url_for('admin.reports') }}" class="btn btn-outline-info btn-touch">
+                            <i class="bi bi-file-earmark-text"></i> Reportes
+                        </a>
+                        <a href="{{ url_for('admin.ncf_sequences') }}" class="btn btn-outline-warning btn-touch">
+                            <i class="bi bi-file-earmark-ruled"></i> Secuencias NCF
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

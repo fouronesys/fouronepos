@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Mesas - Mesero{% endblock %}
+
+{% block content %}
+<div class="container-fluid tablet-friendly">
+    <h2 class="mb-4"><i class="bi bi-table"></i> Gestión de Mesas</h2>
+    
+    <div class="row">
+        {% for table in tables %}
+        <div class="col-md-4 col-lg-3 mb-3">
+            <div class="card h-100 
+                        {% if table.status.value == 'available' %}border-success
+                        {% elif table.status.value == 'occupied' %}border-danger
+                        {% else %}border-warning{% endif %}">
+                <div class="card-body text-center">
+                    <h4>
+                        <i class="bi bi-table"></i> Mesa {{ table.number }}
+                    </h4>
+                    
+                    {% if table.name %}
+                    <p class="text-muted">{{ table.name }}</p>
+                    {% endif %}
+                    
+                    <p><i class="bi bi-people"></i> {{ table.capacity }} personas</p>
+                    
+                    <div class="mb-3">
+                        {% if table.status.value == 'available' %}
+                        <span class="badge bg-success fs-6">Disponible</span>
+                        {% elif table.status.value == 'occupied' %}
+                        <span class="badge bg-danger fs-6">Ocupada</span>
+                        {% else %}
+                        <span class="badge bg-warning fs-6">Reservada</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        {% if table.status.value == 'available' %}
+                        <a href="{{ url_for('waiter.table_detail', table_id=table.id) }}" 
+                           class="btn btn-primary btn-touch">
+                            <i class="bi bi-play-circle"></i> Abrir Mesa
+                        </a>
+                        {% elif table.status.value == 'occupied' %}
+                        <a href="{{ url_for('waiter.table_detail', table_id=table.id) }}" 
+                           class="btn btn-warning btn-touch">
+                            <i class="bi bi-pencil"></i> Gestionar
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

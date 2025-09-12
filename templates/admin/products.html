@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Productos - POS RD{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-box"></i> Gestión de Productos</h2>
+        <button class="btn btn-primary btn-touch" data-bs-toggle="modal" data-bs-target="#productModal" onclick="newProduct()">
+            <i class="bi bi-plus-circle"></i> Nuevo Producto
+        </button>
+    </div>
+
+    <!-- Products Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Nombre</th>
+                            <th>Categoría</th>
+                            <th>Precio</th>
+                            <th>Stock</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for product in products %}
+                        <tr>
+                            <td>#{{ product.id }}</td>
+                            <td>{{ product.name }}</td>
+                            <td>{{ product.category.name if product.category else 'Sin categoría' }}</td>
+                            <td>RD$ {{ "%.2f"|format(product.price) }}</td>
+                            <td>
+                                {% if product.stock <= product.min_stock %}
+                                    <span class="badge bg-danger">{{ product.stock }}</span>
+                                {% elif product.stock <= product.min_stock * 2 %}
+                                    <span class="badge bg-warning">{{ product.stock }}</span>
+                                {% else %}
+                                    <span class="badge bg-success">{{ product.stock }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if product.active %}
+                                    <span class="badge bg-success">Activo</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Inactivo</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="editProduct({{ product.id }})">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteProduct({{ product.id }})">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Product Modal -->
+<div class="modal fade" id="productModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="productModalTitle">Nuevo Producto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="productForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="productName" class="form-label">Nombre del Producto</label>
+                                <input type="text" class="form-control" id="productName" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="productCategory" class="form-label">Categoría</label>
+                                <select class="form-control" id="productCategory" required>
+                                    <option value="">Seleccionar categoría</option>
+                                    {% for category in categories %}
+                                    <option value="{{ category.id }}">{{ category.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="productCost" class="form-label">Costo</label>
+                                <input type="number" step="0.01" class="form-control" id="productCost" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="productPrice" class="form-label">Precio de Venta</label>
+                                <input type="number" step="0.01" class="form-control" id="productPrice" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="productStock" class="form-label">Stock Inicial</label>
+                                <input type="number" class="form-control" id="productStock" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="productMinStock" class="form-label">Stock Mínimo</label>
+                                <input type="number" class="form-control" id="productMinStock" value="5" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="productDescription" class="form-label">Descripción</label>
+                        <textarea class="form-control" id="productDescription" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Producto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function newProduct() {
+    document.getElementById('productModalTitle').textContent = 'Nuevo Producto';
+    document.getElementById('productForm').reset();
+}
+
+function editProduct(productId) {
+    // TODO: Implement edit functionality
+    alert('Función de edición en desarrollo');
+}
+
+function deleteProduct(productId) {
+    if (confirm('¿Estás seguro de que deseas eliminar este producto?')) {
+        // TODO: Implement delete functionality
+        alert('Función de eliminación en desarrollo');
+    }
+}
+
+document.getElementById('productForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    // TODO: Implement form submission
+    alert('Funcionalidad de guardado en desarrollo');
+});
+</script>
+{% endblock %}

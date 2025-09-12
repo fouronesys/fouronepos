@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}Secuencias NCF - POS RD{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-file-earmark-ruled"></i> Gestión de Secuencias NCF</h2>
+        <button class="btn btn-primary btn-touch" data-bs-toggle="modal" data-bs-target="#ncfModal" onclick="newNCFSequence()">
+            <i class="bi bi-plus-circle"></i> Nueva Secuencia
+        </button>
+    </div>
+
+    <!-- Info Alert -->
+    <div class="alert alert-info" role="alert">
+        <i class="bi bi-info-circle"></i>
+        <strong>Información:</strong> Las secuencias NCF son obligatorias en República Dominicana para la emisión de comprobantes fiscales válidos.
+        Cada caja debe tener secuencias asignadas para los diferentes tipos de comprobantes.
+    </div>
+
+    <!-- NCF Sequences Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Caja</th>
+                            <th>Tipo NCF</th>
+                            <th>Serie</th>
+                            <th>Rango</th>
+                            <th>Actual</th>
+                            <th>Disponibles</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sequence in sequences %}
+                        <tr>
+                            <td>{{ sequence.cash_register.name }}</td>
+                            <td>
+                                <span class="badge 
+                                    {% if sequence.ncf_type.value == 'consumo' %}bg-primary
+                                    {% elif sequence.ncf_type.value == 'credito_fiscal' %}bg-success
+                                    {% else %}bg-warning{% endif %}">
+                                    {{ sequence.ncf_type.value.replace('_', ' ').title() }}
+                                </span>
+                            </td>
+                            <td><strong>{{ sequence.serie }}</strong></td>
+                            <td>{{ "%08d"|format(sequence.start_number) }} - {{ "%08d"|format(sequence.end_number) }}</td>
+                            <td><strong>{{ "%08d"|format(sequence.current_number) }}</strong></td>
+                            <td>
+                                {% set remaining = sequence.end_number - sequence.current_number %}
+                                {% if remaining <= 100 %}
+                                    <span class="badge bg-danger">{{ remaining }}</span>
+                                {% elif remaining <= 500 %}
+                                    <span class="badge bg-warning">{{ remaining }}</span>
+                                {% else %}
+                                    <span class="badge bg-success">{{ remaining }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if sequence.active %}
+                                    <span class="badge bg-success">Activa</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Inactiva</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="editNCFSequence({{ sequence.id }})">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-warning" onclick="deactivateNCFSequence({{ sequence.id }})">
+                                    <i class="bi bi-pause"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- NCF Types Reference -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-question-circle"></i> Tipos de Comprobantes NCF</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h6><span class="badge bg-primary">Consumo</span></h6>
+                            <p class="small">Para ventas a consumidores finales que no requieren crédito fiscal.</p>
+                        </div>
+                        <div class="col-md-4">
+                            <h6><span class="badge bg-success">Crédito Fiscal</span></h6>
+                            <p class="small">Para ventas a empresas que requieren crédito fiscal del ITBIS.</p>
+                        </div>
+                        <div class="col-md-4">
+                            <h6><span class="badge bg-warning">Gubernamental</span></h6>
+                            <p class="small">Para ventas a instituciones gubernamentales exentas de ITBIS.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- NCF Sequence Modal -->
+<div class="modal fade" id="ncfModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="ncfModalTitle">Nueva Secuencia NCF</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="ncfForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="cashRegister" class="form-label">Caja Registradora</label>
+                                <select class="form-control" id="cashRegister" required>
+                                    <option value="">Seleccionar caja</option>
+                                    {% for register in cash_registers %}
+                                    <option value="{{ register.id }}">{{ register.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="ncfType" class="form-label">Tipo de NCF</label>
+                                <select class="form-control" id="ncfType" required>
+                                    <option value="">Seleccionar tipo</option>
+                                    <option value="consumo">Consumo</option>
+                                    <option value="credito_fiscal">Crédito Fiscal</option>
+                                    <option value="gubernamental">Gubernamental</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="serie" class="form-label">Serie</label>
+                                <input type="text" class="form-control" id="serie" placeholder="B01" maxlength="3" required>
+                                <div class="form-text">Ej: B01, B02, etc.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="startNumber" class="form-label">Número Inicial</label>
+                                <input type="number" class="form-control" id="startNumber" min="1" max="99999999" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="endNumber" class="form-label">Número Final</label>
+                                <input type="number" class="form-control" id="endNumber" min="1" max="99999999" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>Importante:</strong> Asegúrese de que los rangos de secuencia sean autorizados por la DGII 
+                        y no se superpongan con otras secuencias activas.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Crear Secuencia</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function newNCFSequence() {
+    document.getElementById('ncfModalTitle').textContent = 'Nueva Secuencia NCF';
+    document.getElementById('ncfForm').reset();
+}
+
+function editNCFSequence(sequenceId) {
+    // TODO: Implement edit functionality
+    alert('Función de edición en desarrollo');
+}
+
+function deactivateNCFSequence(sequenceId) {
+    if (confirm('¿Estás seguro de que deseas desactivar esta secuencia NCF?')) {
+        // TODO: Implement deactivate functionality
+        alert('Función de desactivación en desarrollo');
+    }
+}
+
+document.getElementById('ncfForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const startNumber = parseInt(document.getElementById('startNumber').value);
+    const endNumber = parseInt(document.getElementById('endNumber').value);
+    
+    if (startNumber >= endNumber) {
+        alert('El número final debe ser mayor que el número inicial');
+        return;
+    }
+    
+    // TODO: Implement form submission
+    alert('Funcionalidad de creación en desarrollo');
+});
+
+// Auto-format serie input
+document.getElementById('serie').addEventListener('input', function(e) {
+    e.target.value = e.target.value.toUpperCase();
+});
+</script>
+{% endblock %}
