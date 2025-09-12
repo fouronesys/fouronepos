@@ -786,10 +786,14 @@ def view_receipt(sale_id):
     # Get company info
     company_info = get_company_info_for_receipt()
     
+    # Check for auto_print parameter to add print trigger JavaScript
+    auto_print = request.args.get('auto_print', 'false').lower() == 'true'
+    
     return render_template('receipt_view.html', 
                          sale_data=sale_data, 
                          company_info=company_info,
-                         receipt_format=receipt_format)
+                         receipt_format=receipt_format,
+                         auto_print=auto_print)
 
 
 @bp.route('/receipts/<int:sale_id>/pdf')

@@ -399,7 +399,9 @@ class DeviceDetector {
 // Automatic Receipt Printing Function
 async function printReceipt(saleData) {
     try {
-        if (!saleData.sale_id) {
+        // Handle both sale_id and id for robustness
+        const saleId = saleData.sale_id || saleData.id;
+        if (!saleId) {
             throw new Error('Sale ID is required for receipt printing');
         }
         
@@ -408,31 +410,37 @@ async function printReceipt(saleData) {
         console.log(`[Receipt] Printing receipt in ${receiptFormat} format for ${deviceInfo.isMobile ? 'mobile' : deviceInfo.isTablet ? 'tablet' : 'desktop'} device`);
         
         // Use existing receipt view endpoint with format parameter
-        const viewUrl = `/api/receipts/${saleData.sale_id}/view?format=${receiptFormat}`;
+        const viewUrl = `/api/receipts/${saleId}/view?format=${receiptFormat}`;
         
-        // For mobile/tablet devices, just show success message (thermal printing typically handled by POS hardware)
+        // For mobile/tablet devices, fetch receipt and trigger auto-print
         if (deviceInfo.isMobile || deviceInfo.isTablet) {
-            console.log(`[Receipt] ${receiptFormat} receipt ready for thermal printing`);
-            showNotification(`Recibo listo para impresi\u00f3n t\u00e9rmica ${receiptFormat}`, 'success');
+            console.log(`[Receipt] Generating ${receiptFormat} thermal receipt for mobile/tablet`);
+            
+            try {
+                // Fetch the receipt content to verify it's ready
+                const response = await fetch(viewUrl);
+                if (response.ok) {
+                    // On mobile/tablet, redirect with auto_print for automatic printing
+                    window.location.href = viewUrl + '&auto_print=true';
+                    showNotification(`Recibo t\u00e9rmico ${receiptFormat} generado - redirigiendo para impresi\u00f3n...`, 'success');
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (fetchError) {
+                console.error('[Receipt] Failed to fetch receipt:', fetchError);
+                showNotification(`Error al generar recibo t\u00e9rmico: ${fetchError.message}`, 'error');
+                return false;
+            }
+            
             return true;
         }
         
-        // For desktop, open print preview
+        // For desktop, avoid popup blocker by redirecting to same tab
         if (deviceInfo.isDesktop) {
-            console.log(`[Receipt] Opening ${receiptFormat} receipt for desktop printing`);
-            const printWindow = window.open(viewUrl, '_blank', 'width=400,height=600,toolbar=no,menubar=no,scrollbars=yes');
-            
-            if (printWindow) {
-                // Wait for window to load then trigger print dialog
-                printWindow.onload = function() {
-                    setTimeout(() => {
-                        printWindow.print();
-                    }, 500);
-                };
-                showNotification(`Recibo abierto en formato ${receiptFormat} - usar Ctrl+P para imprimir`, 'success');
-            } else {
-                showNotification('Ventana de impresi\u00f3n bloqueada - habilitar ventanas emergentes', 'warning');
-            }
+            console.log(`[Receipt] Redirecting to ${receiptFormat} receipt for desktop printing`);
+            // Redirect to receipt page which will auto-trigger print on load
+            window.location.href = viewUrl + '&auto_print=true';
+            showNotification(`Recibo ${receiptFormat} generado - redirigiendo para impresión...`, 'success');
             
             return true;
         }
@@ -724,9 +732,9 @@ function processSale() {
             showNotification(`Venta procesada exitosamente. NCF: ${result.ncf}`, 'success');
             
             // Automatically print receipt with appropriate format for device
-            if (result.sale_id) {
+            if (result.id) {
                 const saleData = {
-                    sale_id: result.sale_id,
+                    sale_id: result.id,  // Use result.id from finalize_sale response
                     table_id: result.table_id || null
                 };
                 printReceipt(saleData).then(printed => {

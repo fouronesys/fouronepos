@@ -28,12 +28,17 @@
     
     .receipt-paper {
         background: white;
-        max-width: 320px;
+        {% if receipt_format == '58mm' %}
+        max-width: 220px; /* 58mm format - narrower */
+        font-size: 10px;
+        {% else %}
+        max-width: 320px; /* 80mm format - standard */
+        font-size: 12px;
+        {% endif %}
         margin: 0 auto;
         padding: 15px;
         border: 1px solid #ddd;
         font-family: 'Courier New', monospace;
-        font-size: 12px;
         line-height: 1.4;
     }
     
@@ -306,9 +311,17 @@ function downloadPDF() {
     }
 }
 
-// Optional: Auto-focus for better print experience
+// Auto-print functionality for receipt automation
 document.addEventListener('DOMContentLoaded', function() {
-    // Make sure the page is ready for printing
+    // Auto-print if triggered by POS system
+    {% if auto_print %}
+    setTimeout(() => {
+        console.log('[Receipt] Auto-print triggered for {{ receipt_format }} format');
+        window.print();
+    }, 1000);
+    {% endif %}
+    
+    // Legacy support for hash-based printing
     setTimeout(() => {
         if (window.location.hash === '#print') {
             window.print();
