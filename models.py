@@ -226,3 +226,23 @@ class CancelledNCF(db.Model):
     
     # Relationships
     cancelled_by_user = relationship("User")
+
+
+class StockAdjustment(db.Model):
+    __tablename__ = 'stock_adjustments'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey('products.id'), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    adjustment_type: Mapped[str] = mapped_column(String(50), nullable=False)  # 'manual', 'purchase', 'sale', 'waste', 'return'
+    old_stock: Mapped[int] = mapped_column(Integer, nullable=False)
+    adjustment: Mapped[int] = mapped_column(Integer, nullable=False)  # Can be positive or negative
+    new_stock: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(Text)
+    reference_id: Mapped[int] = mapped_column(Integer, nullable=True)  # Purchase ID, Sale ID, etc.
+    reference_type: Mapped[str] = mapped_column(String(50), nullable=True)  # 'purchase', 'sale', etc.
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    product = relationship("Product")
+    user = relationship("User")

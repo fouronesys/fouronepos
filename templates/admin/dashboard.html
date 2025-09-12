@@ -106,10 +106,19 @@
                         <a href="{{ url_for('admin.products') }}" class="btn btn-outline-primary btn-touch">
                             <i class="bi bi-box"></i> Gestionar Productos
                         </a>
-                        <a href="{{ url_for('admin.reports') }}" class="btn btn-outline-info btn-touch">
+                        <a href="{{ url_for('inventory.suppliers') }}" class="btn btn-outline-success btn-touch">
+                            <i class="bi bi-building"></i> Proveedores
+                        </a>
+                        <a href="{{ url_for('inventory.purchases') }}" class="btn btn-outline-info btn-touch">
+                            <i class="bi bi-cart-plus"></i> Compras
+                        </a>
+                        <a href="{{ url_for('inventory.stock_alerts') }}" class="btn btn-outline-warning btn-touch">
+                            <i class="bi bi-exclamation-triangle"></i> Alertas Stock
+                        </a>
+                        <a href="{{ url_for('admin.reports') }}" class="btn btn-outline-secondary btn-touch">
                             <i class="bi bi-file-earmark-text"></i> Reportes
                         </a>
-                        <a href="{{ url_for('admin.ncf_sequences') }}" class="btn btn-outline-warning btn-touch">
+                        <a href="{{ url_for('admin.ncf_sequences') }}" class="btn btn-outline-dark btn-touch">
                             <i class="bi bi-file-earmark-ruled"></i> Secuencias NCF
                         </a>
                     </div>

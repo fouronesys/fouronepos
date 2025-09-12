@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Compras - POS RD{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-cart-plus"></i> Gestión de Compras</h2>
+        <div>
+            <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Volver
+            </a>
+            <button class="btn btn-primary btn-touch" data-bs-toggle="modal" data-bs-target="#purchaseModal" onclick="newPurchase()">
+                <i class="bi bi-plus-circle"></i> Nueva Compra
+            </button>
+        </div>
+    </div>
+
+    <!-- Purchases Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Fecha</th>
+                            <th>Proveedor</th>
+                            <th>NCF Proveedor</th>
+                            <th>Total</th>
+                            <th>Productos</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for purchase in purchases %}
+                        <tr>
+                            <td>#{{ purchase.id }}</td>
+                            <td>{{ purchase.created_at.strftime('%d/%m/%Y') }}</td>
+                            <td>{{ purchase.supplier.name }}</td>
+                            <td>{{ purchase.ncf_supplier or 'N/A' }}</td>
+                            <td>RD$ {{ "%.2f"|format(purchase.total_amount) }}</td>
+                            <td>{{ purchase.purchase_items|length }} items</td>
+                            <td>
+                                <a href="{{ url_for('inventory.purchase_detail', purchase_id=purchase.id) }}" class="btn btn-sm btn-outline-info">
+                                    <i class="bi bi-eye"></i> Ver
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Purchase Modal -->
+<div class="modal fade" id="purchaseModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nueva Compra</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="purchaseForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="purchaseSupplier" class="form-label">Proveedor *</label>
+                                <select class="form-select" id="purchaseSupplier" required>
+                                    <option value="">Seleccionar proveedor...</option>
+                                    {% for supplier in suppliers %}
+                                    <option value="{{ supplier.id }}">{{ supplier.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="purchaseNCF" class="form-label">NCF del Proveedor</label>
+                                <input type="text" class="form-control" id="purchaseNCF" placeholder="B0100000001">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="purchaseNotes" class="form-label">Notas</label>
+                        <textarea class="form-control" id="purchaseNotes" rows="2"></textarea>
+                    </div>
+                    
+                    <hr>
+                    
+                    <h6>Productos de la Compra</h6>
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-outline-primary" onclick="addPurchaseItem()">
+                            <i class="bi bi-plus"></i> Agregar Producto
+                        </button>
+                    </div>
+                    
+                    <div id="purchaseItems">
+                        <!-- Purchase items will be added here -->
+                    </div>
+                    
+                    <div class="row mt-3">
+                        <div class="col-md-6 offset-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <span>Subtotal:</span>
+                                        <span id="purchaseSubtotal">RD$ 0.00</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>ITBIS (18%):</span>
+                                        <span id="purchaseTax">RD$ 0.00</span>
+                                    </div>
+                                    <hr>
+                                    <div class="d-flex justify-content-between fw-bold">
+                                        <span>Total:</span>
+                                        <span id="purchaseTotal">RD$ 0.00</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="savePurchase()">Guardar Compra</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let purchaseItemCounter = 0;
+
+function newPurchase() {
+    document.getElementById('purchaseForm').reset();
+    document.getElementById('purchaseItems').innerHTML = '';
+    purchaseItemCounter = 0;
+    updatePurchaseTotals();
+}
+
+function addPurchaseItem() {
+    purchaseItemCounter++;
+    const itemHtml = `
+        <div class="card mb-3" id="purchaseItem-${purchaseItemCounter}">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <label class="form-label">Producto</label>
+                        <input type="text" class="form-control" placeholder="Nombre del producto" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Cantidad</label>
+                        <input type="number" class="form-control item-quantity" min="1" value="1" onchange="updatePurchaseTotals()">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Costo Unitario</label>
+                        <input type="number" class="form-control item-cost" step="0.01" min="0" onchange="updatePurchaseTotals()">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Total</label>
+                        <input type="text" class="form-control item-total" readonly>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label">&nbsp;</label>
+                        <button type="button" class="btn btn-outline-danger d-block" onclick="removePurchaseItem(${purchaseItemCounter})">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('purchaseItems').insertAdjacentHTML('beforeend', itemHtml);
+}
+
+function removePurchaseItem(itemId) {
+    const element = document.getElementById(`purchaseItem-${itemId}`);
+    if (element) {
+        element.remove();
+        updatePurchaseTotals();
+    }
+}
+
+function updatePurchaseTotals() {
+    let subtotal = 0;
+    
+    // Calculate totals for each item
+    document.querySelectorAll('#purchaseItems .card').forEach(card => {
+        const quantity = parseFloat(card.querySelector('.item-quantity').value) || 0;
+        const cost = parseFloat(card.querySelector('.item-cost').value) || 0;
+        const total = quantity * cost;
+        
+        card.querySelector('.item-total').value = `RD$ ${total.toFixed(2)}`;
+        subtotal += total;
+    });
+    
+    const tax = subtotal * 0.18;
+    const total = subtotal + tax;
+    
+    document.getElementById('purchaseSubtotal').textContent = `RD$ ${subtotal.toFixed(2)}`;
+    document.getElementById('purchaseTax').textContent = `RD$ ${tax.toFixed(2)}`;
+    document.getElementById('purchaseTotal').textContent = `RD$ ${total.toFixed(2)}`;
+}
+
+async function savePurchase() {
+    const supplierId = document.getElementById('purchaseSupplier').value;
+    const ncf = document.getElementById('purchaseNCF').value;
+    const notes = document.getElementById('purchaseNotes').value;
+    
+    if (!supplierId) {
+        alert('Seleccione un proveedor');
+        return;
+    }
+    
+    // Collect purchase items
+    const items = [];
+    document.querySelectorAll('#purchaseItems .card').forEach(card => {
+        const quantity = parseFloat(card.querySelector('.item-quantity').value) || 0;
+        const cost = parseFloat(card.querySelector('.item-cost').value) || 0;
+        
+        if (quantity > 0 && cost > 0) {
+            items.push({
+                product_id: 1, // This would need to be from a product selector
+                quantity: quantity,
+                unit_cost: cost
+            });
+        }
+    });
+    
+    if (items.length === 0) {
+        alert('Agregue al menos un producto a la compra');
+        return;
+    }
+    
+    const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_cost), 0);
+    const tax = subtotal * 0.18;
+    const total = subtotal + tax;
+    
+    const purchaseData = {
+        supplier_id: parseInt(supplierId),
+        ncf_supplier: ncf,
+        total_amount: total,
+        tax_amount: tax,
+        notes: notes,
+        items: items
+    };
+    
+    try {
+        const response = await fetch('/inventory/api/purchases', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(purchaseData)
+        });
+        
+        if (response.ok) {
+            alert('Compra registrada exitosamente');
+            location.reload();
+        } else {
+            const error = await response.json();
+            alert(error.error || 'Error guardando compra');
+        }
+    } catch (error) {
+        alert('Error de conexión');
+    }
+}
+
+// Add initial purchase item
+document.addEventListener('DOMContentLoaded', function() {
+    // Modal events handled by Bootstrap
+});
+</script>
+{% endblock %}

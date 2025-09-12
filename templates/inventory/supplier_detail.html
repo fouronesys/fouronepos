@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}{{ supplier.name }} - Detalles del Proveedor - POS RD{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-building"></i> {{ supplier.name }}</h2>
+        <div>
+            <a href="{{ url_for('inventory.suppliers') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Volver a Proveedores
+            </a>
+            <button class="btn btn-primary btn-touch" onclick="editSupplier({{ supplier.id }})">
+                <i class="bi bi-pencil"></i> Editar Proveedor
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Supplier Information Card -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-info-circle"></i> Información del Proveedor</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row">
+                        <dt class="col-sm-4">ID:</dt>
+                        <dd class="col-sm-8">#{{ supplier.id }}</dd>
+                        
+                        <dt class="col-sm-4">Nombre:</dt>
+                        <dd class="col-sm-8">{{ supplier.name }}</dd>
+                        
+                        <dt class="col-sm-4">RNC:</dt>
+                        <dd class="col-sm-8">
+                            {% if supplier.rnc %}
+                                <span class="badge bg-info">{{ supplier.rnc }}</span>
+                            {% else %}
+                                <span class="text-muted">No especificado</span>
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-4">Contacto:</dt>
+                        <dd class="col-sm-8">{{ supplier.contact_person or 'N/A' }}</dd>
+                        
+                        <dt class="col-sm-4">Teléfono:</dt>
+                        <dd class="col-sm-8">
+                            {% if supplier.phone %}
+                                <a href="tel:{{ supplier.phone }}" class="text-decoration-none">
+                                    <i class="bi bi-telephone"></i> {{ supplier.phone }}
+                                </a>
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-4">Email:</dt>
+                        <dd class="col-sm-8">
+                            {% if supplier.email %}
+                                <a href="mailto:{{ supplier.email }}" class="text-decoration-none">
+                                    <i class="bi bi-envelope"></i> {{ supplier.email }}
+                                </a>
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-4">Dirección:</dt>
+                        <dd class="col-sm-8">{{ supplier.address or 'N/A' }}</dd>
+                        
+                        <dt class="col-sm-4">Estado:</dt>
+                        <dd class="col-sm-8">
+                            {% if supplier.active %}
+                                <span class="badge bg-success">Activo</span>
+                            {% else %}
+                                <span class="badge bg-danger">Inactivo</span>
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-4">Creado:</dt>
+                        <dd class="col-sm-8">{{ supplier.created_at.strftime('%d/%m/%Y %I:%M %p') }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <!-- Purchase History -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="bi bi-cart-plus"></i> Historial de Compras</h5>
+                    <button class="btn btn-sm btn-outline-primary" onclick="newPurchaseFromSupplier({{ supplier.id }})">
+                        <i class="bi bi-plus"></i> Nueva Compra
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if purchases %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Fecha</th>
+                                    <th>NCF Proveedor</th>
+                                    <th>Total</th>
+                                    <th>Productos</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for purchase in purchases %}
+                                <tr>
+                                    <td>#{{ purchase.id }}</td>
+                                    <td>{{ purchase.created_at.strftime('%d/%m/%Y') }}</td>
+                                    <td>
+                                        {% if purchase.ncf_supplier %}
+                                            <span class="badge bg-secondary">{{ purchase.ncf_supplier }}</span>
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>RD$ {{ "%.2f"|format(purchase.total_amount) }}</td>
+                                    <td>{{ purchase.purchase_items|length }} items</td>
+                                    <td>
+                                        <a href="{{ url_for('inventory.purchase_detail', purchase_id=purchase.id) }}" 
+                                           class="btn btn-sm btn-outline-info">
+                                            <i class="bi bi-eye"></i> Ver
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-cart-x" style="font-size: 3rem; color: #6c757d;"></i>
+                        <p class="text-muted mt-2">No hay compras registradas para este proveedor</p>
+                        <button class="btn btn-primary" onclick="newPurchaseFromSupplier({{ supplier.id }})">
+                            <i class="bi bi-plus-circle"></i> Crear Primera Compra
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Purchase Statistics -->
+            {% if purchases %}
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6><i class="bi bi-graph-up"></i> Estadísticas de Compras</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h4 class="text-primary">{{ purchases|length }}</h4>
+                                <small class="text-muted">Total Compras</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                {% set total_spent = purchases | sum(attribute='total_amount') %}
+                                <h4 class="text-success">RD$ {{ "%.2f"|format(total_spent) }}</h4>
+                                <small class="text-muted">Total Gastado</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                {% set avg_purchase = total_spent / purchases|length if purchases|length > 0 else 0 %}
+                                <h4 class="text-info">RD$ {{ "%.2f"|format(avg_purchase) }}</h4>
+                                <small class="text-muted">Promedio por Compra</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Edit Supplier Modal -->
+<div class="modal fade" id="editSupplierModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Editar Proveedor</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editSupplierForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="editSupplierName" class="form-label">Nombre del Proveedor *</label>
+                                <input type="text" class="form-control" id="editSupplierName" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="editSupplierRnc" class="form-label">RNC</label>
+                                <input type="text" class="form-control" id="editSupplierRnc" 
+                                       placeholder="123456789" maxlength="11">
+                                <div class="form-text">Registro Nacional del Contribuyente (RNC)</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="editSupplierContact" class="form-label">Persona de Contacto</label>
+                                <input type="text" class="form-control" id="editSupplierContact">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="editSupplierPhone" class="form-label">Teléfono</label>
+                                <input type="tel" class="form-control" id="editSupplierPhone" 
+                                       placeholder="809-555-0123">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editSupplierEmail" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="editSupplierEmail" 
+                               placeholder="contacto@proveedor.com">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editSupplierAddress" class="form-label">Dirección</label>
+                        <textarea class="form-control" id="editSupplierAddress" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="editSupplierActive">
+                            <label class="form-check-label" for="editSupplierActive">
+                                Proveedor Activo
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="updateSupplier()">Actualizar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function editSupplier(supplierId) {
+    // Load current supplier data
+    const supplier = {
+        id: {{ supplier.id }},
+        name: "{{ supplier.name }}",
+        rnc: "{{ supplier.rnc or '' }}",
+        contact_person: "{{ supplier.contact_person or '' }}",
+        phone: "{{ supplier.phone or '' }}",
+        email: "{{ supplier.email or '' }}",
+        address: "{{ supplier.address or '' }}",
+        active: {{ 'true' if supplier.active else 'false' }}
+    };
+    
+    document.getElementById('editSupplierName').value = supplier.name;
+    document.getElementById('editSupplierRnc').value = supplier.rnc;
+    document.getElementById('editSupplierContact').value = supplier.contact_person;
+    document.getElementById('editSupplierPhone').value = supplier.phone;
+    document.getElementById('editSupplierEmail').value = supplier.email;
+    document.getElementById('editSupplierAddress').value = supplier.address;
+    document.getElementById('editSupplierActive').checked = supplier.active;
+    
+    new bootstrap.Modal(document.getElementById('editSupplierModal')).show();
+}
+
+async function updateSupplier() {
+    const formData = {
+        name: document.getElementById('editSupplierName').value,
+        rnc: document.getElementById('editSupplierRnc').value,
+        contact_person: document.getElementById('editSupplierContact').value,
+        phone: document.getElementById('editSupplierPhone').value,
+        email: document.getElementById('editSupplierEmail').value,
+        address: document.getElementById('editSupplierAddress').value,
+        active: document.getElementById('editSupplierActive').checked
+    };
+    
+    if (!formData.name) {
+        alert('El nombre del proveedor es requerido');
+        return;
+    }
+    
+    // Validate RNC if provided
+    if (formData.rnc && !validateRNC(formData.rnc)) {
+        alert('El RNC debe tener 9 u 11 dígitos');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/inventory/api/suppliers/{{ supplier.id }}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            alert('Proveedor actualizado exitosamente');
+            location.reload();
+        } else {
+            alert('Error: ' + (result.error || 'Error desconocido'));
+        }
+    } catch (error) {
+        alert('Error de conexión: ' + error.message);
+    }
+}
+
+function validateRNC(rnc) {
+    // Remove any spaces or dashes
+    rnc = rnc.replace(/[\s-]/g, '');
+    // Dominican Republic RNC should be 9 or 11 digits
+    return /^\d{9}$|^\d{11}$/.test(rnc);
+}
+
+function newPurchaseFromSupplier(supplierId) {
+    // Redirect to purchases page with pre-selected supplier
+    window.location.href = `/inventory/purchases?supplier=${supplierId}`;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+
+{% block title %}Compra #{{ purchase.id }} - Detalles - POS RD{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-cart-plus"></i> Compra #{{ purchase.id }}</h2>
+        <div>
+            <a href="{{ url_for('inventory.purchases') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Volver a Compras
+            </a>
+            <a href="{{ url_for('inventory.supplier_detail', supplier_id=purchase.supplier.id) }}" 
+               class="btn btn-outline-info me-2">
+                <i class="bi bi-building"></i> Ver Proveedor
+            </a>
+            <button class="btn btn-primary btn-touch" onclick="printPurchase()">
+                <i class="bi bi-printer"></i> Imprimir
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Purchase Information -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-info-circle"></i> Información de la Compra</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row">
+                        <dt class="col-sm-5">ID Compra:</dt>
+                        <dd class="col-sm-7">#{{ purchase.id }}</dd>
+                        
+                        <dt class="col-sm-5">Fecha:</dt>
+                        <dd class="col-sm-7">{{ purchase.created_at.strftime('%d/%m/%Y %I:%M %p') }}</dd>
+                        
+                        <dt class="col-sm-5">Proveedor:</dt>
+                        <dd class="col-sm-7">
+                            <a href="{{ url_for('inventory.supplier_detail', supplier_id=purchase.supplier.id) }}" 
+                               class="text-decoration-none">
+                                {{ purchase.supplier.name }}
+                            </a>
+                        </dd>
+                        
+                        <dt class="col-sm-5">RNC Proveedor:</dt>
+                        <dd class="col-sm-7">
+                            {% if purchase.supplier.rnc %}
+                                <span class="badge bg-info">{{ purchase.supplier.rnc }}</span>
+                            {% else %}
+                                <span class="text-muted">No especificado</span>
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-5">NCF Proveedor:</dt>
+                        <dd class="col-sm-7">
+                            {% if purchase.ncf_supplier %}
+                                <span class="badge bg-secondary">{{ purchase.ncf_supplier }}</span>
+                            {% else %}
+                                <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-5">Subtotal:</dt>
+                        <dd class="col-sm-7">RD$ {{ "%.2f"|format(purchase.total_amount - purchase.tax_amount) }}</dd>
+                        
+                        <dt class="col-sm-5">ITBIS (18%):</dt>
+                        <dd class="col-sm-7">RD$ {{ "%.2f"|format(purchase.tax_amount) }}</dd>
+                        
+                        <dt class="col-sm-5"><strong>Total:</strong></dt>
+                        <dd class="col-sm-7"><strong>RD$ {{ "%.2f"|format(purchase.total_amount) }}</strong></dd>
+                    </dl>
+                    
+                    {% if purchase.notes %}
+                    <hr>
+                    <div>
+                        <strong>Notas:</strong>
+                        <p class="text-muted mt-1">{{ purchase.notes }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Supplier Contact Info -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6><i class="bi bi-building"></i> Información del Proveedor</h6>
+                </div>
+                <div class="card-body">
+                    <dl class="row">
+                        {% if purchase.supplier.contact_person %}
+                        <dt class="col-sm-5">Contacto:</dt>
+                        <dd class="col-sm-7">{{ purchase.supplier.contact_person }}</dd>
+                        {% endif %}
+                        
+                        {% if purchase.supplier.phone %}
+                        <dt class="col-sm-5">Teléfono:</dt>
+                        <dd class="col-sm-7">
+                            <a href="tel:{{ purchase.supplier.phone }}" class="text-decoration-none">
+                                <i class="bi bi-telephone"></i> {{ purchase.supplier.phone }}
+                            </a>
+                        </dd>
+                        {% endif %}
+                        
+                        {% if purchase.supplier.email %}
+                        <dt class="col-sm-5">Email:</dt>
+                        <dd class="col-sm-7">
+                            <a href="mailto:{{ purchase.supplier.email }}" class="text-decoration-none">
+                                <i class="bi bi-envelope"></i> {{ purchase.supplier.email }}
+                            </a>
+                        </dd>
+                        {% endif %}
+                        
+                        {% if purchase.supplier.address %}
+                        <dt class="col-sm-5">Dirección:</dt>
+                        <dd class="col-sm-7">{{ purchase.supplier.address }}</dd>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <!-- Purchase Items -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-box"></i> Productos Comprados</h5>
+                </div>
+                <div class="card-body">
+                    {% if purchase.purchase_items %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Cantidad</th>
+                                    <th>Costo Unitario</th>
+                                    <th>Total</th>
+                                    <th>Stock Actual</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in purchase.purchase_items %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ item.product.name }}</strong>
+                                        {% if item.product.description %}
+                                        <br><small class="text-muted">{{ item.product.description }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-primary">{{ item.quantity }}</span>
+                                    </td>
+                                    <td>RD$ {{ "%.2f"|format(item.unit_cost) }}</td>
+                                    <td><strong>RD$ {{ "%.2f"|format(item.total_cost) }}</strong></td>
+                                    <td>
+                                        {% if item.product.stock <= item.product.min_stock %}
+                                            <span class="badge bg-danger">{{ item.product.stock }}</span>
+                                        {% elif item.product.stock <= item.product.min_stock * 2 %}
+                                            <span class="badge bg-warning">{{ item.product.stock }}</span>
+                                        {% else %}
+                                            <span class="badge bg-success">{{ item.product.stock }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-box-x" style="font-size: 3rem; color: #6c757d;"></i>
+                        <p class="text-muted mt-2">No hay productos en esta compra</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Purchase Summary -->
+            {% if purchase.purchase_items %}
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6><i class="bi bi-graph-up"></i> Resumen de la Compra</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-primary">{{ purchase.purchase_items|length }}</h4>
+                                <small class="text-muted">Tipos de Productos</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                {% set total_items = purchase.purchase_items | sum(attribute='quantity') %}
+                                <h4 class="text-info">{{ total_items }}</h4>
+                                <small class="text-muted">Total Unidades</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                {% set avg_cost = purchase.total_amount / total_items if total_items > 0 else 0 %}
+                                <h4 class="text-warning">RD$ {{ "%.2f"|format(avg_cost) }}</h4>
+                                <small class="text-muted">Costo Promedio</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                {% set tax_percentage = (purchase.tax_amount / purchase.total_amount * 100) if purchase.total_amount > 0 else 0 %}
+                                <h4 class="text-success">{{ "%.1f"|format(tax_percentage) }}%</h4>
+                                <small class="text-muted">ITBIS Aplicado</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Stock Impact Analysis -->
+            {% if purchase.purchase_items %}
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6><i class="bi bi-arrow-up-circle"></i> Impacto en Inventario</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Stock Anterior*</th>
+                                    <th>Cantidad Comprada</th>
+                                    <th>Stock Actual</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in purchase.purchase_items %}
+                                {% set previous_stock = item.product.stock - item.quantity %}
+                                <tr>
+                                    <td>{{ item.product.name }}</td>
+                                    <td>{{ previous_stock }}</td>
+                                    <td><span class="badge bg-primary">+{{ item.quantity }}</span></td>
+                                    <td>{{ item.product.stock }}</td>
+                                    <td>
+                                        {% if item.product.stock > item.product.min_stock * 2 %}
+                                            <span class="badge bg-success">Bien Surtido</span>
+                                        {% elif item.product.stock > item.product.min_stock %}
+                                            <span class="badge bg-warning">Stock Normal</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Stock Bajo</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        <small class="text-muted">* Stock calculado restando la cantidad comprada del stock actual</small>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Print Modal -->
+<div class="modal fade" id="printModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Vista de Impresión - Compra #{{ purchase.id }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="printContent">
+                <div class="text-center mb-4">
+                    <h4>ORDEN DE COMPRA</h4>
+                    <h5>Compra #{{ purchase.id }}</h5>
+                    <p>{{ purchase.created_at.strftime('%d/%m/%Y %I:%M %p') }}</p>
+                </div>
+                
+                <div class="row">
+                    <div class="col-6">
+                        <strong>PROVEEDOR:</strong><br>
+                        {{ purchase.supplier.name }}<br>
+                        {% if purchase.supplier.rnc %}RNC: {{ purchase.supplier.rnc }}<br>{% endif %}
+                        {% if purchase.supplier.contact_person %}Contacto: {{ purchase.supplier.contact_person }}<br>{% endif %}
+                        {% if purchase.supplier.phone %}Tel: {{ purchase.supplier.phone }}<br>{% endif %}
+                        {% if purchase.supplier.address %}{{ purchase.supplier.address }}{% endif %}
+                    </div>
+                    <div class="col-6">
+                        <strong>INFORMACIÓN FISCAL:</strong><br>
+                        {% if purchase.ncf_supplier %}NCF Proveedor: {{ purchase.ncf_supplier }}<br>{% endif %}
+                        Subtotal: RD$ {{ "%.2f"|format(purchase.total_amount - purchase.tax_amount) }}<br>
+                        ITBIS (18%): RD$ {{ "%.2f"|format(purchase.tax_amount) }}<br>
+                        <strong>Total: RD$ {{ "%.2f"|format(purchase.total_amount) }}</strong>
+                    </div>
+                </div>
+                
+                <table class="table table-bordered mt-4">
+                    <thead>
+                        <tr>
+                            <th>Producto</th>
+                            <th>Cantidad</th>
+                            <th>Costo Unit.</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in purchase.purchase_items %}
+                        <tr>
+                            <td>{{ item.product.name }}</td>
+                            <td>{{ item.quantity }}</td>
+                            <td>RD$ {{ "%.2f"|format(item.unit_cost) }}</td>
+                            <td>RD$ {{ "%.2f"|format(item.total_cost) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                
+                {% if purchase.notes %}
+                <div class="mt-3">
+                    <strong>Notas:</strong><br>
+                    {{ purchase.notes }}
+                </div>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary" onclick="window.print()">
+                    <i class="bi bi-printer"></i> Imprimir
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function printPurchase() {
+    new bootstrap.Modal(document.getElementById('printModal')).show();
+}
+
+// Print styles for when window.print() is called
+const printStyles = `
+    <style media="print">
+        body * {
+            visibility: hidden;
+        }
+        #printContent, #printContent * {
+            visibility: visible;
+        }
+        #printContent {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+        }
+        .modal-header, .modal-footer {
+            display: none !important;
+        }
+        @page {
+            size: A4;
+            margin: 2cm;
+        }
+    </style>
+`;
+
+document.head.insertAdjacentHTML('beforeend', printStyles);
+</script>
+{% endblock %}

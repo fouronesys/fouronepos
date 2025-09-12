@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}Alertas de Stock - POS RD{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-exclamation-triangle"></i> Alertas de Stock</h2>
+        <div>
+            <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Volver
+            </a>
+            <a href="{{ url_for('inventory.purchases') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Nueva Compra
+            </a>
+        </div>
+    </div>
+
+    {% if critical_stock_products %}
+    <div class="alert alert-danger" role="alert">
+        <h5><i class="bi bi-exclamation-triangle-fill"></i> Stock Crítico</h5>
+        <p>{{ critical_stock_products|length }} productos requieren atención inmediata (stock muy bajo)</p>
+    </div>
+
+    <div class="card border-danger mb-4">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0">Productos con Stock Crítico</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Producto</th>
+                            <th>Categoría</th>
+                            <th>Stock Actual</th>
+                            <th>Stock Mínimo</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for product in critical_stock_products %}
+                        <tr>
+                            <td>{{ product.name }}</td>
+                            <td>{{ product.category.name if product.category else 'Sin categoría' }}</td>
+                            <td>
+                                <span class="badge bg-danger">{{ product.stock }}</span>
+                            </td>
+                            <td>{{ product.min_stock }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="adjustStock({{ product.id }}, '{{ product.name }}')">
+                                    <i class="bi bi-plus-circle"></i> Ajustar
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if low_stock_products %}
+    <div class="alert alert-warning" role="alert">
+        <h5><i class="bi bi-exclamation-triangle"></i> Stock Bajo</h5>
+        <p>{{ low_stock_products|length }} productos tienen stock bajo y requieren reposición</p>
+    </div>
+
+    <div class="card border-warning">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0">Productos con Stock Bajo</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Producto</th>
+                            <th>Categoría</th>
+                            <th>Stock Actual</th>
+                            <th>Stock Mínimo</th>
+                            <th>Última Compra</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for product in low_stock_products %}
+                        <tr>
+                            <td>{{ product.name }}</td>
+                            <td>{{ product.category.name if product.category else 'Sin categoría' }}</td>
+                            <td>
+                                {% if product.stock <= product.min_stock / 2 %}
+                                    <span class="badge bg-danger">{{ product.stock }}</span>
+                                {% else %}
+                                    <span class="badge bg-warning">{{ product.stock }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ product.min_stock }}</td>
+                            <td>
+                                <small class="text-muted">Pendiente</small>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="adjustStock({{ product.id }}, '{{ product.name }}')">
+                                    <i class="bi bi-plus-circle"></i> Ajustar
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not low_stock_products and not critical_stock_products %}
+    <div class="alert alert-success" role="alert">
+        <h5><i class="bi bi-check-circle"></i> ¡Excelente!</h5>
+        <p>Todos los productos tienen stock suficiente. No hay alertas de stock bajo.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Stock Adjustment Modal -->
+<div class="modal fade" id="stockModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Ajustar Stock</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Producto:</label>
+                    <p id="adjustProductName" class="fw-bold"></p>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="stockAdjustment" class="form-label">Cantidad a Agregar</label>
+                    <input type="number" class="form-control" id="stockAdjustment" min="1" placeholder="Ej: 50">
+                    <div class="form-text">Ingrese un número positivo para agregar al stock actual</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="adjustmentReason" class="form-label">Motivo del Ajuste</label>
+                    <select class="form-select" id="adjustmentReason">
+                        <option value="Compra">Nueva Compra</option>
+                        <option value="Corrección">Corrección de Inventario</option>
+                        <option value="Devolución">Devolución de Cliente</option>
+                        <option value="Otro">Otro</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="saveStockAdjustment()">Ajustar Stock</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let adjustingProductId = null;
+
+function adjustStock(productId, productName) {
+    adjustingProductId = productId;
+    document.getElementById('adjustProductName').textContent = productName;
+    document.getElementById('stockAdjustment').value = '';
+    document.getElementById('adjustmentReason').value = 'Compra';
+    $('#stockModal').modal('show');
+}
+
+async function saveStockAdjustment() {
+    const adjustment = parseInt(document.getElementById('stockAdjustment').value);
+    const reason = document.getElementById('adjustmentReason').value;
+    
+    if (!adjustment || adjustment <= 0) {
+        alert('Ingrese una cantidad válida');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/inventory/api/stock/${adjustingProductId}/adjust`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                adjustment: adjustment,
+                reason: reason
+            })
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            alert(`Stock ajustado: ${result.old_stock} → ${result.new_stock} (${result.adjustment > 0 ? '+' : ''}${result.adjustment})`);
+            location.reload();
+        } else {
+            const error = await response.json();
+            alert(error.error || 'Error ajustando stock');
+        }
+    } catch (error) {
+        alert('Error de conexión');
+    }
+}
+</script>
+{% endblock %}

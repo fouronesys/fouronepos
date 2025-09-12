@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Proveedores - POS RD{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-building"></i> Gestión de Proveedores</h2>
+        <div>
+            <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Volver
+            </a>
+            <button class="btn btn-primary btn-touch" data-bs-toggle="modal" data-bs-target="#supplierModal" onclick="newSupplier()">
+                <i class="bi bi-plus-circle"></i> Nuevo Proveedor
+            </button>
+        </div>
+    </div>
+
+    <!-- Suppliers Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>RNC</th>
+                            <th>Contacto</th>
+                            <th>Teléfono</th>
+                            <th>Email</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for supplier in suppliers %}
+                        <tr>
+                            <td>#{{ supplier.id }}</td>
+                            <td>{{ supplier.name }}</td>
+                            <td>{{ supplier.rnc or 'N/A' }}</td>
+                            <td>{{ supplier.contact_person or 'N/A' }}</td>
+                            <td>{{ supplier.phone or 'N/A' }}</td>
+                            <td>{{ supplier.email or 'N/A' }}</td>
+                            <td>
+                                <a href="{{ url_for('inventory.supplier_detail', supplier_id=supplier.id) }}" class="btn btn-sm btn-outline-info">
+                                    <i class="bi bi-eye"></i> Ver
+                                </a>
+                                <button class="btn btn-sm btn-outline-primary" onclick="editSupplier({{ supplier.id }})">
+                                    <i class="bi bi-pencil"></i> Editar
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Supplier Modal -->
+<div class="modal fade" id="supplierModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="supplierModalTitle">Nuevo Proveedor</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="supplierForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="supplierName" class="form-label">Nombre del Proveedor *</label>
+                                <input type="text" class="form-control" id="supplierName" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="supplierRnc" class="form-label">RNC</label>
+                                <input type="text" class="form-control" id="supplierRnc" placeholder="123456789">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="supplierContact" class="form-label">Persona de Contacto</label>
+                                <input type="text" class="form-control" id="supplierContact">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="supplierPhone" class="form-label">Teléfono</label>
+                                <input type="tel" class="form-control" id="supplierPhone" placeholder="809-555-0123">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="supplierEmail" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="supplierEmail" placeholder="contacto@proveedor.com">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="supplierAddress" class="form-label">Dirección</label>
+                        <textarea class="form-control" id="supplierAddress" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="saveSupplier()">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let editingSupplierId = null;
+
+function newSupplier() {
+    editingSupplierId = null;
+    document.getElementById('supplierModalTitle').textContent = 'Nuevo Proveedor';
+    document.getElementById('supplierForm').reset();
+}
+
+function editSupplier(supplierId) {
+    editingSupplierId = supplierId;
+    document.getElementById('supplierModalTitle').textContent = 'Editar Proveedor';
+    // Implementation would load supplier data
+    $('#supplierModal').modal('show');
+}
+
+async function saveSupplier() {
+    const formData = {
+        name: document.getElementById('supplierName').value,
+        rnc: document.getElementById('supplierRnc').value,
+        contact_person: document.getElementById('supplierContact').value,
+        phone: document.getElementById('supplierPhone').value,
+        email: document.getElementById('supplierEmail').value,
+        address: document.getElementById('supplierAddress').value
+    };
+    
+    if (!formData.name) {
+        alert('El nombre del proveedor es requerido');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/inventory/api/suppliers', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        if (response.ok) {
+            alert('Proveedor guardado exitosamente');
+            location.reload();
+        } else {
+            const error = await response.json();
+            alert(error.error || 'Error guardando proveedor');
+        }
+    } catch (error) {
+        alert('Error de conexión');
+    }
+}
+</script>
+{% endblock %}

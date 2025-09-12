@@ -38,7 +38,7 @@ with app.app_context():
 
 
 # Import routes after app initialization
-from routes import auth, admin, waiter, api
+from routes import auth, admin, waiter, api, inventory
 
 
 # Register blueprints
@@ -46,6 +46,7 @@ app.register_blueprint(auth.bp)
 app.register_blueprint(admin.bp)
 app.register_blueprint(waiter.bp)
 app.register_blueprint(api.bp)
+app.register_blueprint(inventory.bp)
 
 
 @app.route('/')
