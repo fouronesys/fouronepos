@@ -189,6 +189,7 @@ def add_sale_item(sale_id):
             # Update existing item quantity
             existing_item.quantity = total_quantity
             existing_item.total_price = product.price * total_quantity
+            existing_item.tax_rate = product.tax_rate  # Actualizar tasa de impuesto desde producto
             sale_item = existing_item
         else:
             # Create new sale item
@@ -198,6 +199,7 @@ def add_sale_item(sale_id):
             sale_item.quantity = quantity
             sale_item.unit_price = product.price
             sale_item.total_price = product.price * quantity
+            sale_item.tax_rate = product.tax_rate  # Capturar tasa de impuesto desde producto
             
             db.session.add(sale_item)
         
@@ -235,15 +237,8 @@ def finalize_sale(sale_id):
     ncf_type = data.get('ncf_type', 'consumo')
     payment_method = data.get('payment_method', 'efectivo')
     
-    # SECURITY: Validate tax_rate to prevent compliance violations
-    tax_rate = data.get('tax_rate', 0.18)
-    try:
-        tax_rate = float(tax_rate)
-        # Only allow 0% (sin impuestos) or 18% (ITBIS) for Dominican Republic compliance
-        if tax_rate not in [0.0, 0.18]:
-            return jsonify({'error': 'Tasa de impuesto inválida. Solo se permite 0% o 18% ITBIS'}), 400
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Tasa de impuesto debe ser un número válido'}), 400
+    # NOTE: Tax rates are now calculated automatically from individual products
+    # No need to validate user-provided tax_rate as we calculate from sale items
     
     # Get client info for fiscal/government invoices
     customer_name = data.get('client_name')
@@ -354,10 +349,25 @@ def finalize_sale(sale_id):
         sale.payment_method = payment_method
         sale.status = 'completed'
         
-        # Recalculate totals with the dynamic tax rate before finalizing
-        sale.subtotal = sum(item.total_price for item in sale.sale_items)
-        sale.tax_amount = sale.subtotal * tax_rate
-        sale.total = sale.subtotal + sale.tax_amount
+        # Calculate totals by tax rate categories (proper per-item tax calculation)
+        subtotal_by_rate = {}
+        total_subtotal = 0
+        total_tax = 0
+        
+        # Group items by tax rate and calculate totals per category
+        for item in sale.sale_items:
+            # Defensive fallback: if tax_rate is NULL, use product's current rate
+            rate = item.tax_rate if item.tax_rate is not None else item.product.tax_rate
+            if rate not in subtotal_by_rate:
+                subtotal_by_rate[rate] = 0
+            subtotal_by_rate[rate] += item.total_price
+            total_subtotal += item.total_price
+            # Round tax per item to 2 decimals to prevent DGII rounding discrepancies
+            total_tax += round(item.total_price * rate, 2)
+        
+        sale.subtotal = total_subtotal
+        sale.tax_amount = total_tax
+        sale.total = total_subtotal + total_tax
         
         # Add client info for fiscal/government invoices (NCF compliance)
         if customer_name and customer_rnc and ncf_type in ['credito_fiscal', 'gubernamental']:

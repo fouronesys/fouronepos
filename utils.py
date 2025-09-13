@@ -219,7 +219,7 @@ def calculate_itbis(subtotal: float, rate: float = 0.18) -> float:
     
     Args:
         subtotal: The subtotal amount
-        rate: Tax rate (default 18%)
+        rate: Tax rate (default 18% estándar, también soporta 16% reducido y 0% exento)
         
     Returns:
         Tax amount
