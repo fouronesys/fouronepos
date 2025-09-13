@@ -206,20 +206,23 @@ def add_sale_item(sale_id):
         if not product:
             return jsonify({'error': 'Producto no encontrado'}), 404
 
-        # Check for existing sale items of the same product in this sale
-        existing_quantity = db.session.query(db.func.sum(models.SaleItem.quantity)).filter_by(
-            sale_id=sale_id, 
-            product_id=product.id
-        ).scalar() or 0
-        
-        # Calculate total quantity (existing + new)
-        total_quantity = existing_quantity + quantity
-        
-        # Check stock availability against total quantity
-        if product.stock < total_quantity:
-            return jsonify({
-                'error': f'Stock insuficiente para {product.name}. Disponible: {product.stock}, ya en venta: {existing_quantity}, solicitado: {quantity}'
-            }), 400
+        # Only validate stock for inventariable products, not consumables
+        if product.product_type == 'inventariable':
+            # Check for existing sale items of the same product in this sale
+            existing_quantity = db.session.query(db.func.sum(models.SaleItem.quantity)).filter_by(
+                sale_id=sale_id, 
+                product_id=product.id
+            ).scalar() or 0
+            
+            # Calculate total quantity (existing + new)
+            total_quantity = existing_quantity + quantity
+            
+            # Check stock availability against total quantity
+            if product.stock < total_quantity:
+                return jsonify({
+                    'error': f'Stock insuficiente para {product.name}. Disponible: {product.stock}, ya en venta: {existing_quantity}, solicitado: {quantity}'
+                }), 400
+        # For consumable products, skip stock validation entirely
 
         # Check if product already exists in this sale - merge quantities instead of creating duplicate lines
         existing_item = models.SaleItem.query.filter_by(sale_id=sale_id, product_id=product.id).first()
