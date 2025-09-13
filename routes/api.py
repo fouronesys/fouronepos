@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, render_template, send_file, abort
+from flask import Blueprint, request, jsonify, session, render_template, send_file, abort, flash
 import models
 from models import db
 from datetime import datetime
@@ -9,7 +9,8 @@ import random
 import os
 from receipt_generator import generate_pdf_receipt, generate_thermal_receipt_text
 from utils import get_company_info_for_receipt, validate_ncf
-# CSRF exempt decorator will be applied at app level
+from flask_wtf.csrf import validate_csrf
+from werkzeug.exceptions import BadRequest
 
 bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -30,6 +31,28 @@ def require_login():
         return jsonify({'error': 'Usuario no encontrado'}), 401
     
     return user
+
+
+def validate_csrf_token():
+    """Validate CSRF token for API requests"""
+    try:
+        # Support CSRF token from JSON body or header
+        csrf_token = None
+        
+        # Try JSON body first (for API calls)
+        if request.is_json and request.get_json() and request.get_json().get('csrf_token'):
+            csrf_token = request.get_json().get('csrf_token')
+        # Try header (for API calls)
+        elif request.headers.get('X-CSRFToken'):
+            csrf_token = request.headers.get('X-CSRFToken')
+        
+        if not csrf_token:
+            return jsonify({'error': 'Token de seguridad requerido (csrf_token)'}), 400
+            
+        validate_csrf(csrf_token)
+    except BadRequest:
+        return jsonify({'error': 'Token de seguridad inválido'}), 400
+    return None  # Success
 
 
 @bp.route('/products')
@@ -76,6 +99,11 @@ def update_table_status(table_id):
     if not isinstance(user, models.User):
         return user
     
+    # Validate CSRF token
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
+    
     table = models.Table.query.get_or_404(table_id)
     data = request.get_json()
     
@@ -92,6 +120,11 @@ def create_sale():
         user = require_login()
         if not isinstance(user, models.User):
             return user
+        
+        # Validate CSRF token
+        csrf_error = validate_csrf_token()
+        if csrf_error:
+            return csrf_error
         
         data = request.get_json() or {}  # Default to empty dict if no JSON
         
@@ -134,6 +167,11 @@ def add_sale_item(sale_id):
     user = require_login()
     if not isinstance(user, models.User):
         return user
+    
+    # Validate CSRF token
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
     
     data = request.get_json()
     
@@ -265,6 +303,11 @@ def finalize_sale(sale_id):
     user = require_login()
     if not isinstance(user, models.User):
         return user
+    
+    # Validate CSRF token  
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
     
     # ROLE RESTRICTION: Only cashiers and administrators can finalize sales
     if user.role.value not in ['administrador', 'cajero']:
@@ -512,6 +555,11 @@ def remove_sale_item(sale_id, item_id):
     if not isinstance(user, models.User):
         return user
     
+    # Validate CSRF token
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
+    
     try:
         with db.session.begin():
             # Get sale and item with locks
@@ -614,6 +662,11 @@ def close_table_properly(table_id):
     if not isinstance(user, models.User):
         return user
     
+    # Validate CSRF token
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
+    
     data = request.get_json() or {}
     action = data.get('action', 'finalize')  # 'finalize' or 'cancel'
     
@@ -677,6 +730,11 @@ def update_kitchen_status(sale_id):
     if not isinstance(user, models.User):
         return user
     
+    # Validate CSRF token
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
+    
     data = request.get_json()
     new_status = data.get('order_status')
     
@@ -721,6 +779,11 @@ def send_to_kitchen(sale_id):
     user = require_login()
     if not isinstance(user, models.User):
         return user
+    
+    # Validate CSRF token
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
     
     try:
         with db.session.begin():
@@ -1126,6 +1189,11 @@ def create_credit_note(sale_id):
     if not isinstance(user, models.User):
         return user
     
+    # Validate CSRF token
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
+    
     # Only administrators and cashiers can create credit notes
     if user.role.value not in ['administrador', 'cajero']:
         return jsonify({'error': 'No tienes permisos para crear notas de crédito'}), 403
@@ -1259,7 +1327,7 @@ def create_credit_note(sale_id):
             credit_note.original_sale_id = sale_id
             credit_note.ncf_sequence_id = ncf_sequence.id
             credit_note.ncf = ncf
-            credit_note.note_type = ncf_enum_type
+            credit_note.note_type = models.NCFType.NOTA_CREDITO if note_type == 'nota_credito' else models.NCFType.NOTA_DEBITO
             credit_note.amount = note_subtotal
             credit_note.tax_amount = note_tax_amount
             credit_note.total = note_total
@@ -1464,6 +1532,11 @@ def cancel_sale(sale_id):
     user = require_login()
     if not isinstance(user, models.User):
         return user
+    
+    # Validate CSRF token
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
     
     # Only administrators and cashiers can cancel sales
     if user.role.value not in ['administrador', 'cajero']:

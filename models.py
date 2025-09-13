@@ -209,6 +209,10 @@ class Sale(db.Model):
     customer_name: Mapped[str] = mapped_column(String(200), nullable=True)
     customer_rnc: Mapped[str] = mapped_column(String(20), nullable=True) 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Cancellation fields
+    cancellation_reason: Mapped[str] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    cancelled_by: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=True)
     
     # Relationships
     cash_register = relationship("CashRegister", back_populates="sales")
@@ -241,6 +245,8 @@ class CancelledNCF(db.Model):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ncf: Mapped[str] = mapped_column(String(20), nullable=False)
     ncf_type: Mapped[NCFType] = mapped_column(Enum(NCFType), nullable=False)
+    ncf_sequence_id: Mapped[int] = mapped_column(Integer, ForeignKey('ncf_sequences.id'), nullable=True)
+    original_sale_id: Mapped[int] = mapped_column(Integer, ForeignKey('sales.id'), nullable=True)
     reason: Mapped[str] = mapped_column(Text)
     cancelled_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     cancelled_by: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'))

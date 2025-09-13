@@ -3,6 +3,8 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 import bcrypt
 from datetime import datetime
 from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # create the app
 app = Flask(__name__)
@@ -14,9 +16,22 @@ if not app.secret_key:
     else:
         app.secret_key = "dev-secret-key-change-in-production"
 
-# CSRF protection configured for production (currently disabled for demonstration)
-# csrf = CSRFProtect(app)
-# app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 hour token lifetime
+# CSRF protection enabled for production security
+csrf = CSRFProtect(app)
+app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 hour token lifetime
+
+# Rate limiting configuration for security
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["100 per hour"],  # Default rate limit for all routes
+    storage_uri="memory://"  # Use memory storage for rate limiting
+)
+
+# Secure session configuration for production
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get("ENVIRONMENT") == "production"
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Better UX than 'Strict' while still secure
 
 # Make csrf_token available in all templates
 @app.context_processor
@@ -37,9 +52,11 @@ from models import db
 # initialize the app with the extension, flask-sqlalchemy >= 3.0.x
 db.init_app(app)
 
-with app.app_context():
-    # Create all database tables
-    db.create_all()
+# Database initialization - use proper migration tools for production
+# with app.app_context():
+#     # Create all database tables - DISABLED for production
+#     # Use flask db upgrade or proper migration tools instead
+#     db.create_all()
 
 
 # Import routes after app initialization

@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 
+# Import for rate limiting access
+from flask import current_app
 
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
