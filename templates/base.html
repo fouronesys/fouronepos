@@ -83,7 +83,7 @@
     <nav class="navbar navbar-expand-lg animate-fade-in">
         <div class="container-fluid">
             <a class="navbar-brand" href="/">
-                <img src="{{ url_for('static', filename='css/logo.png') }}" alt="Four One Solutions" height="32">
+                <img id="navbar-logo" src="{{ url_for('static', filename='uploads/logos/logo-white.png') }}" alt="Four One Solutions" height="32">
                 <span>Four One POS</span>
             </a>
             
@@ -286,6 +286,18 @@
         });
     }
     
+    // Logo Theme Update Function
+    function updateLogo(theme) {
+        const logo = document.getElementById('navbar-logo');
+        if (logo) {
+            if (theme === 'light') {
+                logo.src = "{{ url_for('static', filename='uploads/logos/logo-black.png') }}";
+            } else {
+                logo.src = "{{ url_for('static', filename='uploads/logos/logo-white.png') }}";
+            }
+        }
+    }
+    
     // Theme System JavaScript
     function toggleTheme() {
         const html = document.documentElement;
@@ -300,6 +312,7 @@
             themeToggle.innerHTML = '<i class="bi bi-moon-fill"></i> Modo Claro';
             themeColorMeta.content = '#1a1a1a';
             localStorage.setItem('theme', 'dark');
+            updateLogo('dark');
             console.log('[Theme] Switched to dark mode');
         } else {
             // Switch to light mode
@@ -308,6 +321,7 @@
             themeToggle.innerHTML = '<i class="bi bi-sun-fill"></i> Modo Oscuro';
             themeColorMeta.content = '#ffffff';
             localStorage.setItem('theme', 'light');
+            updateLogo('light');
             console.log('[Theme] Switched to light mode');
         }
     }
@@ -319,9 +333,11 @@
         
         if (savedTheme === 'light') {
             themeToggle.innerHTML = '<i class="bi bi-sun-fill"></i> Modo Oscuro';
+            updateLogo('light');
             console.log('[Theme] Initialized with light mode');
         } else {
             themeToggle.innerHTML = '<i class="bi bi-moon-fill"></i> Modo Claro';
+            updateLogo('dark');
             console.log('[Theme] Initialized with dark mode (default)');
         }
     });
