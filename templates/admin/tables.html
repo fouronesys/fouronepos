@@ -13,36 +13,52 @@
 
     <!-- Tables Grid -->
     <div class="row">
-        {% for table in tables %}
+        {% for table_data in tables %}
+        {% set table = table_data.table %}
+        {% set current_sale = table_data.current_sale %}
+        {% set has_order = table_data.has_order %}
+        
         <div class="col-md-4 col-lg-3 mb-3">
             <div class="card h-100 
-                        {% if table.status.value == 'available' %}border-success
+                        {% if has_order %}border-warning
+                        {% elif table.status.value == 'available' %}border-success
                         {% elif table.status.value == 'occupied' %}border-danger
                         {% else %}border-warning{% endif %}">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h5 class="card-title">
+                
+                <!-- Card Header with Table Info -->
+                <div class="card-header 
+                            {% if has_order %}bg-warning text-dark
+                            {% elif table.status.value == 'available' %}bg-success text-white
+                            {% elif table.status.value == 'occupied' %}bg-danger text-white
+                            {% else %}bg-warning text-dark{% endif %}">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">
                             <i class="bi bi-table"></i> Mesa {{ table.number }}
-                        </h5>
+                        </h6>
+                        
+                        {% if user_role in ['ADMINISTRADOR', 'GERENTE'] %}
                         <div class="dropdown">
-                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown">
+                            <button class="btn btn-sm btn-outline-light" type="button" data-bs-toggle="dropdown">
                                 <i class="bi bi-three-dots-vertical"></i>
                             </button>
                             <ul class="dropdown-menu">
                                 <li>
                                     <a class="dropdown-item" href="#" onclick="editTable({{ table.id }}, '{{ table.number }}', '{{ table.name or '' }}', {{ table.capacity }}, '{{ table.status.value }}')">
-                                        <i class="bi bi-pencil"></i> Editar
+                                        <i class="bi bi-pencil"></i> Editar Mesa
                                     </a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item text-danger" href="#" onclick="deleteTable({{ table.id }}, '{{ table.number }}')">
-                                        <i class="bi bi-trash"></i> Eliminar
+                                        <i class="bi bi-trash"></i> Eliminar Mesa
                                     </a>
                                 </li>
                             </ul>
                         </div>
+                        {% endif %}
                     </div>
-                    
+                </div>
+                
+                <div class="card-body">
                     {% if table.name %}
                     <p class="text-muted mb-2">{{ table.name }}</p>
                     {% endif %}
@@ -51,6 +67,36 @@
                         <i class="bi bi-people"></i> {{ table.capacity }} personas
                     </p>
                     
+                    <!-- Order Information -->
+                    {% if has_order and current_sale %}
+                    <div class="alert alert-warning p-2 mb-3">
+                        <small class="fw-bold"><i class="bi bi-receipt"></i> Orden Activa:</small><br>
+                        <small>
+                            <strong>Total:</strong> RD$ {{ "%.2f"|format(current_sale.total) }}<br>
+                            <strong>Productos:</strong> {{ table_data.order_items_count }}<br>
+                            <strong>Hora:</strong> {{ current_sale.created_at.strftime('%H:%M') }}
+                        </small>
+                    </div>
+                    
+                    <!-- Billing Actions for Admin/Manager/Cashier -->
+                    {% if user_role in ['ADMINISTRADOR', 'GERENTE', 'CAJERO'] and current_sale.total > 0 %}
+                    <div class="d-grid gap-2 mb-2">
+                        <button class="btn btn-primary btn-sm" onclick="billOrder({{ current_sale.id }})">
+                            <i class="bi bi-credit-card"></i> Facturar Orden
+                        </button>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-info btn-sm" onclick="viewOrderDetails({{ current_sale.id }})">
+                            <i class="bi bi-eye"></i> Ver Detalles
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" onclick="editOrder({{ current_sale.id }})">
+                            <i class="bi bi-pencil"></i> Editar Orden
+                        </button>
+                    </div>
+                    
+                    {% else %}
                     <div class="mb-3">
                         {% if table.status.value == 'available' %}
                         <span class="badge bg-success">Disponible</span>
@@ -61,14 +107,14 @@
                         {% endif %}
                     </div>
                     
-                    <!-- Show current sale info if occupied -->
-                    {% if table.status.value == 'occupied' %}
-                    <div class="alert alert-info p-2">
-                        <small>
-                            <i class="bi bi-clock"></i> En uso
-                            <br>Revisar en sistema de meseros
-                        </small>
+                    <!-- Action for available tables -->
+                    {% if table.status.value == 'available' %}
+                    <div class="d-grid">
+                        <a href="/admin/pos?table_id={{ table.id }}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-plus-circle"></i> Nueva Orden
+                        </a>
                     </div>
+                    {% endif %}
                     {% endif %}
                 </div>
             </div>
@@ -131,8 +177,86 @@
 </div>
 {% endblock %}
 
+<!-- Order Details Modal -->
+<div class="modal fade" id="orderDetailsModal" tabindex="-1" aria-labelledby="orderDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="orderDetailsModalLabel">
+                    <i class="bi bi-receipt"></i> Detalles de la Orden
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="orderDetailsContent">
+                <!-- Content will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Billing Modal -->
+<div class="modal fade" id="billingModal" tabindex="-1" aria-labelledby="billingModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="billingModalLabel">
+                    <i class="bi bi-credit-card"></i> Procesar Facturación
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="billingForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="paymentMethod" class="form-label">Método de Pago</label>
+                        <select class="form-control" id="paymentMethod" name="payment_method" required>
+                            <option value="">Selecciona método</option>
+                            <option value="cash">Efectivo</option>
+                            <option value="card">Tarjeta</option>
+                            <option value="transfer">Transferencia</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="ncfType" class="form-label">Tipo de Comprobante</label>
+                        <select class="form-control" id="ncfType" name="ncf_type" required>
+                            <option value="">Selecciona tipo</option>
+                            <option value="consumo">Consumo</option>
+                            <option value="credito_fiscal">Crédito Fiscal</option>
+                            <option value="gubernamental">Gubernamental</option>
+                        </select>
+                    </div>
+                    
+                    <div id="customerFields" style="display: none;">
+                        <div class="mb-3">
+                            <label for="customerName" class="form-label">Nombre del Cliente</label>
+                            <input type="text" class="form-control" id="customerName" name="customer_name">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="customerRnc" class="form-label">RNC/Cédula</label>
+                            <input type="text" class="form-control" id="customerRnc" name="customer_rnc">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Descripción (Opcional)</label>
+                        <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="processBilling()">Procesar Factura</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 {% block scripts %}
 <script>
+let currentSaleId = null;
+
 // Table functions
 function newTable() {
     document.getElementById('tableModalTitle').textContent = 'Nueva Mesa';
@@ -171,5 +295,181 @@ function deleteTable(tableId, tableNumber) {
         form.submit();
     }
 }
+
+// Order management functions
+function billOrder(saleId) {
+    currentSaleId = saleId;
+    const modal = new bootstrap.Modal(document.getElementById('billingModal'));
+    modal.show();
+}
+
+// Show/hide customer fields based on NCF type
+document.getElementById('ncfType').addEventListener('change', function() {
+    const customerFields = document.getElementById('customerFields');
+    const ncfType = this.value;
+    
+    if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
+        customerFields.style.display = 'block';
+        document.getElementById('customerName').required = true;
+        document.getElementById('customerRnc').required = true;
+    } else {
+        customerFields.style.display = 'none';
+        document.getElementById('customerName').required = false;
+        document.getElementById('customerRnc').required = false;
+    }
+});
+
+async function processBilling() {
+    if (!currentSaleId) return;
+    
+    const form = document.getElementById('billingForm');
+    const formData = new FormData(form);
+    
+    const billingData = {
+        payment_method: document.getElementById('paymentMethod').value,
+        ncf_type: document.getElementById('ncfType').value,
+        customer_name: document.getElementById('customerName').value,
+        customer_rnc: document.getElementById('customerRnc').value,
+        description: document.getElementById('description').value
+    };
+    
+    // Validate required fields
+    if (!billingData.payment_method || !billingData.ncf_type) {
+        alert('Por favor completa todos los campos requeridos.');
+        return;
+    }
+    
+    // Validate customer info for fiscal receipts
+    if (['credito_fiscal', 'gubernamental'].includes(billingData.ncf_type)) {
+        if (!billingData.customer_name || !billingData.customer_rnc) {
+            alert('Los comprobantes fiscales y gubernamentales requieren información del cliente.');
+            return;
+        }
+    }
+    
+    try {
+        // Process the sale via API with CSRF token
+        const csrfToken = getCsrfToken();
+        if (!csrfToken) {
+            alert('Error: Token de seguridad no disponible. Por favor recarga la página.');
+            return;
+        }
+        
+        billingData.csrf_token = csrfToken;
+        
+        const response = await fetch(`/api/sales/${currentSaleId}/table-finalize`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify(billingData)
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            
+            alert(`✅ Factura procesada exitosamente!\n\n` +
+                  `📋 NCF: ${result.ncf}\n` +
+                  `💰 Total: RD$ ${result.total.toFixed(2)}\n` +
+                  `🧾 ID Venta: ${result.sale_id}`);
+            
+            // Hide modal and reload page
+            bootstrap.Modal.getInstance(document.getElementById('billingModal')).hide();
+            location.reload();
+            
+        } else {
+            const error = await response.json();
+            alert('Error procesando factura: ' + (error.error || 'Error desconocido'));
+        }
+    } catch (error) {
+        alert('Error de conexión procesando factura');
+        console.error('Billing error:', error);
+    }
+}
+
+// View order details
+async function viewOrderDetails(saleId) {
+    try {
+        const response = await fetch(`/api/sales/${saleId}/table-details`);
+        if (response.ok) {
+            const sale = await response.json();
+                
+            let detailsHtml = `
+                <div class="row mb-3">
+                    <div class="col-6"><strong>Venta ID:</strong> ${sale.id}</div>
+                    <div class="col-6"><strong>Mesa:</strong> ${sale.table_number}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-6"><strong>Fecha:</strong> ${new Date(sale.created_at).toLocaleString()}</div>
+                    <div class="col-6"><strong>Total:</strong> RD$ ${sale.total.toFixed(2)}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-6"><strong>Estado:</strong> ${sale.status}</div>
+                    <div class="col-6"><strong>Subtotal:</strong> RD$ ${sale.subtotal.toFixed(2)}</div>
+                </div>
+                
+                <h6>Productos:</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th>Cantidad</th>
+                                <th>Precio</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            sale.items.forEach(item => {
+                detailsHtml += `
+                    <tr>
+                        <td>${item.product_name}</td>
+                        <td>${item.quantity}</td>
+                        <td>RD$ ${item.unit_price.toFixed(2)}</td>
+                        <td>RD$ ${item.total_price.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+            
+            detailsHtml += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            document.getElementById('orderDetailsContent').innerHTML = detailsHtml;
+            
+            const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
+            modal.show();
+            
+        } else {
+            const error = await response.json();
+            alert('Error cargando detalles de la orden: ' + (error.error || 'Error desconocido'));
+        }
+    } catch (error) {
+        alert('Error de conexión al cargar detalles');
+        console.error('[Orders] Error loading order details:', error);
+    }
+}
+
+// Edit order function
+function editOrder(saleId) {
+    // Redirect to POS with the sale ID to edit the order
+    window.location.href = `/admin/pos?edit_sale=${saleId}`;
+}
+
+// Get CSRF token from meta tag
+function getCsrfToken() {
+    const token = document.querySelector('meta[name=csrf-token]');
+    return token ? token.getAttribute('content') : '';
+}
+
+// Auto refresh page every 30 seconds to show updated table status
+setInterval(() => {
+    location.reload();
+}, 30000);
 </script>
 {% endblock %}

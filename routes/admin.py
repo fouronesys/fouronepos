@@ -334,12 +334,32 @@ def delete_category(category_id):
 # Table Management Routes  
 @bp.route('/tables')
 def tables():
-    user = require_admin_or_manager()
+    user = require_admin_or_manager_or_cashier()
     if not isinstance(user, models.User):
         return user
     
+    # Get all tables with their current sales information
     tables = models.Table.query.order_by(models.Table.number).all()
-    return render_template('admin/tables.html', tables=tables)
+    
+    # Enrich tables with sale information for operational view
+    enriched_tables = []
+    for table in tables:
+        # Get current pending sale for this table
+        current_sale = models.Sale.query.filter_by(
+            table_id=table.id, 
+            status='pending'
+        ).first()
+        
+        table_data = {
+            'table': table,
+            'current_sale': current_sale,
+            'has_order': current_sale is not None,
+            'order_total': current_sale.total if current_sale else 0,
+            'order_items_count': len(current_sale.sale_items) if current_sale else 0
+        }
+        enriched_tables.append(table_data)
+    
+    return render_template('admin/tables.html', tables=enriched_tables, user_role=user.role.value)
 
 @bp.route('/tables/create', methods=['POST'])
 def create_table():
