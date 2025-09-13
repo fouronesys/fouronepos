@@ -435,15 +435,55 @@ def finalize_sale(sale_id):
         
         # If ANY part fails, everything rolls back and no NCF is consumed
         
-        # Return success response
-        return jsonify({
+        # Success response data
+        response_data = {
             'id': sale.id,
             'ncf': sale.ncf,
             'total': sale.total,
             'status': sale.status,
             'payment_method': sale.payment_method,
-            'created_at': sale.created_at.isoformat()
-        })
+            'created_at': sale.created_at.isoformat(),
+            'receipt_printed': False  # Will be updated if printing succeeds
+        }
+        
+        # AUTOMATIC RECEIPT PRINTING: Generate thermal receipt immediately after successful finalization
+        try:
+            # Prepare sale data for receipt generation
+            sale_data = {
+                'id': sale.id,
+                'ncf': sale.ncf,
+                'created_at': sale.created_at.isoformat(),
+                'payment_method': sale.payment_method,
+                'subtotal': sale.subtotal,
+                'tax_amount': sale.tax_amount,
+                'total': sale.total,
+                'items': [{
+                    'product_name': item.product.name,
+                    'quantity': item.quantity,
+                    'price': item.unit_price,
+                    'total_price': item.total_price,
+                    'tax_rate': item.tax_rate,
+                    'is_tax_included': item.is_tax_included
+                } for item in sale.sale_items]
+            }
+            
+            # Import and use thermal receipt generator
+            from receipt_generator import generate_thermal_receipt_text
+            receipt_text = generate_thermal_receipt_text(sale_data)
+            
+            if receipt_text:
+                response_data['receipt_printed'] = True
+                response_data['receipt_text'] = receipt_text
+                response_data['message'] = 'Venta finalizada exitosamente. Recibo generado automáticamente.'
+            else:
+                response_data['message'] = 'Venta finalizada exitosamente. Error generando recibo automático.'
+        except Exception as print_error:
+            # Don't fail the entire sale if receipt printing fails
+            print(f"[Receipt] Error generando recibo automático para venta {sale.id}: {print_error}")
+            response_data['message'] = 'Venta finalizada exitosamente. Error en impresión automática de recibo.'
+        
+        # Return success response
+        return jsonify(response_data)
         
     except ValueError as e:
         # Handle business logic errors (no sale, wrong status, no NCF sequence, exhausted sequence, stock issues)
