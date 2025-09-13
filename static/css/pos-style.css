@@ -67,6 +67,190 @@ body {
     background-color: var(--bg-secondary);
 }
 
+/* === POS TABS === */
+.pos-tabs {
+    margin-bottom: 25px;
+}
+
+.tab-buttons {
+    display: flex;
+    gap: 10px;
+    background: var(--bg-secondary);
+    padding: 8px;
+    border-radius: 16px;
+    border: 1px solid var(--border-light);
+}
+
+.tab-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: transparent;
+    border: none;
+    border-radius: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+}
+
+.tab-button:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.tab-button.active {
+    background: var(--accent-bright);
+    color: var(--bg-primary);
+    font-weight: 600;
+    box-shadow: 0 4px 12px var(--accent-alpha-30);
+}
+
+.tab-button i {
+    font-size: 16px;
+}
+
+.order-count {
+    background: var(--bg-primary);
+    color: var(--accent-bright);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    min-width: 20px;
+    text-align: center;
+}
+
+.tab-button.active .order-count {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+/* === ORDERS SECTION === */
+.orders-section {
+    background: var(--bg-secondary);
+    border-radius: 20px;
+    padding: 25px;
+    border: 1px solid var(--border-light);
+}
+
+.orders-header h5 {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.orders-grid {
+    display: grid;
+    gap: 20px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+/* Order Cards */
+.order-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-light);
+    border-radius: 16px;
+    padding: 20px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.order-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px var(--shadow-color);
+    border-color: var(--accent-bright-alpha-40);
+}
+
+.order-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 15px;
+}
+
+.order-info h6 {
+    color: var(--text-primary);
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.order-info small {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.order-status .badge {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+
+.order-items {
+    margin-bottom: 15px;
+}
+
+.order-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 14px;
+}
+
+.order-item:last-child {
+    border-bottom: none;
+}
+
+.item-name {
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.item-quantity {
+    color: var(--text-muted);
+    margin: 0 15px;
+    font-weight: 500;
+}
+
+.item-price {
+    color: var(--accent-bright);
+    font-weight: 600;
+}
+
+.order-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-light);
+}
+
+.order-total {
+    color: var(--text-primary);
+    font-size: 16px;
+}
+
+.order-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.order-actions .btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.empty-orders {
+    background: var(--bg-tertiary);
+    border: 2px dashed var(--border-light);
+    border-radius: 16px;
+    color: var(--text-muted);
+}
+
 /* === CATEGORY TABS - TOUCH OPTIMIZED === */
 .nav-pills {
     margin-bottom: 25px;

@@ -44,9 +44,25 @@
     </div>
     
     <div class="row g-4">
-        <!-- Products Section -->
+        <!-- Products/Orders Section -->
         <div class="col-lg-8">
-            <div class="products-section">
+            <!-- Tab Navigation -->
+            <div class="pos-tabs mb-4">
+                <div class="tab-buttons">
+                    <button class="tab-button active" id="products-tab" onclick="showProductsSection()">
+                        <i class="bi bi-grid-3x3-gap"></i>
+                        <span>Productos</span>
+                    </button>
+                    <button class="tab-button" id="orders-tab" onclick="showOrdersSection()">
+                        <i class="bi bi-clock-history"></i>
+                        <span>Órdenes Abiertas</span>
+                        <span class="order-count" id="pending-orders-count">0</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Products Section -->
+            <div id="products-section" class="products-section">
                 <!-- Enhanced Category Navigation -->
                 <div class="category-nav mb-4">
                     <div class="category-pills">
@@ -71,6 +87,26 @@
                         </div>
                     </div>
                     {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Open Orders Section -->
+            <div id="orders-section" class="orders-section d-none">
+                <div class="orders-header mb-3">
+                    <h5 class="mb-0">
+                        <i class="bi bi-clock-history me-2"></i>
+                        Órdenes Pendientes de Facturación
+                    </h5>
+                    <small class="text-muted">Órdenes creadas por meseros que necesitan ser facturadas</small>
+                </div>
+                
+                <div id="pending-orders-container" class="orders-grid">
+                    <!-- Orders will be loaded via JavaScript -->
+                    <div class="empty-orders text-center py-5">
+                        <i class="bi bi-inbox" style="font-size: 3rem; color: #ddd;"></i>
+                        <h6 class="text-muted mt-3">No hay órdenes pendientes</h6>
+                        <p class="text-muted mb-0">Las órdenes de los meseros aparecerán aquí</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1074,6 +1110,195 @@ async function registerServiceWorker() {
     }
 }
 
+// Tab Management Functions
+function showProductsSection() {
+    // Switch tab buttons
+    document.getElementById('products-tab').classList.add('active');
+    document.getElementById('orders-tab').classList.remove('active');
+    
+    // Switch sections
+    document.getElementById('products-section').classList.remove('d-none');
+    document.getElementById('orders-section').classList.add('d-none');
+}
+
+function showOrdersSection() {
+    // Switch tab buttons
+    document.getElementById('orders-tab').classList.add('active');
+    document.getElementById('products-tab').classList.remove('active');
+    
+    // Switch sections
+    document.getElementById('orders-section').classList.remove('d-none');
+    document.getElementById('products-section').classList.add('d-none');
+    
+    // Load pending orders
+    loadPendingOrders();
+}
+
+// Load pending orders from API
+async function loadPendingOrders() {
+    try {
+        const response = await fetch('/api/pending-orders');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        const orders = data.orders || [];
+        
+        // Update order count in tab
+        document.getElementById('pending-orders-count').textContent = orders.length;
+        
+        // Display orders
+        displayPendingOrders(orders);
+        
+    } catch (error) {
+        console.error('[Orders] Error loading pending orders:', error);
+        showNotification('Error cargando órdenes pendientes', 'error');
+    }
+}
+
+// Display pending orders in the interface
+function displayPendingOrders(orders) {
+    const container = document.getElementById('pending-orders-container');
+    
+    if (orders.length === 0) {
+        container.innerHTML = `
+            <div class="empty-orders text-center py-5">
+                <i class="bi bi-inbox" style="font-size: 3rem; color: #ddd;"></i>
+                <h6 class="text-muted mt-3">No hay órdenes pendientes</h6>
+                <p class="text-muted mb-0">Las órdenes de los meseros aparecerán aquí</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = orders.map(order => `
+        <div class="order-card" data-order-id="${order.id}">
+            <div class="order-header">
+                <div class="order-info">
+                    <h6 class="order-title">
+                        <i class="bi bi-table me-1"></i>
+                        Mesa ${order.table_number || 'Sin asignar'}
+                        ${order.table_name ? ` - ${order.table_name}` : ''}
+                    </h6>
+                    <small class="text-muted">
+                        <i class="bi bi-person me-1"></i>
+                        Mesero: ${order.waiter_name} • 
+                        ${new Date(order.created_at).toLocaleTimeString('es-DO', {hour: '2-digit', minute: '2-digit'})}
+                    </small>
+                </div>
+                <div class="order-status">
+                    <span class="badge ${getOrderStatusBadgeClass(order.order_status)}">
+                        ${getOrderStatusText(order.order_status)}
+                    </span>
+                </div>
+            </div>
+            
+            <div class="order-items">
+                ${order.items.map(item => `
+                    <div class="order-item">
+                        <span class="item-name">${item.product_name}</span>
+                        <span class="item-quantity">×${item.quantity}</span>
+                        <span class="item-price">RD$ ${item.total_price.toFixed(2)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="order-footer">
+                <div class="order-total">
+                    <strong>Total: RD$ ${order.total.toFixed(2)}</strong>
+                </div>
+                <div class="order-actions">
+                    <button class="btn btn-primary btn-sm" onclick="billOrder(${order.id})">
+                        <i class="bi bi-receipt me-1"></i>
+                        Facturar
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="viewOrderDetails(${order.id})">
+                        <i class="bi bi-eye me-1"></i>
+                        Ver
+                    </button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Utility functions for order status
+function getOrderStatusBadgeClass(status) {
+    switch (status) {
+        case 'sent_to_kitchen': return 'bg-info';
+        case 'in_preparation': return 'bg-warning';
+        case 'ready': return 'bg-success';
+        default: return 'bg-secondary';
+    }
+}
+
+function getOrderStatusText(status) {
+    switch (status) {
+        case 'not_sent': return 'No enviado';
+        case 'sent_to_kitchen': return 'En cocina';
+        case 'in_preparation': return 'Preparando';
+        case 'ready': return 'Listo';
+        default: return 'Pendiente';
+    }
+}
+
+// Bill an order (load it into the cart for processing)
+async function billOrder(orderId) {
+    try {
+        // Clear current cart first
+        cartManager.clearCart();
+        
+        // Get order details
+        const response = await fetch(`/api/sales/${orderId}/details`);
+        if (!response.ok) {
+            throw new Error('Error obteniendo detalles de la orden');
+        }
+        
+        const orderData = await response.json();
+        const order = orderData.sale;
+        
+        // Add order items to cart
+        order.sale_items.forEach(item => {
+            cartManager.addItem({
+                id: item.product.id,
+                name: item.product.name,
+                price: item.unit_price,
+                quantity: item.quantity,
+                category: item.product.category_name || 'General'
+            });
+        });
+        
+        // Set table if available
+        if (order.table_id) {
+            const tableSelect = document.getElementById('table-select');
+            tableSelect.value = order.table_id;
+        }
+        
+        // Switch to products tab to show the cart
+        showProductsSection();
+        
+        // Update cart display
+        updateCartDisplay();
+        
+        // Store the order ID for finalization
+        window.currentOrderId = orderId;
+        
+        showNotification(`Orden de Mesa ${order.table?.number || 'Sin asignar'} cargada en el carrito`, 'success');
+        
+    } catch (error) {
+        console.error('[Orders] Error billing order:', error);
+        showNotification('Error cargando la orden para facturación', 'error');
+    }
+}
+
+// View order details (placeholder for now)
+function viewOrderDetails(orderId) {
+    // TODO: Implement order details modal
+    showNotification(`Ver detalles de orden ${orderId} - Por implementar`, 'info');
+}
+
 // Initialize POS System
 async function initializePOS() {
     console.log('[POS] Initializing POS system...');
@@ -1104,6 +1329,9 @@ async function initializePOS() {
     
     // Load available tables
     loadTables();
+    
+    // Load pending orders count
+    loadPendingOrders();
     
     console.log('[POS] POS system initialized successfully');
     showNotification('Sistema POS iniciado - Modo offline disponible', 'success');
