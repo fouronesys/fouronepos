@@ -1488,18 +1488,18 @@ async function billOrder(orderId) {
         const orderData = await apiRequest(`/api/sales/${orderId}/details`);
         const order = orderData.sale;
         
-        if (!order || !order.sale_items) {
+        if (!order || !order.items) {
             throw new Error('Datos de orden inválidos recibidos del servidor');
         }
         
         // Add order items to cart
-        order.sale_items.forEach(item => {
+        order.items.forEach(item => {
             cartManager.addItem({
-                id: item.product.id,
-                name: item.product.name,
+                id: item.product_id,
+                name: item.product_name,
                 price: item.unit_price,
                 quantity: item.quantity,
-                category: item.product.category_name || 'General'
+                category: 'General'
             });
         });
         
