@@ -887,18 +887,18 @@ def update_kitchen_status(sale_id):
         return jsonify({'error': f'Estado inválido. Debe ser uno de: {valid_statuses}'}), 400
     
     try:
-        with db.session.begin():
-            sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
-            
-            if not sale:
-                raise ValueError('Venta no encontrada')
-            
-            # Only allow updating order status for pending sales
-            if sale.status != 'pending':
-                raise ValueError('Solo se puede actualizar el estado de pedidos pendientes')
-            
-            # Update order status
-            sale.order_status = models.OrderStatus(new_status)
+        sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
+        
+        if not sale:
+            return jsonify({'error': 'Venta no encontrada'}), 404
+        
+        # Only allow updating order status for pending sales
+        if sale.status != 'pending':
+            return jsonify({'error': 'Solo se puede actualizar el estado de pedidos pendientes'}), 400
+        
+        # Update order status
+        sale.order_status = models.OrderStatus(new_status)
+        db.session.commit()
             
         return jsonify({
             'success': True,
@@ -907,9 +907,8 @@ def update_kitchen_status(sale_id):
             'message': f'Estado del pedido actualizado a: {sale.order_status.value}'
         })
         
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
     except Exception as e:
+        db.session.rollback()
         return jsonify({'error': f'Error interno: {str(e)}'}), 500
 
 

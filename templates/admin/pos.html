@@ -1510,28 +1510,92 @@ async function billOrder(orderId) {
             }
         }
         
+        // Set payment method if available
+        if (order.payment_method) {
+            const paymentMethodInputs = document.querySelectorAll('input[name="payment-method"]');
+            paymentMethodInputs.forEach(input => {
+                if (input.value === order.payment_method) {
+                    input.checked = true;
+                    // Trigger payment method change to show/hide cash fields
+                    input.dispatchEvent(new Event('change'));
+                }
+            });
+        }
+        
+        // Set customer name if available
+        if (order.customer_name) {
+            const customerNameInput = document.getElementById('client-name');
+            if (customerNameInput) {
+                customerNameInput.value = order.customer_name;
+            }
+        }
+        
+        // Set customer RNC if available
+        if (order.customer_rnc) {
+            const customerRncInput = document.getElementById('client-rnc');
+            if (customerRncInput) {
+                customerRncInput.value = order.customer_rnc;
+            }
+        }
+        
+        // Set NCF type based on customer info
+        const ncfTypeSelect = document.getElementById('ncf-type-select');
+        if (ncfTypeSelect) {
+            if (order.customer_rnc) {
+                ncfTypeSelect.value = 'credito_fiscal';
+            } else if (order.customer_name) {
+                ncfTypeSelect.value = 'gubernamental';
+            } else {
+                ncfTypeSelect.value = 'consumo';
+            }
+            // Trigger NCF type change to show/hide client info
+            ncfTypeSelect.dispatchEvent(new Event('change'));
+        }
+        
         // Switch to products tab to show the cart
         showProductsSection();
         
         // Update cart display
         updateCartDisplay();
         
-        // Store the order ID for finalization
+        // Store the order ID for finalization - we'll complete this original order
         window.currentOrderId = orderId;
+        window.originalOrderData = order; // Store original order for completion
         
-        // Update order status to indicate it's being processed
+        // IMMEDIATELY finalize the original order to close it
         try {
-            await apiRequest(`/api/sales/${orderId}/kitchen-status`, {
-                method: 'PUT',
-                body: JSON.stringify({
-                    order_status: 'in_preparation'
-                })
+            // Prepare finalization data from the original order
+            const finalizeData = {
+                ncf_type: order.customer_rnc ? 'credito_fiscal' : (order.customer_name ? 'gubernamental' : 'consumo'),
+                payment_method: order.payment_method || 'cash',
+                client_name: order.customer_name || '',
+                client_rnc: order.customer_rnc || ''
+            };
+            
+            // If cash payment, calculate cash received and change
+            if (finalizeData.payment_method === 'cash') {
+                finalizeData.cash_received = parseFloat(order.total);
+                finalizeData.change_amount = 0;
+            }
+            
+            console.log('[Orders] Finalizing original order:', orderId, finalizeData);
+            
+            // Finalize the original order
+            await apiRequest(`/api/sales/${orderId}/finalize`, {
+                method: 'POST',
+                body: JSON.stringify(finalizeData)
             });
+            
+            showNotification(`Orden #${orderId} cerrada automáticamente`, 'success');
+            
+            // Clear the order ID since we've completed the original order
+            window.currentOrderId = null;
+            window.originalOrderData = null;
+            
         } catch (error) {
-            console.warn('[Orders] Could not update order status:', error.message);
+            console.error('[Orders] Error finalizing original order:', error.message || error);
+            showNotification(`Error cerrando orden original: ${error.message}`, 'error');
         }
-        
-        showNotification(`Orden de Mesa ${order.table_number || 'Sin asignar'} cargada en el carrito`, 'success');
         
     } catch (error) {
         console.error('[Orders] Error billing order:', error.message || error);
