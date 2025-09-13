@@ -81,28 +81,13 @@ def create_sample_data():
         
         # Create products
         products = [
-            # Bebidas
-            models.Product(name='Cerveza Presidente', description='Cerveza premium dominicana', category_id=bebidas.id, cost=45, price=80, stock=100),
-            models.Product(name='Cerveza Brahma', description='Cerveza importada brasileña', category_id=bebidas.id, cost=40, price=75, stock=80),
-            models.Product(name='Ron Brugal', description='Ron premium dominicano añejo', category_id=bebidas.id, cost=350, price=500, stock=20),
-            models.Product(name='Coca Cola', description='Refresco de cola 355ml', category_id=bebidas.id, cost=25, price=50, stock=150),
-            models.Product(name='Agua', description='Agua natural 500ml', category_id=bebidas.id, cost=15, price=30, stock=200),
-            
-            # Comidas
-            models.Product(name='Pollo al Horno', description='Pollo asado con especias dominicanas', category_id=comidas.id, cost=180, price=350, stock=25),
-            models.Product(name='Pescado Frito', description='Pescado fresco frito criollo', category_id=comidas.id, cost=200, price=400, stock=15),
-            models.Product(name='Mangu', description='Puré de plátano verde tradicional', category_id=comidas.id, cost=80, price=150, stock=30),
-            models.Product(name='Tostones', description='Plátano verde frito doble cocción', category_id=comidas.id, cost=40, price=80, stock=50),
-            models.Product(name='Ensalada Verde', description='Mix de vegetales frescos', category_id=comidas.id, cost=50, price=120, stock=35),
-            
-            # Postres
-            models.Product(name='Flan', description='Flan de vainilla casero', category_id=postres.id, cost=30, price=80, stock=20),
-            models.Product(name='Tres Leches', description='Pastel tres leches tradicional', category_id=postres.id, cost=45, price=120, stock=15),
-            models.Product(name='Helado', description='Helado artesanal varios sabores', category_id=postres.id, cost=25, price=60, stock=40)
+            # Los productos se pueden agregar aquí cuando sea necesario
         ]
         
-        db.session.add_all(products)
-        db.session.commit()
+        # Solo agregar productos si hay alguno definido
+        if products:
+            db.session.add_all(products)
+            db.session.commit()
         
         # Create tables
         tables = []
@@ -136,7 +121,10 @@ def create_sample_data():
         print("   - admin / admin123 (Administrador)")
         print("   - cajero1 / cajero123 (Cajero)")
         print("   - mesero1 / mesero123 (Mesero)")
-        print("\n📦 Productos de muestra añadidos")
+        if products:
+            print("\n📦 Productos de muestra añadidos")
+        else:
+            print("\n📦 Lista de productos inicializada (vacía)")
         print("🏪 12 mesas configuradas")
         print("🧾 Secuencias NCF configuradas")
 

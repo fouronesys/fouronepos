@@ -175,10 +175,9 @@ def create_product():
         for tax_type_id in tax_type_ids:
             tax_type = models.TaxType.query.get(tax_type_id)
             if tax_type and tax_type.active:
-                product_tax = models.ProductTax(
-                    product_id=product.id,
-                    tax_type_id=tax_type_id
-                )
+                product_tax = models.ProductTax()
+                product_tax.product_id = product.id
+                product_tax.tax_type_id = tax_type_id
                 db.session.add(product_tax)
         
         db.session.commit()
@@ -247,14 +246,13 @@ def update_product(product_id):
             models.ProductTax.query.filter_by(product_id=product.id).delete()
             
             # Add new tax type relationships
-            tax_type_ids = data.get('tax_type_ids', [])
+            tax_type_ids = list(set(data.get('tax_type_ids', [])))
             for tax_type_id in tax_type_ids:
                 tax_type = models.TaxType.query.get(tax_type_id)
                 if tax_type and tax_type.active:
-                    product_tax = models.ProductTax(
-                        product_id=product.id,
-                        tax_type_id=tax_type_id
-                    )
+                    product_tax = models.ProductTax()
+                    product_tax.product_id = product.id
+                    product_tax.tax_type_id = tax_type_id
                     db.session.add(product_tax)
         
         db.session.commit()

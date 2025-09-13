@@ -2242,9 +2242,9 @@ def close_cash_register():
             if payment_method in ['cash', 'efectivo']:
                 cash_sales += float(total or 0)
             elif payment_method == 'card':
-                card_sales = float(total or 0)
+                card_sales += float(total or 0)
             elif payment_method == 'transfer':
-                transfer_sales = float(total or 0)
+                transfer_sales += float(total or 0)
             total_transactions += count
         
         expected_cash = current_session.opening_amount + cash_sales
