@@ -165,8 +165,7 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4 no-print">
-        <h2><i class="bi bi-receipt"></i> Recibo Fiscal</h2>
+    <div class="d-flex justify-content-end align-items-center mb-4 no-print">
         <div>
             <button type="button" class="btn btn-secondary me-2" onclick="window.history.back()">
                 <i class="bi bi-arrow-left"></i> Volver
@@ -184,9 +183,9 @@
     <div class="receipt-container">
         <div class="receipt-paper">
             <!-- Company Header -->
-            <div class="receipt-header">
+            <div class="receipt-header" style="text-align: center;">
                 {% if company_info.logo %}
-                    <div class="company-logo mb-2">
+                    <div class="company-logo mb-2" style="text-align: center;">
                         <img src="{{ company_info.logo }}" alt="Logo" style="max-height: 40px; max-width: 120px;">
                     </div>
                 {% endif %}
@@ -225,25 +224,25 @@
             </div>
 
             <!-- Items Table -->
-            <table class="items-table" style="margin: 0 auto;">
+            <table class="items-table" style="margin: 0 auto; width: 100%;">
                 <thead>
-                    <tr>
-                        <th class="item-qty">Cant.</th>
-                        <th class="item-desc">Descripción</th>
-                        <th class="item-price">Precio</th>
-                        <th class="item-total">Total</th>
+                    <tr style="text-align: center;">
+                        <th class="item-qty" style="text-align: center;">Cant.</th>
+                        <th class="item-desc" style="text-align: center;">Descripción</th>
+                        <th class="item-price" style="text-align: center;">Precio</th>
+                        <th class="item-total" style="text-align: center;">Total</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for item in sale_data['items'] %}
-                        <tr>
-                            <td class="item-qty">{{ item.quantity }}</td>
-                            <td class="item-desc">
+                        <tr style="text-align: center;">
+                            <td class="item-qty" style="text-align: center;">{{ item.quantity }}</td>
+                            <td class="item-desc" style="text-align: center;">
                                 {{ item.product_name[:25] }}
                                 {% if item.product_name|length > 25 %}...{% endif %}
                             </td>
-                            <td class="item-price">{{ "RD$ %.2f"|format(item.price) }}</td>
-                            <td class="item-total">{{ "RD$ %.2f"|format(item.quantity * item.price) }}</td>
+                            <td class="item-price" style="text-align: center;">{{ "RD$ %.2f"|format(item.price) }}</td>
+                            <td class="item-total" style="text-align: center;">{{ "RD$ %.2f"|format(item.quantity * item.price) }}</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -265,15 +264,9 @@
                 </div>
             </div>
 
-            <!-- Fiscal Information -->
-            {% if sale_data.ncf_type_display %}
-                <div class="fiscal-info">
-                    <div>Tipo: {{ sale_data.ncf_type_display }}</div>
-                </div>
-            {% endif %}
 
             <!-- Footer -->
-            <div class="receipt-footer">
+            <div class="receipt-footer" style="text-align: center;">
                 {% if company_info.message %}
                     <div class="footer-message">{{ company_info.message }}</div>
                 {% endif %}
