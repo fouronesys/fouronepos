@@ -1494,13 +1494,12 @@ async function billOrder(orderId) {
         
         // Add order items to cart
         order.items.forEach(item => {
-            cartManager.addItem({
-                id: item.product_id,
-                name: item.product_name,
-                price: item.unit_price,
-                quantity: item.quantity,
-                category: 'General'
-            });
+            cartManager.addItemDirectly(
+                item.product_id,
+                item.product_name,
+                item.unit_price,
+                item.quantity
+            );
         });
         
         // Set table if available
