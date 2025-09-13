@@ -477,14 +477,14 @@ def finalize_sale(sale_id):
         
         ncf_sequence = None
         
-        # Try shared NCF sequences first
+        # Use ONLY centralized NCF sequences - no division by cash register
         shared_cash_register = db.session.query(models.CashRegister).filter_by(
-            name="Secuencias NCF Compartidas",
+            is_ncf_centralized=True,
             active=True
         ).first()
         
         if shared_cash_register:
-            print(f"[DEBUG FINALIZE] Found shared cash register: {shared_cash_register.id}")
+            print(f"[DEBUG FINALIZE] Found centralized NCF register: {shared_cash_register.id}")
             ncf_sequence = db.session.query(models.NCFSequence).filter_by(
                 cash_register_id=shared_cash_register.id,
                 ncf_type=models.NCFType(ncf_type.upper()),
@@ -492,25 +492,11 @@ def finalize_sale(sale_id):
             ).with_for_update().first()
             
             if ncf_sequence:
-                print(f"[DEBUG FINALIZE] Found shared NCF sequence: {ncf_sequence.id} (serie: {ncf_sequence.serie})")
+                print(f"[DEBUG FINALIZE] Found centralized NCF sequence: {ncf_sequence.id} (serie: {ncf_sequence.serie})")
             else:
-                print(f"[DEBUG FINALIZE] No shared NCF sequence found for type {ncf_type}")
+                print(f"[DEBUG FINALIZE] No centralized NCF sequence found for type {ncf_type}")
         else:
-            print(f"[DEBUG FINALIZE] No shared cash register found")
-        
-        # If no shared sequence found, try sale's cash register
-        if not ncf_sequence:
-            print(f"[DEBUG FINALIZE] Trying NCF sequence from sale's cash register: {sale.cash_register_id}")
-            ncf_sequence = db.session.query(models.NCFSequence).filter_by(
-                cash_register_id=sale.cash_register_id,
-                ncf_type=models.NCFType(ncf_type.upper()),
-                active=True
-            ).with_for_update().first()
-            
-            if ncf_sequence:
-                print(f"[DEBUG FINALIZE] Found NCF sequence in sale's cash register: {ncf_sequence.id} (serie: {ncf_sequence.serie})")
-            else:
-                print(f"[ERROR FINALIZE] No NCF sequence found in sale's cash register for type {ncf_type}")
+            print(f"[DEBUG FINALIZE] No centralized NCF register found")
         
         if not ncf_sequence:
             # Get all available sequences for debugging
@@ -519,7 +505,11 @@ def finalize_sale(sale_id):
             for seq in all_sequences:
                 print(f"  - ID: {seq.id}, Type: {seq.ncf_type}, Serie: {seq.serie}, Cash Register: {seq.cash_register_id}")
             
-            error_msg = f'No hay secuencia NCF activa para tipo {ncf_type}. Tipos disponibles: {", ".join([str(s.ncf_type.value) for s in all_sequences])}'
+            if not shared_cash_register:
+                error_msg = 'Sistema de facturación no configurado: no hay caja registradora centralizada para secuencias NCF. Contacte al administrador.'
+            else:
+                error_msg = f'No hay secuencia NCF activa para tipo {ncf_type} en el sistema centralizado. Tipos disponibles: {", ".join([str(s.ncf_type.value) for s in all_sequences if s.cash_register_id == shared_cash_register.id])}'
+            
             print(f"[ERROR FINALIZE] {error_msg}")
             raise ValueError(error_msg)
         

@@ -20,7 +20,7 @@
     <div class="alert alert-info" role="alert">
         <i class="bi bi-info-circle"></i>
         <strong>Información:</strong> Cada cajero debe tener una caja registradora asignada para poder procesar ventas.
-        Solo un usuario puede estar asignado a cada caja activa.
+        Solo un usuario puede estar asignado a cada caja activa. Las secuencias NCF están centralizadas y se comparten entre todas las cajas.
     </div>
 
     <!-- Cash Registers Table -->
@@ -61,12 +61,29 @@
                             <td>{{ register.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
                             <td>
                                 <div class="btn-group" role="group">
+                                    {% if not register.is_ncf_centralized %}
                                     <button class="btn btn-sm btn-outline-primary" onclick="editRegister({{ register.id }})" title="Editar">
                                         <i class="bi bi-pencil"></i>
                                     </button>
+                                    {% else %}
+                                    <span class="btn btn-sm btn-outline-secondary disabled" title="Caja de NCF centralizada no editable">
+                                        <i class="bi bi-lock"></i>
+                                    </span>
+                                    {% endif %}
+                                    {% if not register.is_ncf_centralized %}
                                     <button class="btn btn-sm btn-outline-info" onclick="assignRegister({{ register.id }})" title="Asignar Usuario">
                                         <i class="bi bi-person-check"></i>
                                     </button>
+                                    {% else %}
+                                    <span class="btn btn-sm btn-outline-secondary disabled" title="Caja centralizada no requiere asignación">
+                                        <i class="bi bi-person-x"></i>
+                                    </span>
+                                    {% endif %}
+                                    {% if not register.is_ncf_centralized %}
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRegister({{ register.id }}, '{{ register.name }}')" title="Eliminar">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -212,6 +229,32 @@ function assignRegister(registerId) {
     }
     
     new bootstrap.Modal(document.getElementById('assignModal')).show();
+}
+
+// Delete cash register
+function deleteRegister(registerId, registerName) {
+    // Confirm deletion
+    if (!confirm(`¿Estás seguro de que deseas eliminar la caja "${registerName}"?\n\nSi la caja tiene ventas asociadas, se desactivará en lugar de eliminarse para mantener el registro de auditoría.`)) {
+        return;
+    }
+    
+    // Create and submit form
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `/admin/cash-registers/${registerId}/delete`;
+    
+    // Add CSRF token
+    const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+    if (csrfToken) {
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrf_token';
+        csrfInput.value = csrfToken;
+        form.appendChild(csrfInput);
+    }
+    
+    document.body.appendChild(form);
+    form.submit();
 }
 </script>
 {% endblock %}

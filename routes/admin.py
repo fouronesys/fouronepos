@@ -780,18 +780,19 @@ def ncf_sequences():
     sequences = models.NCFSequence.query.filter_by(active=True).all()
     cash_registers = models.CashRegister.query.filter_by(active=True).all()
     
-    # Get or create shared cash register for NCF sequences
+    # Get or create centralized cash register for NCF sequences
     shared_cash_register = models.CashRegister.query.filter_by(
-        name="Secuencias NCF Compartidas",
+        is_ncf_centralized=True,
         active=True
     ).first()
     
-    # Create shared cash register if it doesn't exist
+    # Create centralized cash register if it doesn't exist
     if not shared_cash_register:
         shared_cash_register = models.CashRegister()
-        shared_cash_register.name = "Secuencias NCF Compartidas"
+        shared_cash_register.name = "Secuencias NCF Centralizadas"
         shared_cash_register.user_id = user.id  # Assign to current admin user
         shared_cash_register.active = True
+        shared_cash_register.is_ncf_centralized = True
         db.session.add(shared_cash_register)
         db.session.commit()
     
@@ -1102,6 +1103,11 @@ def assign_cash_register(register_id):
         register = models.CashRegister.query.get_or_404(register_id)
         user_id = request.form.get('user_id')
         
+        # Prevent assignment changes for centralized NCF register
+        if register.is_ncf_centralized:
+            flash('No se puede reasignar la caja de secuencias NCF centralizadas', 'error')
+            return redirect(url_for('admin.cash_registers'))
+        
         if user_id:
             # Unassign the register from any previous user
             models.CashRegister.query.filter_by(user_id=int(user_id)).update({'user_id': None})
@@ -1140,6 +1146,11 @@ def edit_cash_register(register_id):
     try:
         register = models.CashRegister.query.get_or_404(register_id)
         
+        # Prevent editing of centralized NCF register
+        if register.is_ncf_centralized:
+            flash('No se puede editar la caja de secuencias NCF centralizadas', 'error')
+            return redirect(url_for('admin.cash_registers'))
+        
         register.name = request.form['name'].strip()
         register.active = request.form.get('active') == 'true'
         
@@ -1149,6 +1160,56 @@ def edit_cash_register(register_id):
     except Exception as e:
         db.session.rollback()
         flash(f'Error al actualizar caja registradora: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.cash_registers'))
+
+
+@bp.route('/cash-registers/<int:register_id>/delete', methods=['POST'])
+def delete_cash_register(register_id):
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.cash_registers'))
+    
+    try:
+        register = models.CashRegister.query.get_or_404(register_id)
+        
+        # Prevent deletion of centralized NCF register
+        if register.is_ncf_centralized:
+            flash('No se puede eliminar la caja de secuencias NCF centralizadas', 'error')
+            return redirect(url_for('admin.cash_registers'))
+        
+        # Check if register has open sessions
+        open_sessions = models.CashSession.query.filter_by(
+            cash_register_id=register.id,
+            status='open'
+        ).count()
+        
+        if open_sessions > 0:
+            flash('No se puede eliminar una caja con sesiones abiertas', 'error')
+            return redirect(url_for('admin.cash_registers'))
+        
+        # Check if register has sales (for audit trail)
+        sales_count = models.Sale.query.filter_by(cash_register_id=register.id).count()
+        
+        if sales_count > 0:
+            # Mark as inactive instead of deleting for audit purposes
+            register.active = False
+            flash(f'Caja registradora {register.name} desactivada (se mantiene por auditoría)', 'warning')
+        else:
+            # Safe to delete if no sales associated
+            register_name = register.name
+            db.session.delete(register)
+            flash(f'Caja registradora {register_name} eliminada exitosamente', 'success')
+        
+        db.session.commit()
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar caja registradora: {str(e)}', 'error')
     
     return redirect(url_for('admin.cash_registers'))
 

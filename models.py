@@ -69,6 +69,7 @@ class CashRegister(db.Model):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_ncf_centralized: Mapped[bool] = mapped_column(Boolean, default=False)  # Flag for centralized NCF register
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
     # Relationships
