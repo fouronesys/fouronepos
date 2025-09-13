@@ -1346,3 +1346,199 @@ def api_test_receipt():
             'success': False,
             'message': f'Error generando recibo de prueba: {str(e)}'
         }), 500
+
+
+# ===========================
+# TAX TYPES MANAGEMENT ROUTES
+# ===========================
+
+@bp.route('/tax-types')
+def tax_types():
+    """Tax types management page"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Get all tax types ordered by display_order and name
+    tax_types = models.TaxType.query.order_by(models.TaxType.display_order, models.TaxType.name).all()
+    
+    return render_template('admin/tax_types.html', tax_types=tax_types)
+
+
+@bp.route('/api/tax-types', methods=['GET'])
+def api_get_tax_types():
+    """API to get all tax types"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    tax_types = models.TaxType.query.filter_by(active=True).order_by(models.TaxType.display_order, models.TaxType.name).all()
+    
+    return jsonify({
+        'tax_types': [{
+            'id': tax.id,
+            'name': tax.name,
+            'description': tax.description,
+            'rate': tax.rate,
+            'is_inclusive': tax.is_inclusive,
+            'is_percentage': tax.is_percentage,
+            'active': tax.active,
+            'display_order': tax.display_order
+        } for tax in tax_types]
+    })
+
+
+@bp.route('/api/tax-types', methods=['POST'])
+def api_create_tax_type():
+    """API to create a new tax type"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return jsonify({'error': 'Token de seguridad inválido'}), 400
+    
+    data = request.get_json()
+    
+    # Validate required fields
+    required_fields = ['name', 'rate']
+    for field in required_fields:
+        if not data.get(field):
+            return jsonify({'error': f'Campo requerido: {field}'}), 400
+    
+    try:
+        # Check if tax type with same name already exists
+        existing = models.TaxType.query.filter_by(name=data['name']).first()
+        if existing:
+            return jsonify({'error': 'Ya existe un tipo de impuesto con ese nombre'}), 400
+        
+        # Create new tax type
+        tax_type = models.TaxType(
+            name=data['name'],
+            description=data.get('description', ''),
+            rate=float(data['rate']),
+            is_inclusive=data.get('is_inclusive', False),
+            is_percentage=data.get('is_percentage', True),
+            display_order=data.get('display_order', 0),
+            active=True
+        )
+        
+        db.session.add(tax_type)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Tipo de impuesto creado exitosamente',
+            'tax_type': {
+                'id': tax_type.id,
+                'name': tax_type.name,
+                'description': tax_type.description,
+                'rate': tax_type.rate,
+                'is_inclusive': tax_type.is_inclusive,
+                'is_percentage': tax_type.is_percentage,
+                'active': tax_type.active,
+                'display_order': tax_type.display_order
+            }
+        })
+        
+    except ValueError:
+        return jsonify({'error': 'Tasa de impuesto debe ser un número válido'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error creando tipo de impuesto: {str(e)}'}), 500
+
+
+@bp.route('/api/tax-types/<int:tax_type_id>', methods=['PUT'])
+def api_update_tax_type(tax_type_id):
+    """API to update a tax type"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return jsonify({'error': 'Token de seguridad inválido'}), 400
+    
+    tax_type = models.TaxType.query.get_or_404(tax_type_id)
+    data = request.get_json()
+    
+    try:
+        # Check if another tax type with same name exists (exclude current one)
+        if 'name' in data:
+            existing = models.TaxType.query.filter(
+                models.TaxType.name == data['name'],
+                models.TaxType.id != tax_type_id
+            ).first()
+            if existing:
+                return jsonify({'error': 'Ya existe un tipo de impuesto con ese nombre'}), 400
+            tax_type.name = data['name']
+        
+        # Update fields if provided
+        if 'description' in data:
+            tax_type.description = data['description']
+        if 'rate' in data:
+            tax_type.rate = float(data['rate'])
+        if 'is_inclusive' in data:
+            tax_type.is_inclusive = data['is_inclusive']
+        if 'is_percentage' in data:
+            tax_type.is_percentage = data['is_percentage']
+        if 'display_order' in data:
+            tax_type.display_order = int(data['display_order'])
+        if 'active' in data:
+            tax_type.active = data['active']
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Tipo de impuesto actualizado exitosamente',
+            'tax_type': {
+                'id': tax_type.id,
+                'name': tax_type.name,
+                'description': tax_type.description,
+                'rate': tax_type.rate,
+                'is_inclusive': tax_type.is_inclusive,
+                'is_percentage': tax_type.is_percentage,
+                'active': tax_type.active,
+                'display_order': tax_type.display_order
+            }
+        })
+        
+    except ValueError:
+        return jsonify({'error': 'Valores numéricos inválidos'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error actualizando tipo de impuesto: {str(e)}'}), 500
+
+
+@bp.route('/api/tax-types/<int:tax_type_id>', methods=['DELETE'])
+def api_delete_tax_type(tax_type_id):
+    """API to delete a tax type"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return jsonify({'error': 'Token de seguridad inválido'}), 400
+    
+    tax_type = models.TaxType.query.get_or_404(tax_type_id)
+    
+    try:
+        # Check if tax type is being used by any products
+        product_count = models.ProductTax.query.filter_by(tax_type_id=tax_type_id).count()
+        if product_count > 0:
+            return jsonify({'error': f'No se puede eliminar. Este tipo de impuesto está siendo usado por {product_count} producto(s)'}), 400
+        
+        db.session.delete(tax_type)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Tipo de impuesto eliminado exitosamente'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error eliminando tipo de impuesto: {str(e)}'}), 500

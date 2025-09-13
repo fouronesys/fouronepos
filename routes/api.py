@@ -227,12 +227,26 @@ def add_sale_item(sale_id):
         # Check if product already exists in this sale - merge quantities instead of creating duplicate lines
         existing_item = models.SaleItem.query.filter_by(sale_id=sale_id, product_id=product.id).first()
         
+        # Get product's tax types for NEW TAX SYSTEM
+        product_tax_types = []
+        for product_tax in product.product_taxes:
+            if product_tax.tax_type.active:
+                product_tax_types.append({
+                    'name': product_tax.tax_type.name,
+                    'rate': product_tax.tax_type.rate,
+                    'is_inclusive': product_tax.tax_type.is_inclusive
+                })
+        
+        # Calculate aggregated tax rate and inclusiveness for backward compatibility
+        total_tax_rate = sum(tax['rate'] for tax in product_tax_types)
+        has_inclusive_tax = any(tax['is_inclusive'] for tax in product_tax_types)
+        
         if existing_item:
             # Update existing item quantity
             existing_item.quantity = total_quantity
             existing_item.total_price = product.price * total_quantity
-            existing_item.tax_rate = product.tax_rate  # Actualizar tasa de impuesto desde producto
-            existing_item.is_tax_included = product.is_tax_included  # Actualizar si impuesto está incluido
+            existing_item.tax_rate = total_tax_rate  # Aggregated tax rate from new system
+            existing_item.is_tax_included = has_inclusive_tax  # True if any tax is inclusive
             sale_item = existing_item
         else:
             # Create new sale item
@@ -242,8 +256,8 @@ def add_sale_item(sale_id):
             sale_item.quantity = quantity
             sale_item.unit_price = product.price
             sale_item.total_price = product.price * quantity
-            sale_item.tax_rate = product.tax_rate  # Capturar tasa de impuesto desde producto
-            sale_item.is_tax_included = product.is_tax_included  # Capturar si impuesto está incluido
+            sale_item.tax_rate = total_tax_rate  # Aggregated tax rate from new system
+            sale_item.is_tax_included = has_inclusive_tax  # True if any tax is inclusive
             
             db.session.add(sale_item)
         
@@ -294,7 +308,8 @@ def add_sale_item(sale_id):
             'unit_price': sale_item.unit_price,
             'total_price': sale_item.total_price,
             'tax_rate': sale_item.tax_rate,
-            'is_tax_included': sale_item.is_tax_included
+            'is_tax_included': sale_item.is_tax_included,
+            'tax_types': product_tax_types  # NEW: Include detailed tax types for receipt generation
         })
         
     except Exception as e:
@@ -344,6 +359,10 @@ def finalize_sale(sale_id):
     # Get client info for fiscal/government invoices
     customer_name = data.get('client_name')
     customer_rnc = data.get('client_rnc')
+    
+    # NEW: Get service charge (propina) option
+    apply_service_charge = data.get('apply_service_charge', False)
+    service_charge_rate = 0.10  # 10% standard tip rate in Dominican Republic
     
     # CRITICAL FIX: Idempotent sale finalization with proper locking to prevent NCF race conditions
     # This ensures exactly one NCF per sale even under concurrent finalization requests
@@ -541,10 +560,17 @@ def finalize_sale(sale_id):
                     tax_amount = round(item.total_price * rate, 2)
                     total_tax_added += tax_amount
         
+        # NEW: Calculate service charge (propina) if requested
+        service_charge_amount = 0
+        if apply_service_charge:
+            # Apply service charge to subtotal (before adding exclusive taxes)
+            service_charge_amount = round(total_subtotal * service_charge_rate, 2)
+        
         # Set sale totals
         sale.subtotal = round(total_subtotal, 2)
-        sale.tax_amount = round(total_tax_included + total_tax_added, 2)
-        sale.total = round(total_subtotal + total_tax_added, 2)  # Only add non-included taxes
+        sale.tax_amount = round(total_tax_included + total_tax_added, 2)  # Only taxes, not service charge
+        sale.service_charge_amount = service_charge_amount  # Store service charge separately
+        sale.total = round(total_subtotal + total_tax_added + service_charge_amount, 2)  # Add service charge to final total
         
         # Add client info for fiscal/government invoices (NCF compliance)
         if customer_name and customer_rnc and ncf_type in ['credito_fiscal', 'gubernamental']:
@@ -1158,7 +1184,8 @@ def _prepare_sale_data_for_receipt(sale, sale_items):
         'ncf': sale.ncf,
         'total': sale.total,        # Use calculated total from sale
         'subtotal': sale.subtotal,  # Use calculated subtotal from sale  
-        'tax_amount': sale.tax_amount,  # Use calculated tax from sale
+        'tax_amount': sale.tax_amount,  # Use calculated tax from sale (taxes only)
+        'service_charge_amount': getattr(sale, 'service_charge_amount', 0),  # Service charge/propina
         'payment_method': sale.payment_method,
         'payment_method_display': {
             'efectivo': 'Efectivo',
@@ -1178,13 +1205,25 @@ def _prepare_sale_data_for_receipt(sale, sale_items):
         tax_rate = item.tax_rate if hasattr(item, 'tax_rate') and item.tax_rate is not None else item.product.tax_rate
         is_tax_included = item.is_tax_included if hasattr(item, 'is_tax_included') and item.is_tax_included is not None else item.product.is_tax_included
         
+        # NEW TAX SYSTEM: Get product's tax types for receipt generation
+        product_tax_types = []
+        if hasattr(item, 'product') and item.product and hasattr(item.product, 'product_taxes'):
+            for product_tax in item.product.product_taxes:
+                if product_tax.tax_type and product_tax.tax_type.active:
+                    product_tax_types.append({
+                        'name': product_tax.tax_type.name,
+                        'rate': product_tax.tax_type.rate,
+                        'is_inclusive': product_tax.tax_type.is_inclusive
+                    })
+        
         sale_data['items'].append({
             'quantity': item.quantity,
             'product_name': item.product.name,
             'name': item.product.name,  # Alternative name field
             'price': item.unit_price,
-            'tax_rate': tax_rate,  # CRITICAL: Add tax rate for line-by-line display
-            'is_tax_included': is_tax_included  # CRITICAL: Add tax inclusion flag
+            'tax_rate': tax_rate,  # LEGACY: Backward compatibility
+            'is_tax_included': is_tax_included,  # LEGACY: Backward compatibility
+            'tax_types': product_tax_types  # NEW: Detailed tax types for receipt
         })
     
     return sale_data

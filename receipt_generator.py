@@ -188,7 +188,7 @@ class DominicanReceiptGenerator:
         return content
 
     def _build_items_list(self, sale_data: Dict[str, Any]) -> List:
-        """Build items list with line-by-line tax display for included taxes"""
+        """Build items list with line-by-line tax display for included taxes using new TaxType system"""
         content = []
         
         content.append(Paragraph("-" * (self.text_width if hasattr(self, 'text_width') else 32), self.styles['Item']))
@@ -199,8 +199,6 @@ class DominicanReceiptGenerator:
             name = item.get("product_name", item.get("name", "Producto"))
             price = item.get("price", 0)
             total = qty * price
-            tax_rate = item.get("tax_rate", 0)
-            is_tax_included = item.get("is_tax_included", False)
             
             # Truncate name based on format
             max_name_len = 20 if self.format_type == '58mm' else 25
@@ -211,12 +209,26 @@ class DominicanReceiptGenerator:
             content.append(Paragraph(f"{qty}x {name}", self.styles['Item']))
             content.append(Paragraph(f"    {format_currency_rd(price)} c/u = {format_currency_rd(total)}", self.styles['Item']))
             
-            # Show tax line for included taxes
-            if is_tax_included and tax_rate > 0:
-                # Calculate included tax amount per line
-                tax_amount = total - (total / (1 + tax_rate))
-                tax_percentage = int(tax_rate * 100)
-                content.append(Paragraph(f"    (ITBIS {tax_percentage}%)      {format_currency_rd(tax_amount)}", self.styles['Item']))
+            # Show tax lines for multiple tax types (NEW SYSTEM)
+            tax_types = item.get('tax_types', [])
+            if tax_types:
+                for tax_type in tax_types:
+                    if tax_type.get('is_inclusive', False) and tax_type.get('rate', 0) > 0:
+                        # Calculate included tax amount per line
+                        rate = tax_type['rate']
+                        tax_amount = total - (total / (1 + rate))
+                        tax_percentage = int(rate * 100)
+                        tax_name = tax_type.get('name', 'ITBIS')
+                        content.append(Paragraph(f"    ({tax_name} {tax_percentage}%)      {format_currency_rd(tax_amount)}", self.styles['Item']))
+            else:
+                # Fallback to legacy system for backward compatibility
+                tax_rate = item.get("tax_rate", 0)
+                is_tax_included = item.get("is_tax_included", False)
+                if is_tax_included and tax_rate > 0:
+                    # Calculate included tax amount per line
+                    tax_amount = total - (total / (1 + tax_rate))
+                    tax_percentage = int(tax_rate * 100)
+                    content.append(Paragraph(f"    (ITBIS {tax_percentage}%)      {format_currency_rd(tax_amount)}", self.styles['Item']))
         
         content.append(Paragraph("-" * (self.text_width if hasattr(self, 'text_width') else 32), self.styles['Item']))
         return content
@@ -227,26 +239,63 @@ class DominicanReceiptGenerator:
         tax = sale_data.get('tax_amount', 0)
         total = sale_data.get('total', subtotal + tax)
         
-        # Check if there are any items with included taxes
+        # Analyze tax types across all items (NEW SYSTEM)
         items = sale_data.get('items', [])
-        has_included_tax = any(item.get('is_tax_included', False) and item.get('tax_rate', 0) > 0 for item in items)
-        has_added_tax = any(not item.get('is_tax_included', False) and item.get('tax_rate', 0) > 0 for item in items)
-
+        inclusive_taxes = {}  # {tax_name: total_amount}
+        exclusive_taxes = {}  # {tax_name: total_amount}
+        
+        # Calculate taxes by type
+        for item in items:
+            qty = item.get('quantity', 1)
+            price = item.get('price', 0)
+            item_total = qty * price
+            
+            tax_types = item.get('tax_types', [])
+            if tax_types:
+                for tax_type in tax_types:
+                    rate = tax_type.get('rate', 0)
+                    name = tax_type.get('name', 'ITBIS')
+                    
+                    if rate > 0:
+                        if tax_type.get('is_inclusive', False):
+                            # Included tax - extract from price
+                            tax_amount = item_total - (item_total / (1 + rate))
+                            inclusive_taxes[name] = inclusive_taxes.get(name, 0) + tax_amount
+                        else:
+                            # Exclusive tax - add to price
+                            tax_amount = item_total * rate
+                            exclusive_taxes[name] = exclusive_taxes.get(name, 0) + tax_amount
+            else:
+                # Fallback to legacy system
+                tax_rate = item.get('tax_rate', 0)
+                is_tax_included = item.get('is_tax_included', False)
+                if tax_rate > 0:
+                    if is_tax_included:
+                        tax_amount = item_total - (item_total / (1 + tax_rate))
+                        inclusive_taxes['ITBIS'] = inclusive_taxes.get('ITBIS', 0) + tax_amount
+                    else:
+                        tax_amount = item_total * tax_rate
+                        exclusive_taxes['ITBIS'] = exclusive_taxes.get('ITBIS', 0) + tax_amount
+        
         content.append(Paragraph(f"Subtotal: {format_currency_rd(subtotal)}", self.styles['Item']))
         
-        # Show tax information based on type
-        if tax > 0.01:
-            if has_included_tax and not has_added_tax:
-                # Only included taxes
-                content.append(Paragraph(f"ITBIS (incl.): {format_currency_rd(tax)}", self.styles['Item']))
-            elif has_added_tax and not has_included_tax:
-                # Only added taxes - calculate percentage
-                tax_percentage = round((tax / subtotal) * 100) if subtotal > 0 else 0
-                content.append(Paragraph(f"ITBIS ({tax_percentage}%): {format_currency_rd(tax)}", self.styles['Item']))
-            else:
-                # Mixed taxes
-                content.append(Paragraph(f"ITBIS: {format_currency_rd(tax)}", self.styles['Item']))
-        elif tax == 0:
+        # Show inclusive taxes (these don't add to total)
+        for tax_name, tax_amount in inclusive_taxes.items():
+            if tax_amount > 0.01:
+                content.append(Paragraph(f"{tax_name} (incl.): {format_currency_rd(tax_amount)}", self.styles['Item']))
+        
+        # Show exclusive taxes (these add to total)
+        for tax_name, tax_amount in exclusive_taxes.items():
+            if tax_amount > 0.01:
+                content.append(Paragraph(f"{tax_name}: {format_currency_rd(tax_amount)}", self.styles['Item']))
+        
+        # Show service charge/propina if applied (NEW)
+        service_charge_amount = sale_data.get('service_charge_amount', 0)
+        if service_charge_amount > 0.01:
+            content.append(Paragraph(f"Propina legal (10%): {format_currency_rd(service_charge_amount)}", self.styles['Item']))
+        
+        # Show no taxes message if no taxes or service charges found
+        if not inclusive_taxes and not exclusive_taxes and service_charge_amount <= 0.01:
             content.append(Paragraph("Sin impuestos", self.styles['Item']))
             
         content.append(Paragraph(f"<b>TOTAL: {format_currency_rd(total)}</b>", self.styles['Total']))

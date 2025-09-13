@@ -145,7 +145,9 @@ def create_product():
         product.category_id = data['category_id']
         product.cost = float(data['cost'])
         product.price = float(data['price'])
-        product.tax_rate = float(data.get('tax_rate', 0.18))
+        # Keep legacy fields for backward compatibility but use defaults
+        product.tax_rate = 0.18  # Default ITBIS rate for legacy compatibility
+        product.is_tax_included = False  # Default to exclusive for legacy compatibility
         product.product_type = data.get('product_type', 'inventariable')
         
         # Solo manejar stock para productos inventariables
@@ -159,7 +161,35 @@ def create_product():
         product.active = data.get('active', True)
         
         db.session.add(product)
+        db.session.flush()  # Get product ID before adding tax relationships
+        
+        # Handle tax types - products can have multiple tax types
+        tax_type_ids = data.get('tax_type_ids', [])
+        if not tax_type_ids:
+            # Default to ITBIS Exclusivo if no tax types specified
+            default_tax_type = models.TaxType.query.filter_by(name='ITBIS Exclusivo', active=True).first()
+            if default_tax_type:
+                tax_type_ids = [default_tax_type.id]
+        
+        # Add tax type relationships
+        for tax_type_id in tax_type_ids:
+            tax_type = models.TaxType.query.get(tax_type_id)
+            if tax_type and tax_type.active:
+                product_tax = models.ProductTax(
+                    product_id=product.id,
+                    tax_type_id=tax_type_id
+                )
+                db.session.add(product_tax)
+        
         db.session.commit()
+        
+        # Get tax types for response
+        tax_types = [{
+            'id': pt.tax_type.id,
+            'name': pt.tax_type.name,
+            'rate': pt.tax_type.rate,
+            'is_inclusive': pt.tax_type.is_inclusive
+        } for pt in product.product_taxes]
         
         return jsonify({
             'success': True,
@@ -168,7 +198,8 @@ def create_product():
                 'name': product.name,
                 'description': product.description,
                 'price': product.price,
-                'stock': product.stock
+                'stock': product.stock,
+                'tax_types': tax_types
             }
         })
         
@@ -197,7 +228,7 @@ def update_product(product_id):
         product.category_id = data['category_id']
         product.cost = float(data['cost'])
         product.price = float(data['price'])
-        product.tax_rate = float(data.get('tax_rate', 0.18))
+        # Keep legacy fields but don't update them from frontend
         product.product_type = data.get('product_type', 'inventariable')
         
         # Solo manejar stock para productos inventariables
@@ -210,9 +241,43 @@ def update_product(product_id):
             
         product.active = data.get('active', True)
         
+        # Update tax types if provided
+        if 'tax_type_ids' in data:
+            # Remove existing tax type relationships
+            models.ProductTax.query.filter_by(product_id=product.id).delete()
+            
+            # Add new tax type relationships
+            tax_type_ids = data.get('tax_type_ids', [])
+            for tax_type_id in tax_type_ids:
+                tax_type = models.TaxType.query.get(tax_type_id)
+                if tax_type and tax_type.active:
+                    product_tax = models.ProductTax(
+                        product_id=product.id,
+                        tax_type_id=tax_type_id
+                    )
+                    db.session.add(product_tax)
+        
         db.session.commit()
         
-        return jsonify({'success': True})
+        # Get updated tax types for response
+        tax_types = [{
+            'id': pt.tax_type.id,
+            'name': pt.tax_type.name,
+            'rate': pt.tax_type.rate,
+            'is_inclusive': pt.tax_type.is_inclusive
+        } for pt in product.product_taxes]
+        
+        return jsonify({
+            'success': True,
+            'product': {
+                'id': product.id,
+                'name': product.name,
+                'description': product.description,
+                'price': product.price,
+                'stock': product.stock,
+                'tax_types': tax_types
+            }
+        })
         
     except Exception as e:
         db.session.rollback()

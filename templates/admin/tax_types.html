@@ -1,0 +1,424 @@
+{% extends "base.html" %}
+
+{% block title %}Tipos de Impuestos - Four One POS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-calculator"></i> Gestión de Tipos de Impuestos</h2>
+        <button class="btn btn-primary btn-touch" data-bs-toggle="modal" data-bs-target="#taxTypeModal" onclick="newTaxType()">
+            <i class="bi bi-plus-circle"></i> Nuevo Tipo de Impuesto
+        </button>
+    </div>
+
+    <!-- Info Alert -->
+    <div class="alert alert-info" role="alert">
+        <i class="bi bi-info-circle"></i>
+        <strong>Información:</strong> Configure los tipos de impuestos para su establecimiento. Los impuestos inclusivos se calculan desde el precio del producto y se muestran por separado en el recibo, mientras que los exclusivos se añaden al precio final.
+    </div>
+
+    <!-- Tax Types Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Orden</th>
+                            <th>Nombre</th>
+                            <th>Descripción</th>
+                            <th>Tasa</th>
+                            <th>Tipo</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taxTypesTableBody">
+                        <!-- Tax types will be loaded here via JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tax Types Reference -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-question-circle"></i> Tipos de Impuestos</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6><span class="badge bg-success">Inclusivo</span></h6>
+                            <p class="small">El impuesto está incluido en el precio del producto. Se calcula y muestra por separado en el recibo, pero no afecta el precio total.</p>
+                            <strong>Ejemplo:</strong>
+                            <pre class="small bg-light p-2 mt-2">
+----------------------------
+Producto          Cant  Precio
+----------------------------
+Cerveza           2     500.00
+   (ITBIS 18%)          76.27
+----------------------------
+SUBTOTAL                500.00
+ITBIS (incl.)           76.27
+TOTAL                   500.00
+----------------------------</pre>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><span class="badge bg-warning">Exclusivo</span></h6>
+                            <p class="small">El impuesto se añade al precio del producto. Se calcula y añade al precio final.</p>
+                            <strong>Ejemplo:</strong>
+                            <pre class="small bg-light p-2 mt-2">
+----------------------------
+Producto          Cant  Precio
+----------------------------
+Cerveza           2     500.00
+Propina (10%)             50.00
+----------------------------
+SUBTOTAL                500.00
+Propina                  50.00
+TOTAL                   550.00
+----------------------------</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tax Type Modal -->
+<div class="modal fade" id="taxTypeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="taxTypeModalTitle">Nuevo Tipo de Impuesto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="taxTypeForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" id="taxTypeId" name="tax_type_id" value="">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="taxTypeName" class="form-label">Nombre del Impuesto *</label>
+                                <input type="text" class="form-control" id="taxTypeName" name="name" required placeholder="Ej: ITBIS, Propina, IVA">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="taxTypeRate" class="form-label">Tasa *</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="taxTypeRate" name="rate" step="0.01" min="0" max="1" required placeholder="0.18">
+                                    <span class="input-group-text" id="rateUnit">%</span>
+                                </div>
+                                <div class="form-text">Para porcentajes: 0.18 = 18%, 0.10 = 10%. Para montos fijos: monto en pesos.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="taxTypeDescription" class="form-label">Descripción</label>
+                        <textarea class="form-control" id="taxTypeDescription" name="description" rows="2" placeholder="Descripción opcional del tipo de impuesto"></textarea>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Tipo de Impuesto</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="is_inclusive" id="inclusiveTrue" value="true">
+                                    <label class="form-check-label" for="inclusiveTrue">
+                                        <span class="badge bg-success">Inclusivo</span>
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="is_inclusive" id="inclusiveFalse" value="false" checked>
+                                    <label class="form-check-label" for="inclusiveFalse">
+                                        <span class="badge bg-warning">Exclusivo</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Formato de Tasa</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="is_percentage" id="percentageTrue" value="true" checked>
+                                    <label class="form-check-label" for="percentageTrue">
+                                        Porcentaje (%)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="is_percentage" id="percentageFalse" value="false">
+                                    <label class="form-check-label" for="percentageFalse">
+                                        Monto Fijo ($)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="taxTypeDisplayOrder" class="form-label">Orden de Visualización</label>
+                                <input type="number" class="form-control" id="taxTypeDisplayOrder" name="display_order" min="0" value="0" placeholder="0">
+                                <div class="form-text">Orden en formularios (menor número = mayor prioridad)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <span id="submitButtonText">Crear Tipo de Impuesto</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+let taxTypes = [];
+let currentTaxTypeId = null;
+
+// Load tax types on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadTaxTypes();
+    
+    // Update rate unit display when percentage/fixed is selected
+    document.querySelectorAll('input[name="is_percentage"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const rateUnit = document.getElementById('rateUnit');
+            const rateInput = document.getElementById('taxTypeRate');
+            if (this.value === 'true') {
+                rateUnit.textContent = '%';
+                rateInput.placeholder = '0.18';
+                rateInput.max = '1';
+                rateInput.step = '0.01';
+            } else {
+                rateUnit.textContent = '$';
+                rateInput.placeholder = '25.00';
+                rateInput.max = '9999.99';
+                rateInput.step = '0.01';
+            }
+        });
+    });
+});
+
+function loadTaxTypes() {
+    fetch('/admin/api/tax-types')
+        .then(response => response.json())
+        .then(data => {
+            taxTypes = data.tax_types || [];
+            renderTaxTypesTable();
+        })
+        .catch(error => {
+            console.error('Error loading tax types:', error);
+            showToast('Error cargando tipos de impuestos', 'error');
+        });
+}
+
+function renderTaxTypesTable() {
+    const tbody = document.getElementById('taxTypesTableBody');
+    tbody.innerHTML = '';
+
+    if (taxTypes.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center text-muted">
+                    <i class="bi bi-calculator"></i><br>
+                    No hay tipos de impuestos configurados.<br>
+                    <small>Crea el primer tipo de impuesto para comenzar.</small>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    taxTypes.forEach(taxType => {
+        const row = document.createElement('tr');
+        const rateDisplay = taxType.is_percentage ? 
+            `${(taxType.rate * 100).toFixed(2)}%` : 
+            `$${taxType.rate.toFixed(2)}`;
+        
+        row.innerHTML = `
+            <td>
+                <span class="badge bg-secondary">${taxType.display_order}</span>
+            </td>
+            <td>
+                <strong>${taxType.name}</strong>
+            </td>
+            <td>
+                <small class="text-muted">${taxType.description || 'Sin descripción'}</small>
+            </td>
+            <td>
+                <span class="badge bg-info">${rateDisplay}</span>
+            </td>
+            <td>
+                ${taxType.is_inclusive ? 
+                    '<span class="badge bg-success">Inclusivo</span>' : 
+                    '<span class="badge bg-warning">Exclusivo</span>'
+                }
+            </td>
+            <td>
+                ${taxType.active ? 
+                    '<span class="badge bg-success">Activo</span>' : 
+                    '<span class="badge bg-danger">Inactivo</span>'
+                }
+            </td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="editTaxType(${taxType.id})" title="Editar">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteTaxType(${taxType.id})" title="Eliminar">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function newTaxType() {
+    currentTaxTypeId = null;
+    document.getElementById('taxTypeModalTitle').textContent = 'Nuevo Tipo de Impuesto';
+    document.getElementById('submitButtonText').textContent = 'Crear Tipo de Impuesto';
+    document.getElementById('taxTypeForm').reset();
+    document.getElementById('taxTypeId').value = '';
+    
+    // Set default values
+    document.getElementById('inclusiveFalse').checked = true;
+    document.getElementById('percentageTrue').checked = true;
+    document.getElementById('taxTypeDisplayOrder').value = '0';
+}
+
+function editTaxType(taxTypeId) {
+    const taxType = taxTypes.find(t => t.id === taxTypeId);
+    if (!taxType) return;
+
+    currentTaxTypeId = taxTypeId;
+    document.getElementById('taxTypeModalTitle').textContent = 'Editar Tipo de Impuesto';
+    document.getElementById('submitButtonText').textContent = 'Actualizar Tipo de Impuesto';
+    
+    // Fill form with tax type data
+    document.getElementById('taxTypeId').value = taxType.id;
+    document.getElementById('taxTypeName').value = taxType.name;
+    document.getElementById('taxTypeDescription').value = taxType.description || '';
+    document.getElementById('taxTypeRate').value = taxType.rate;
+    document.getElementById('taxTypeDisplayOrder').value = taxType.display_order;
+    
+    // Set radio buttons
+    document.getElementById(taxType.is_inclusive ? 'inclusiveTrue' : 'inclusiveFalse').checked = true;
+    document.getElementById(taxType.is_percentage ? 'percentageTrue' : 'percentageFalse').checked = true;
+    
+    // Update rate unit display
+    const rateUnit = document.getElementById('rateUnit');
+    if (taxType.is_percentage) {
+        rateUnit.textContent = '%';
+    } else {
+        rateUnit.textContent = '$';
+    }
+    
+    // Show modal
+    new bootstrap.Modal(document.getElementById('taxTypeModal')).show();
+}
+
+// Handle form submission
+document.getElementById('taxTypeForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {
+        name: formData.get('name'),
+        description: formData.get('description'),
+        rate: parseFloat(formData.get('rate')),
+        is_inclusive: formData.get('is_inclusive') === 'true',
+        is_percentage: formData.get('is_percentage') === 'true',
+        display_order: parseInt(formData.get('display_order')) || 0,
+        csrf_token: formData.get('csrf_token')
+    };
+    
+    const url = currentTaxTypeId ? 
+        `/admin/api/tax-types/${currentTaxTypeId}` : 
+        '/admin/api/tax-types';
+    const method = currentTaxTypeId ? 'PUT' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': data.csrf_token
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('taxTypeModal')).hide();
+            loadTaxTypes();
+        } else {
+            showToast(data.error || 'Error procesando solicitud', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('Error procesando solicitud', 'error');
+    });
+});
+
+function deleteTaxType(taxTypeId) {
+    const taxType = taxTypes.find(t => t.id === taxTypeId);
+    if (!taxType) return;
+
+    if (!confirm(`¿Estás seguro de que quieres eliminar el tipo de impuesto "${taxType.name}"?`)) {
+        return;
+    }
+
+    const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+    
+    fetch(`/admin/api/tax-types/${taxTypeId}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({csrf_token: csrfToken})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message, 'success');
+            loadTaxTypes();
+        } else {
+            showToast(data.error || 'Error eliminando tipo de impuesto', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('Error eliminando tipo de impuesto', 'error');
+    });
+}
+
+function showToast(message, type = 'info') {
+    // Simple toast implementation - you can replace with your preferred toast library
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}
