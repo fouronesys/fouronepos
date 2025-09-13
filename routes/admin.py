@@ -68,6 +68,19 @@ def require_admin():
     return user
 
 
+def require_pos_access():
+    """Allow admin, cashier, or waiter access to POS system"""
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login'))
+    
+    user = models.User.query.get(session['user_id'])
+    if not user or user.role.value not in ['ADMINISTRADOR', 'CAJERO', 'MESERO']:
+        flash('No tienes permisos para acceder al punto de venta.', 'error')
+        return redirect(url_for('auth.login'))
+    
+    return user
+
+
 @bp.route('/dashboard')
 def dashboard():
     user = require_admin_or_cashier()
@@ -99,15 +112,17 @@ def dashboard():
 
 @bp.route('/pos')
 def pos():
-    user = require_admin_or_cashier()
+    user = require_pos_access()
     if not isinstance(user, models.User):
         return user
     
-    # Get cash register for this user
-    cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
-    if not cash_register:
-        flash('No tienes una caja asignada. Contacta al administrador.', 'error')
-        return redirect(url_for('admin.dashboard'))
+    # Get cash register for this user (only required for admin and cashiers)
+    cash_register = None
+    if user.role.value in ['ADMINISTRADOR', 'CAJERO']:
+        cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
+        if not cash_register:
+            flash('No tienes una caja asignada. Contacta al administrador.', 'error')
+            return redirect(url_for('admin.dashboard'))
     
     # Get products by category
     categories = models.Category.query.filter_by(active=True).all()

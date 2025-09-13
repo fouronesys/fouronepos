@@ -172,6 +172,19 @@ class DominicanReceiptGenerator:
         }.get(sale_data.get('payment_method', 'efectivo'), sale_data.get('payment_method', 'Efectivo'))
 
         content.append(Paragraph(f"Método de pago: {metodo}", self.styles['Item']))
+
+        # Add customer information for fiscal receipts
+        if sale_data.get('customer_name') or sale_data.get('customer_rnc'):
+            content.append(Spacer(1, 2*mm))
+            content.append(Paragraph("--- INFORMACIÓN DEL CLIENTE ---", self.styles['ReceiptHeader']))
+            
+            if sale_data.get('customer_name'):
+                content.append(Paragraph(f"Cliente: {sale_data['customer_name']}", self.styles['Item']))
+            
+            if sale_data.get('customer_rnc'):
+                rnc_label = "RNC:" if len(sale_data['customer_rnc']) == 9 else "Cédula:"
+                content.append(Paragraph(f"{rnc_label} {sale_data['customer_rnc']}", self.styles['Item']))
+
         return content
 
     def _build_items_list(self, sale_data: Dict[str, Any]) -> List:
@@ -286,6 +299,17 @@ class DominicanReceiptGenerator:
         r.append(f"Venta No: {sale_data.get('id','N/A')}")
         if sale_data.get('ncf'): r.append(f"NCF: {sale_data['ncf']}")
         r.append(f"Método: {sale_data.get('payment_method','Efectivo').title()}")
+        
+        # Add customer information for fiscal receipts in thermal format
+        if sale_data.get('customer_name') or sale_data.get('customer_rnc'):
+            r.append("-" * self.text_width)
+            r.append(c("INFORMACIÓN DEL CLIENTE"))
+            if sale_data.get('customer_name'):
+                r.append(f"Cliente: {sale_data['customer_name']}")
+            if sale_data.get('customer_rnc'):
+                rnc_label = "RNC:" if len(sale_data['customer_rnc']) == 9 else "Cédula:"
+                r.append(f"{rnc_label} {sale_data['customer_rnc']}")
+        
         r.append("-" * self.text_width)
         r.append("Cant  Descripción           Total")
         r.append("-" * self.text_width)

@@ -136,6 +136,16 @@
                         </select>
                     </div>
                     
+                    <!-- Order Description -->
+                    <div class="config-item">
+                        <label for="order-description" class="config-label">
+                            <i class="bi bi-sticky"></i>
+                            <span>Descripción</span>
+                        </label>
+                        <input type="text" class="modern-input" id="order-description" placeholder="Nota interna de la orden (opcional)" maxlength="200">
+                        <small class="text-muted" style="font-size: 0.75rem;">Solo para referencia interna - no se imprime en el recibo</small>
+                    </div>
+                    
                     <!-- NCF Type -->
                     <div class="config-item">
                         <label for="ncf-type-select" class="config-label">
@@ -811,6 +821,7 @@ function processSale() {
     }
     
     const tableId = document.getElementById('table-select').value || null;
+    const description = document.getElementById('order-description').value.trim() || '';
     
     // Disable button during processing
     const processButton = document.getElementById('process-sale');
@@ -826,7 +837,8 @@ function processSale() {
         },
         credentials: 'same-origin',
         body: JSON.stringify({
-            table_id: tableId
+            table_id: tableId,
+            description: description
         })
     })
     .then(response => response.json())
@@ -935,6 +947,8 @@ function assignToTable() {
         return;
     }
     
+    const description = document.getElementById('order-description').value.trim() || '';
+    
     // Disable button during processing
     const assignButton = document.getElementById('assign-table');
     const originalText = assignButton.innerHTML;
@@ -949,7 +963,8 @@ function assignToTable() {
         },
         credentials: 'same-origin',
         body: JSON.stringify({
-            table_id: tableId
+            table_id: tableId,
+            description: description
         })
     })
     .then(response => response.json())

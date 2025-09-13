@@ -208,6 +208,8 @@ class Sale(db.Model):
     # Client info for fiscal/government invoices (NCF compliance)
     customer_name: Mapped[str] = mapped_column(String(200), nullable=True)
     customer_rnc: Mapped[str] = mapped_column(String(20), nullable=True) 
+    # Internal reference description (not printed on receipt)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     # Cancellation fields
     cancellation_reason: Mapped[str] = mapped_column(Text, nullable=True)

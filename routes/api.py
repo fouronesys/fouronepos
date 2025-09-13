@@ -134,6 +134,7 @@ def create_sale():
         table_id = data.get('table_id')
         if table_id is not None:
             sale.table_id = int(table_id)
+        sale.description = data.get('description', '')
         sale.subtotal = 0
         sale.tax_amount = 0
         sale.total = 0
@@ -1076,6 +1077,8 @@ def _prepare_sale_data_for_receipt(sale, sale_items):
         }.get(sale.payment_method, sale.payment_method.title()),
         'cashier_name': sale.user.name if sale.user else None,
         'ncf_type_display': _get_ncf_type_display(sale.ncf) if sale.ncf else None,
+        'customer_name': sale.customer_name,
+        'customer_rnc': sale.customer_rnc,
         'items': []
     }
     
