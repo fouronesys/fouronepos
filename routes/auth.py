@@ -37,6 +37,8 @@ def login():
             # Redirect based on role
             if user.role.value == 'ADMINISTRADOR':
                 return redirect(url_for('admin.dashboard'))
+            elif user.role.value == 'GERENTE':
+                return redirect(url_for('admin.dashboard'))
             elif user.role.value == 'CAJERO':
                 return redirect(url_for('admin.pos'))
             elif user.role.value == 'MESERO':
@@ -197,6 +199,8 @@ def change_password():
             
             # Redirect based on role
             if user.role.value == 'ADMINISTRADOR':
+                return redirect(url_for('admin.dashboard'))
+            elif user.role.value == 'GERENTE':
                 return redirect(url_for('admin.dashboard'))
             elif user.role.value == 'CAJERO':
                 return redirect(url_for('admin.pos'))

@@ -202,6 +202,21 @@ def pos():
         if not cash_register:
             flash('No tienes una caja asignada. Contacta al administrador.', 'error')
             return redirect(url_for('admin.dashboard'))
+        
+        # Check if cash register has an open session
+        current_session = models.CashSession.query.filter_by(
+            cash_register_id=cash_register.id,
+            status='open'
+        ).order_by(models.CashSession.opened_at.desc()).first()
+        
+        if not current_session:
+            flash('Debes abrir la caja registradora antes de usar el POS.', 'warning')
+            # Pass flag to template to show cash opening modal automatically
+            return render_template('admin/pos.html', 
+                                 cash_register=cash_register,
+                                 categories=models.Category.query.filter_by(active=True).all(),
+                                 edit_sale_data=None,
+                                 show_cash_opening_modal=True)
     
     # Check if we're editing an existing sale
     edit_sale_id = request.args.get('edit_sale')

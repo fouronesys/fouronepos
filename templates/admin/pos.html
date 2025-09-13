@@ -2736,5 +2736,170 @@ function printCashSummary() {
     printWindow.document.write(printContent);
     printWindow.document.close();
 }
+
+// Print receipt function - called automatically after sale finalization
+async function printReceipt(saleData) {
+    try {
+        if (!saleData || !saleData.sale_id) {
+            console.error('[Print] No sale ID provided for receipt printing');
+            return false;
+        }
+        
+        // Generate thermal receipt via API
+        const response = await apiRequest(`/api/receipts/${saleData.sale_id}/thermal`);
+        
+        if (!response.success || !response.receipt_text) {
+            console.error('[Print] Failed to generate receipt text:', response.error);
+            return false;
+        }
+        
+        // Create receipt preview modal
+        const receiptModal = `
+            <div class="modal fade" id="receiptModal" tabindex="-1" aria-labelledby="receiptModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="receiptModalLabel">
+                                <i class="bi bi-receipt me-2"></i>Recibo Generado - Venta #${saleData.sale_id}
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle me-2"></i>
+                                Recibo generado automáticamente después de la venta
+                            </div>
+                            <div class="receipt-preview">
+                                <pre style="font-family: 'Courier New', monospace; font-size: 12px; background: #f8f9fa; padding: 15px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap;">${response.receipt_text}</pre>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-primary" onclick="printReceiptToDevice('${saleData.sale_id}')">
+                                <i class="bi bi-printer me-1"></i>Imprimir en Impresora
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="copyReceiptText()">
+                                <i class="bi bi-clipboard me-1"></i>Copiar Texto
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remove existing modal if any
+        const existingModal = document.getElementById('receiptModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Add modal to page
+        document.body.insertAdjacentHTML('beforeend', receiptModal);
+        
+        // Store receipt text for copying
+        window.currentReceiptText = response.receipt_text;
+        
+        // Show modal for 3 seconds then auto-hide (user can still interact if needed)
+        const modal = new bootstrap.Modal(document.getElementById('receiptModal'));
+        modal.show();
+        
+        // Auto-hide after 3 seconds to not interrupt workflow
+        setTimeout(() => {
+            modal.hide();
+        }, 3000);
+        
+        console.log('[Print] Receipt generated and displayed successfully');
+        return true;
+        
+    } catch (error) {
+        console.error('[Print] Error generating receipt:', error);
+        showNotification('Error generando recibo (venta procesada exitosamente)', 'warning');
+        return false;
+    }
+}
+
+// Print receipt to thermal printer or regular printer
+function printReceiptToDevice(saleId) {
+    if (!window.currentReceiptText) {
+        showNotification('No hay texto de recibo disponible', 'error');
+        return;
+    }
+    
+    const printContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Recibo - Venta #${saleId}</title>
+            <style>
+                body { 
+                    font-family: 'Courier New', monospace; 
+                    font-size: 12px; 
+                    margin: 5px; 
+                    line-height: 1.2;
+                }
+                pre { 
+                    margin: 0; 
+                    white-space: pre-wrap; 
+                    word-wrap: break-word;
+                }
+                @media print { 
+                    body { margin: 0; } 
+                    @page { 
+                        size: 80mm auto;
+                        margin: 2mm;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <pre>${window.currentReceiptText}</pre>
+        </body>
+        </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    
+    // Wait for content to load then print
+    printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+        
+        // Close print window after printing
+        setTimeout(() => {
+            printWindow.close();
+        }, 500);
+    };
+    
+    showNotification('Enviando recibo a impresora...', 'info');
+}
+
+// Copy receipt text to clipboard
+function copyReceiptText() {
+    if (!window.currentReceiptText) {
+        showNotification('No hay texto de recibo para copiar', 'error');
+        return;
+    }
+    
+    navigator.clipboard.writeText(window.currentReceiptText).then(() => {
+        showNotification('Texto del recibo copiado al portapapeles', 'success');
+    }).catch(err => {
+        console.error('[Print] Error copying receipt text:', err);
+        showNotification('Error copiando texto del recibo', 'error');
+    });
+}
+
+// Handle automatic cash opening modal when flag is set
+{% if show_cash_opening_modal %}
+document.addEventListener('DOMContentLoaded', function() {
+    // Show cash opening modal after page load
+    setTimeout(() => {
+        {% if cash_register %}
+        showOpenCashModal('{{ cash_register.name }}');
+        {% endif %}
+    }, 500); // Small delay to ensure page is fully loaded
+});
+{% endif %}
 </script>
 {% endblock %}
