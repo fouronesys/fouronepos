@@ -2741,6 +2741,9 @@ async function printReceipt(saleData) {
         const modal = new bootstrap.Modal(document.getElementById('receiptModal'));
         modal.show();
         
+        // Automatically download PDF receipt
+        downloadReceiptPDF(saleData.sale_id);
+        
         // Auto-hide after 10 seconds to give user time to read and interact
         setTimeout(() => {
             modal.hide();
@@ -2811,6 +2814,33 @@ function printReceiptToDevice(saleId) {
     };
     
     showNotification('Enviando recibo a impresora...', 'info');
+}
+
+// Download receipt PDF automatically
+function downloadReceiptPDF(saleId) {
+    try {
+        // Create a temporary link to trigger PDF download
+        const downloadLink = document.createElement('a');
+        downloadLink.href = `/api/receipts/${saleId}/pdf`;
+        downloadLink.download = `recibo_fiscal_${saleId}_${new Date().toISOString().slice(0,10)}.pdf`;
+        downloadLink.style.display = 'none';
+        
+        // Add to DOM temporarily and click to trigger download
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        
+        // Clean up
+        setTimeout(() => {
+            document.body.removeChild(downloadLink);
+        }, 100);
+        
+        showNotification('Descargando recibo en PDF...', 'info');
+        console.log(`[Print] PDF download initiated for sale ${saleId}`);
+        
+    } catch (error) {
+        console.error('[Print] Error downloading PDF:', error);
+        showNotification('Error descargando PDF (recibo thermal disponible)', 'warning');
+    }
 }
 
 // Copy receipt text to clipboard
