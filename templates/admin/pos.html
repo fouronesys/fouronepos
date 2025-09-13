@@ -77,6 +77,45 @@
         color: var(--primary-color);
         font-weight: 600;
     }
+
+    /* Cash Register Status Styles */
+    .cash-controls {
+        align-items: center;
+    }
+    
+    .cash-open {
+        background-color: #28a745 !important;
+        animation: pulse-green 2s infinite;
+    }
+    
+    .cash-closed {
+        background-color: #dc3545 !important;
+    }
+    
+    @keyframes pulse-green {
+        0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+        70% { box-shadow: 0 0 0 8px rgba(40, 167, 69, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+    }
+    
+    #cash-status-indicator {
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+    
+    #close-cash-btn {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        font-weight: 500;
+    }
+    
+    #close-cash-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
 </style>
 {% endblock %}
 
@@ -113,6 +152,19 @@
                         <div class="stat-label">Ventas del día</div>
                     </div>
                 </div>
+                <!-- Cash Register Controls -->
+                {% if session.role in ['ADMINISTRADOR', 'CAJERO'] %}
+                <div class="cash-controls d-flex gap-2">
+                    <button id="close-cash-btn" class="btn btn-warning" onclick="showCloseCashModal()" style="display: none;">
+                        <i class="bi bi-lock me-1"></i>Cerrar Caja
+                    </button>
+                    <div id="cash-status-indicator" class="status-indicator" style="display: none;">
+                        <div class="status-dot cash-open"></div>
+                        <span id="cash-status-text">Caja: Cerrada</span>
+                    </div>
+                </div>
+                {% endif %}
+                
                 <!-- Back to Waiter Tables Button (only for waiters) -->
                 {% if session.role == 'MESERO' %}
                 <a href="{{ url_for('waiter.tables') }}" class="btn btn-outline-secondary">
@@ -1645,7 +1697,7 @@ async function billOrder(orderId) {
 async function showBillingForm(order) {
     try {
         // Get tax types for the form
-        const taxTypesResponse = await apiRequest('/api/tax-types');
+        const taxTypesResponse = await apiRequest('/admin/api/tax-types');
         const taxTypes = taxTypesResponse.tax_types || [];
         
         // Create billing form modal
@@ -2199,6 +2251,9 @@ async function initializePOS() {
     // Load pending orders count
     loadPendingOrders();
     
+    // Check cash register status and show opening modal if needed
+    await checkCashRegisterStatus();
+    
     console.log('[POS] POS system initialized successfully');
     showNotification('Sistema POS iniciado - Modo offline disponible', 'success');
 }
@@ -2232,5 +2287,443 @@ window.addEventListener('beforeunload', function(e) {
         e.returnValue = 'Tienes productos en el carrito. ¿Estás seguro de que quieres salir?';
     }
 });
+
+// Cash Register Management Functions
+async function checkCashRegisterStatus() {
+    try {
+        console.log('[Cash] Checking cash register status...');
+        const response = await apiRequest('/api/cash-register/status');
+        
+        if (!response.has_register) {
+            showNotification('No tienes una caja registradora asignada. Contacta al administrador.', 'warning');
+            return;
+        }
+        
+        updateCashStatusUI(response);
+        
+        if (response.has_register && !response.has_open_session) {
+            // Show cash register opening modal
+            showOpenCashModal(response.register_name);
+        }
+        
+    } catch (error) {
+        console.error('[Cash] Error checking cash register status:', error);
+        showNotification('Error verificando estado de caja: ' + (error.message || error), 'error');
+    }
+}
+
+function updateCashStatusUI(status) {
+    const statusIndicator = document.getElementById('cash-status-indicator');
+    const statusText = document.getElementById('cash-status-text');
+    const closeCashBtn = document.getElementById('close-cash-btn');
+    
+    if (statusIndicator && statusText) {
+        statusIndicator.style.display = 'flex';
+        
+        if (status.has_open_session) {
+            statusText.textContent = `Caja: ${status.register_name} - Abierta`;
+            statusIndicator.querySelector('.status-dot').className = 'status-dot cash-open';
+            if (closeCashBtn) closeCashBtn.style.display = 'inline-block';
+        } else {
+            statusText.textContent = `Caja: ${status.register_name} - Cerrada`;
+            statusIndicator.querySelector('.status-dot').className = 'status-dot cash-closed';
+            if (closeCashBtn) closeCashBtn.style.display = 'none';
+        }
+    }
+}
+
+function showOpenCashModal(registerName) {
+    const modalHtml = `
+        <div class="modal fade" id="openCashModal" tabindex="-1" aria-labelledby="openCashModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="openCashModalLabel">
+                            <i class="bi bi-unlock me-2"></i>Abrir Caja Registradora
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Debes abrir la caja registradora <strong>${registerName}</strong> antes de comenzar a vender.
+                        </div>
+                        <form id="openCashForm">
+                            <div class="mb-3">
+                                <label for="opening-amount" class="form-label">Monto inicial en caja (RD$)</label>
+                                <input type="number" class="form-control" id="opening-amount" step="0.01" min="0" value="0" required>
+                                <div class="form-text">Ingresa la cantidad de dinero en efectivo al abrir la caja</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="opening-notes" class="form-label">Notas (opcional)</label>
+                                <textarea class="form-control" id="opening-notes" rows="2" placeholder="Observaciones adicionales..."></textarea>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-success" onclick="openCashRegister()">
+                            <i class="bi bi-unlock me-1"></i>Abrir Caja
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('openCashModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('openCashModal'), {
+        backdrop: 'static',
+        keyboard: false
+    });
+    modal.show();
+}
+
+async function openCashRegister() {
+    try {
+        const openingAmount = parseFloat(document.getElementById('opening-amount').value) || 0;
+        const openingNotes = document.getElementById('opening-notes').value.trim();
+        
+        const response = await apiRequest('/api/cash-register/open', {
+            method: 'POST',
+            body: JSON.stringify({
+                opening_amount: openingAmount,
+                opening_notes: openingNotes
+            }),
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        if (response.success) {
+            showNotification(response.message, 'success');
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('openCashModal'));
+            modal.hide();
+            
+            // Refresh cash register status
+            await checkCashRegisterStatus();
+        } else {
+            showNotification(response.error || 'Error abriendo caja registradora', 'error');
+        }
+        
+    } catch (error) {
+        console.error('[Cash] Error opening cash register:', error);
+        showNotification('Error abriendo caja: ' + (error.message || error), 'error');
+    }
+}
+
+function showCloseCashModal() {
+    const modalHtml = `
+        <div class="modal fade" id="closeCashModal" tabindex="-1" aria-labelledby="closeCashModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="closeCashModalLabel">
+                            <i class="bi bi-lock me-2"></i>Cerrar Caja Registradora
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            Al cerrar la caja se generará un resumen detallado de ventas que debes verificar antes de confirmar.
+                        </div>
+                        <form id="closeCashForm">
+                            <div class="mb-3">
+                                <label for="closing-amount" class="form-label">Monto final en caja (RD$)</label>
+                                <input type="number" class="form-control" id="closing-amount" step="0.01" min="0" value="0" required>
+                                <div class="form-text">Cuenta todo el efectivo y ingresa el total</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="closing-notes" class="form-label">Notas de cierre (opcional)</label>
+                                <textarea class="form-control" id="closing-notes" rows="2" placeholder="Observaciones, incidencias, etc."></textarea>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-danger" onclick="closeCashRegister()">
+                            <i class="bi bi-lock me-1"></i>Cerrar Caja
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('closeCashModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('closeCashModal'));
+    modal.show();
+}
+
+async function closeCashRegister() {
+    try {
+        const closingAmount = parseFloat(document.getElementById('closing-amount').value) || 0;
+        const closingNotes = document.getElementById('closing-notes').value.trim();
+        
+        const response = await apiRequest('/api/cash-register/close', {
+            method: 'POST',
+            body: JSON.stringify({
+                closing_amount: closingAmount,
+                closing_notes: closingNotes
+            }),
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        if (response.success) {
+            showNotification(response.message, 'success');
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('closeCashModal'));
+            modal.hide();
+            
+            // Show detailed summary
+            showCashSummaryModal(response.session_summary);
+            
+            // Refresh cash register status
+            await checkCashRegisterStatus();
+        } else {
+            showNotification(response.error || 'Error cerrando caja registradora', 'error');
+        }
+        
+    } catch (error) {
+        console.error('[Cash] Error closing cash register:', error);
+        showNotification('Error cerrando caja: ' + (error.message || error), 'error');
+    }
+}
+
+function showCashSummaryModal(summary) {
+    const formatCurrency = (amount) => `RD$ ${parseFloat(amount || 0).toLocaleString('es-DO', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    const formatDate = (dateStr) => new Date(dateStr).toLocaleString('es-DO');
+    
+    const differenceClass = summary.cash_difference >= 0 ? 'text-success' : 'text-danger';
+    const differenceIcon = summary.cash_difference >= 0 ? 'arrow-up-circle' : 'arrow-down-circle';
+    
+    const summaryHtml = `
+        <div class="modal fade" id="cashSummaryModal" tabindex="-1" aria-labelledby="cashSummaryModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="cashSummaryModalLabel">
+                            <i class="bi bi-file-earmark-text me-2"></i>Resumen de Caja - Sesión #${summary.session_id}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card mb-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0"><i class="bi bi-clock me-2"></i>Información de Sesión</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p><strong>Apertura:</strong> ${formatDate(summary.opened_at)}</p>
+                                        <p><strong>Cierre:</strong> ${formatDate(summary.closed_at)}</p>
+                                        <p><strong>Total Transacciones:</strong> ${summary.total_transactions}</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="card mb-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0"><i class="bi bi-cash me-2"></i>Control de Efectivo</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p><strong>Apertura:</strong> ${formatCurrency(summary.opening_amount)}</p>
+                                        <p><strong>Ventas en Efectivo:</strong> ${formatCurrency(summary.cash_sales)}</p>
+                                        <p><strong>Efectivo Esperado:</strong> ${formatCurrency(summary.expected_cash)}</p>
+                                        <p><strong>Efectivo Real:</strong> ${formatCurrency(summary.closing_amount)}</p>
+                                        <hr>
+                                        <p class="mb-0 ${differenceClass}">
+                                            <i class="bi bi-${differenceIcon} me-2"></i>
+                                            <strong>Diferencia: ${formatCurrency(Math.abs(summary.cash_difference))} 
+                                            ${summary.cash_difference >= 0 ? '(Sobrante)' : '(Faltante)'}</strong>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="card mb-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Resumen de Ventas</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-sm-6">
+                                                <div class="text-center p-3 bg-success bg-opacity-10 rounded">
+                                                    <i class="bi bi-cash-coin text-success fs-1"></i>
+                                                    <p class="mb-1 text-muted">Efectivo</p>
+                                                    <h5 class="mb-0">${formatCurrency(summary.cash_sales)}</h5>
+                                                </div>
+                                            </div>
+                                            <div class="col-sm-6">
+                                                <div class="text-center p-3 bg-primary bg-opacity-10 rounded">
+                                                    <i class="bi bi-credit-card text-primary fs-1"></i>
+                                                    <p class="mb-1 text-muted">Tarjeta</p>
+                                                    <h5 class="mb-0">${formatCurrency(summary.card_sales)}</h5>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row mt-3">
+                                            <div class="col-sm-6">
+                                                <div class="text-center p-3 bg-info bg-opacity-10 rounded">
+                                                    <i class="bi bi-phone text-info fs-1"></i>
+                                                    <p class="mb-1 text-muted">Transferencia</p>
+                                                    <h5 class="mb-0">${formatCurrency(summary.transfer_sales)}</h5>
+                                                </div>
+                                            </div>
+                                            <div class="col-sm-6">
+                                                <div class="text-center p-3 bg-dark bg-opacity-10 rounded">
+                                                    <i class="bi bi-calculator text-dark fs-1"></i>
+                                                    <p class="mb-1 text-muted">Total</p>
+                                                    <h5 class="mb-0 fw-bold">${formatCurrency(summary.total_sales)}</h5>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                ${summary.opening_notes || summary.closing_notes ? `
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0"><i class="bi bi-journal-text me-2"></i>Notas</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        ${summary.opening_notes ? `<p><strong>Apertura:</strong> ${summary.opening_notes}</p>` : ''}
+                                        ${summary.closing_notes ? `<p><strong>Cierre:</strong> ${summary.closing_notes}</p>` : ''}
+                                    </div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" onclick="printCashSummary()">
+                            <i class="bi bi-printer me-1"></i>Imprimir Resumen
+                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Store summary data for printing
+    window.lastCashSummary = summary;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('cashSummaryModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', summaryHtml);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('cashSummaryModal'));
+    modal.show();
+}
+
+function printCashSummary() {
+    if (!window.lastCashSummary) return;
+    
+    const summary = window.lastCashSummary;
+    const formatCurrency = (amount) => `RD$ ${parseFloat(amount || 0).toLocaleString('es-DO', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    const formatDate = (dateStr) => new Date(dateStr).toLocaleString('es-DO');
+    
+    const printContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Resumen de Caja - Sesión #${summary.session_id}</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                .summary-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                .summary-table th, .summary-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                .summary-table th { background-color: #f2f2f2; }
+                .difference { font-weight: bold; }
+                .positive { color: green; }
+                .negative { color: red; }
+                @media print { body { margin: 0; } }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>RESUMEN DE CAJA REGISTRADORA</h1>
+                <h2>Sesión #${summary.session_id}</h2>
+                <p>Impreso: ${new Date().toLocaleString('es-DO')}</p>
+            </div>
+            
+            <table class="summary-table">
+                <tr><th colspan="2">INFORMACIÓN DE SESIÓN</th></tr>
+                <tr><td>Fecha/Hora Apertura:</td><td>${formatDate(summary.opened_at)}</td></tr>
+                <tr><td>Fecha/Hora Cierre:</td><td>${formatDate(summary.closed_at)}</td></tr>
+                <tr><td>Total Transacciones:</td><td>${summary.total_transactions}</td></tr>
+            </table>
+            
+            <table class="summary-table">
+                <tr><th colspan="2">RESUMEN DE VENTAS POR MÉTODO DE PAGO</th></tr>
+                <tr><td>Ventas en Efectivo:</td><td>${formatCurrency(summary.cash_sales)}</td></tr>
+                <tr><td>Ventas con Tarjeta:</td><td>${formatCurrency(summary.card_sales)}</td></tr>
+                <tr><td>Ventas por Transferencia:</td><td>${formatCurrency(summary.transfer_sales)}</td></tr>
+                <tr><td><strong>TOTAL VENTAS:</strong></td><td><strong>${formatCurrency(summary.total_sales)}</strong></td></tr>
+            </table>
+            
+            <table class="summary-table">
+                <tr><th colspan="2">CONTROL DE EFECTIVO</th></tr>
+                <tr><td>Monto Apertura:</td><td>${formatCurrency(summary.opening_amount)}</td></tr>
+                <tr><td>Ventas en Efectivo:</td><td>${formatCurrency(summary.cash_sales)}</td></tr>
+                <tr><td>Efectivo Esperado:</td><td>${formatCurrency(summary.expected_cash)}</td></tr>
+                <tr><td>Efectivo Contado:</td><td>${formatCurrency(summary.closing_amount)}</td></tr>
+                <tr><td class="difference ${summary.cash_difference >= 0 ? 'positive' : 'negative'}">
+                    DIFERENCIA:
+                </td><td class="difference ${summary.cash_difference >= 0 ? 'positive' : 'negative'}">
+                    ${formatCurrency(Math.abs(summary.cash_difference))} ${summary.cash_difference >= 0 ? '(SOBRANTE)' : '(FALTANTE)'}
+                </td></tr>
+            </table>
+            
+            ${summary.opening_notes || summary.closing_notes ? `
+            <table class="summary-table">
+                <tr><th colspan="2">OBSERVACIONES</th></tr>
+                ${summary.opening_notes ? `<tr><td>Notas Apertura:</td><td>${summary.opening_notes}</td></tr>` : ''}
+                ${summary.closing_notes ? `<tr><td>Notas Cierre:</td><td>${summary.closing_notes}</td></tr>` : ''}
+            </table>
+            ` : ''}
+            
+            <div style="margin-top: 40px; text-align: center; font-size: 12px; color: #666;">
+                Sistema POS Four One • República Dominicana
+            </div>
+        </body>
+        </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
+}
 </script>
 {% endblock %}

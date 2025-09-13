@@ -75,6 +75,27 @@ class CashRegister(db.Model):
     user = relationship("User", back_populates="cash_registers")
     ncf_sequences = relationship("NCFSequence", back_populates="cash_register")
     sales = relationship("Sale", back_populates="cash_register")
+    cash_sessions = relationship("CashSession", back_populates="cash_register")
+
+
+class CashSession(db.Model):
+    """Cash register sessions for tracking opening/closing amounts"""
+    __tablename__ = 'cash_sessions'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cash_register_id: Mapped[int] = mapped_column(Integer, ForeignKey('cash_registers.id'), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    opening_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    closing_amount: Mapped[float] = mapped_column(Float, nullable=True)
+    opening_notes: Mapped[str] = mapped_column(Text, nullable=True)
+    closing_notes: Mapped[str] = mapped_column(Text, nullable=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    closed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default='open')  # open, closed
+    
+    # Relationships
+    cash_register = relationship("CashRegister", back_populates="cash_sessions")
+    user = relationship("User")
 
 
 class NCFSequence(db.Model):

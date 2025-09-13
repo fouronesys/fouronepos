@@ -454,11 +454,10 @@ function savePaymentMethodsConfig() {
     showNotification('Configuración de métodos de pago guardada exitosamente', 'success');
 }
 
-// Show cash management modal
+// Show cash management - navigate to register assignment page
 function showCashManagement() {
-    const modal = new bootstrap.Modal(document.getElementById('cashManagementModal'));
-    modal.show();
-    loadCashSummary();
+    // Navigate to the cash registers management page where users can assign and create registers
+    window.location.href = '{{ url_for("admin.cash_registers") }}';
 }
 
 // Load cash summary for the day

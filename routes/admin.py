@@ -1420,18 +1420,19 @@ def tax_types():
 @bp.route('/api/tax-types', methods=['GET'])
 def api_get_tax_types():
     """API to get all tax types"""
-    user = require_admin()
-    if not isinstance(user, models.User):
-        # Check if user is logged in but not admin - could be cashier
-        from flask import session
-        if 'user_id' in session:
-            user = models.User.query.get(session['user_id'])
-            if user and user.role.value in ['ADMINISTRADOR', 'CAJERO']:
-                pass  # Allow cashiers too
-            else:
-                return jsonify({'error': 'No tienes permisos para acceder a los tipos de impuesto'}), 403
-        else:
-            return jsonify({'error': 'No autorizado'}), 401
+    from flask import session
+    
+    # Check if user is logged in 
+    if 'user_id' not in session:
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    user = models.User.query.get(session['user_id'])
+    if not user:
+        return jsonify({'error': 'Usuario no encontrado'}), 401
+    
+    # Allow admins and cashiers to access tax types for POS operations
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
+        return jsonify({'error': 'No tienes permisos para acceder a los tipos de impuesto'}), 403
     
     tax_types = models.TaxType.query.filter_by(active=True).order_by(models.TaxType.display_order, models.TaxType.name).all()
     
@@ -1475,15 +1476,14 @@ def api_create_tax_type():
             return jsonify({'error': 'Ya existe un tipo de impuesto con ese nombre'}), 400
         
         # Create new tax type
-        tax_type = models.TaxType(
-            name=data['name'],
-            description=data.get('description', ''),
-            rate=float(data['rate']),
-            is_inclusive=data.get('is_inclusive', False),
-            is_percentage=data.get('is_percentage', True),
-            display_order=data.get('display_order', 0),
-            active=True
-        )
+        tax_type = models.TaxType()
+        tax_type.name = data['name']
+        tax_type.description = data.get('description', '')
+        tax_type.rate = float(data['rate'])
+        tax_type.is_inclusive = data.get('is_inclusive', False)
+        tax_type.is_percentage = data.get('is_percentage', True)
+        tax_type.display_order = data.get('display_order', 0)
+        tax_type.active = True
         
         db.session.add(tax_type)
         db.session.commit()

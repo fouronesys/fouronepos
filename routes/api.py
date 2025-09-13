@@ -2038,3 +2038,228 @@ def get_cash_summary():
     except Exception as e:
         print(f"[ERROR] Failed to get cash summary: {str(e)}")
         return jsonify({'error': f'Error al obtener resumen de caja: {str(e)}'}), 500
+
+
+@bp.route('/cash-register/status', methods=['GET'])
+def get_cash_register_status():
+    """Get current user's cash register session status"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Check if user has permission (admin or cashier)
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
+        return jsonify({'error': 'No tienes permisos para acceder al estado de caja'}), 403
+    
+    try:
+        # Find user's active cash register
+        cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
+        
+        if not cash_register:
+            return jsonify({
+                'has_register': False,
+                'message': 'No tienes una caja registradora asignada'
+            })
+        
+        # Find current open cash session
+        current_session = models.CashSession.query.filter_by(
+            cash_register_id=cash_register.id,
+            status='open'
+        ).order_by(models.CashSession.opened_at.desc()).first()
+        
+        if current_session:
+            return jsonify({
+                'has_register': True,
+                'register_name': cash_register.name,
+                'register_id': cash_register.id,
+                'has_open_session': True,
+                'session_id': current_session.id,
+                'opened_at': current_session.opened_at.isoformat(),
+                'opening_amount': current_session.opening_amount,
+                'session_status': 'open'
+            })
+        else:
+            return jsonify({
+                'has_register': True,
+                'register_name': cash_register.name,
+                'register_id': cash_register.id,
+                'has_open_session': False,
+                'session_status': 'closed'
+            })
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to get cash register status: {str(e)}")
+        return jsonify({'error': 'Error obteniendo estado de caja'}), 500
+
+
+@bp.route('/cash-register/open', methods=['POST'])
+def open_cash_register():
+    """Open cash register session"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+        
+    # Check if user has permission (admin or cashier)
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
+        return jsonify({'error': 'No tienes permisos para abrir caja'}), 403
+    
+    # Validate CSRF token
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
+    
+    try:
+        data = request.get_json()
+        opening_amount = float(data.get('opening_amount', 0))
+        opening_notes = data.get('opening_notes', '')
+        
+        # Validate opening amount
+        if opening_amount < 0:
+            return jsonify({'error': 'El monto de apertura no puede ser negativo'}), 400
+        
+        # Find user's active cash register
+        cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
+        
+        if not cash_register:
+            return jsonify({'error': 'No tienes una caja registradora asignada'}), 400
+        
+        # Check if there's already an open session
+        existing_session = models.CashSession.query.filter_by(
+            cash_register_id=cash_register.id,
+            status='open'
+        ).first()
+        
+        if existing_session:
+            return jsonify({'error': 'Ya tienes una sesión de caja abierta'}), 400
+        
+        # Create new cash session
+        new_session = models.CashSession()
+        new_session.cash_register_id = cash_register.id
+        new_session.user_id = user.id
+        new_session.opening_amount = opening_amount
+        new_session.opening_notes = opening_notes
+        new_session.status = 'open'
+        
+        db.session.add(new_session)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Caja {cash_register.name} abierta exitosamente',
+            'session_id': new_session.id,
+            'opening_amount': opening_amount
+        })
+        
+    except ValueError:
+        return jsonify({'error': 'El monto de apertura debe ser un número válido'}), 400
+    except Exception as e:
+        db.session.rollback()
+        print(f"[ERROR] Failed to open cash register: {str(e)}")
+        return jsonify({'error': 'Error abriendo caja registradora'}), 500
+
+
+@bp.route('/cash-register/close', methods=['POST'])
+def close_cash_register():
+    """Close cash register session with detailed summary"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+        
+    # Check if user has permission (admin or cashier)
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
+        return jsonify({'error': 'No tienes permisos para cerrar caja'}), 403
+    
+    # Validate CSRF token
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
+    
+    try:
+        data = request.get_json()
+        closing_amount = float(data.get('closing_amount', 0))
+        closing_notes = data.get('closing_notes', '')
+        
+        # Validate closing amount
+        if closing_amount < 0:
+            return jsonify({'error': 'El monto de cierre no puede ser negativo'}), 400
+        
+        # Find user's active cash register
+        cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
+        
+        if not cash_register:
+            return jsonify({'error': 'No tienes una caja registradora asignada'}), 400
+        
+        # Find current open session
+        current_session = models.CashSession.query.filter_by(
+            cash_register_id=cash_register.id,
+            status='open'
+        ).order_by(models.CashSession.opened_at.desc()).first()
+        
+        if not current_session:
+            return jsonify({'error': 'No hay una sesión de caja abierta para cerrar'}), 400
+        
+        # Get sales summary for the session period
+        from sqlalchemy import func
+        session_sales = db.session.query(
+            models.Sale.payment_method,
+            func.sum(models.Sale.total).label('total'),
+            func.count(models.Sale.id).label('count')
+        ).filter(
+            models.Sale.cash_register_id == cash_register.id,
+            models.Sale.created_at >= current_session.opened_at,
+            models.Sale.status == 'completed'
+        ).group_by(models.Sale.payment_method).all()
+        
+        # Calculate session totals
+        cash_sales = 0.0
+        card_sales = 0.0
+        transfer_sales = 0.0
+        total_transactions = 0
+        
+        for payment_method, total, count in session_sales:
+            if payment_method in ['cash', 'efectivo']:
+                cash_sales += float(total or 0)
+            elif payment_method == 'card':
+                card_sales = float(total or 0)
+            elif payment_method == 'transfer':
+                transfer_sales = float(total or 0)
+            total_transactions += count
+        
+        expected_cash = current_session.opening_amount + cash_sales
+        cash_difference = closing_amount - expected_cash
+        
+        # Close the session
+        current_session.closing_amount = closing_amount
+        current_session.closing_notes = closing_notes
+        current_session.closed_at = datetime.utcnow()
+        current_session.status = 'closed'
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Caja {cash_register.name} cerrada exitosamente',
+            'session_summary': {
+                'session_id': current_session.id,
+                'opened_at': current_session.opened_at.isoformat(),
+                'closed_at': current_session.closed_at.isoformat(),
+                'opening_amount': current_session.opening_amount,
+                'closing_amount': closing_amount,
+                'cash_sales': cash_sales,
+                'card_sales': card_sales,
+                'transfer_sales': transfer_sales,
+                'total_sales': cash_sales + card_sales + transfer_sales,
+                'total_transactions': total_transactions,
+                'expected_cash': expected_cash,
+                'cash_difference': cash_difference,
+                'opening_notes': current_session.opening_notes,
+                'closing_notes': closing_notes
+            }
+        })
+        
+    except ValueError:
+        return jsonify({'error': 'El monto de cierre debe ser un número válido'}), 400
+    except Exception as e:
+        db.session.rollback()
+        print(f"[ERROR] Failed to close cash register: {str(e)}")
+        return jsonify({'error': 'Error cerrando caja registradora'}), 500
