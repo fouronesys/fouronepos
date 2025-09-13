@@ -1422,7 +1422,16 @@ def api_get_tax_types():
     """API to get all tax types"""
     user = require_admin()
     if not isinstance(user, models.User):
-        return jsonify({'error': 'No autorizado'}), 401
+        # Check if user is logged in but not admin - could be cashier
+        from flask import session
+        if 'user_id' in session:
+            user = models.User.query.get(session['user_id'])
+            if user and user.role.value in ['ADMINISTRADOR', 'CAJERO']:
+                pass  # Allow cashiers too
+            else:
+                return jsonify({'error': 'No tienes permisos para acceder a los tipos de impuesto'}), 403
+        else:
+            return jsonify({'error': 'No autorizado'}), 401
     
     tax_types = models.TaxType.query.filter_by(active=True).order_by(models.TaxType.display_order, models.TaxType.name).all()
     

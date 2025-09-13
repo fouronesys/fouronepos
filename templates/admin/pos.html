@@ -8,6 +8,76 @@
 <!-- Organized JavaScript Files - Load with defer for proper DOM loading -->
 <script defer src="{{ url_for('static', filename='js/pos-utils.js') }}?v={{ timestamp }}"></script>
 <script defer src="{{ url_for('static', filename='js/payment-system.js') }}?v={{ timestamp }}"></script>
+<style>
+    /* Billing Modal Styles */
+    .billing-summary {
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        border-radius: 12px;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .summary-details .row {
+        margin-bottom: 0.5rem;
+        padding: 0.25rem 0;
+        border-bottom: 1px solid var(--glass-border);
+    }
+    
+    .summary-details .row:last-child {
+        border-bottom: none;
+        font-weight: 600;
+    }
+    
+    .tax-types-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-top: 0.5rem;
+    }
+    
+    .tax-option {
+        background: var(--glass-bg);
+        border: 2px solid var(--glass-border);
+        border-radius: 8px;
+        padding: 0.75rem;
+        transition: all 0.3s ease;
+    }
+    
+    .tax-option:hover {
+        border-color: var(--primary-color);
+        background: var(--glass-hover-bg);
+    }
+    
+    .tax-option input[type="radio"]:checked + label {
+        color: var(--primary-color);
+        font-weight: 600;
+    }
+    
+    .tax-option input[type="radio"]:checked {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+    }
+    
+    .payment-methods .form-check {
+        background: var(--glass-bg);
+        border: 2px solid var(--glass-border);
+        border-radius: 8px;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        transition: all 0.3s ease;
+    }
+    
+    .payment-methods .form-check:hover {
+        border-color: var(--primary-color);
+        background: var(--glass-hover-bg);
+    }
+    
+    .payment-methods .form-check-input:checked + .form-check-label {
+        color: var(--primary-color);
+        font-weight: 600;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -1562,44 +1632,332 @@ async function billOrder(orderId) {
         window.currentOrderId = orderId;
         window.originalOrderData = order; // Store original order for completion
         
-        // IMMEDIATELY finalize the original order to close it
-        try {
-            // Prepare finalization data from the original order
-            const finalizeData = {
-                ncf_type: order.customer_rnc ? 'credito_fiscal' : (order.customer_name ? 'gubernamental' : 'consumo'),
-                payment_method: order.payment_method || 'cash',
-                client_name: order.customer_name || '',
-                client_rnc: order.customer_rnc || ''
-            };
-            
-            // If cash payment, calculate cash received and change
-            if (finalizeData.payment_method === 'cash') {
-                finalizeData.cash_received = parseFloat(order.total);
-                finalizeData.change_amount = 0;
-            }
-            
-            console.log('[Orders] Finalizing original order:', orderId, finalizeData);
-            
-            // Finalize the original order
-            await apiRequest(`/api/sales/${orderId}/finalize`, {
-                method: 'POST',
-                body: JSON.stringify(finalizeData)
-            });
-            
-            showNotification(`Orden #${orderId} cerrada automáticamente`, 'success');
-            
-            // Clear the order ID since we've completed the original order
-            window.currentOrderId = null;
-            window.originalOrderData = null;
-            
-        } catch (error) {
-            console.error('[Orders] Error finalizing original order:', error.message || error);
-            showNotification(`Error cerrando orden original: ${error.message}`, 'error');
-        }
+        // Show billing form instead of auto-finalizing
+        showBillingForm(order);
         
     } catch (error) {
         console.error('[Orders] Error billing order:', error.message || error);
         showNotification(`Error cargando la orden: ${error.message}`, 'error');
+    }
+}
+
+// Show billing form for order finalization
+async function showBillingForm(order) {
+    try {
+        // Get tax types for the form
+        const taxTypesResponse = await apiRequest('/api/tax-types');
+        const taxTypes = taxTypesResponse.tax_types || [];
+        
+        // Create billing form modal
+        const billingFormHtml = `
+            <div class="modal fade" id="billingModal" tabindex="-1" aria-labelledby="billingModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="billingModalLabel">
+                                <i class="bi bi-receipt"></i> Facturar Orden #${order.id} - Mesa ${order.table_number || 'Sin asignar'}
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="billingForm">
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label"><strong>Método de Pago</strong></label>
+                                        <div class="payment-methods">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="payment_method" id="billing_cash" value="cash" ${order.payment_method === 'cash' ? 'checked' : ''}>
+                                                <label class="form-check-label" for="billing_cash">
+                                                    <i class="bi bi-cash"></i> Efectivo
+                                                </label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="payment_method" id="billing_card" value="card" ${order.payment_method === 'card' ? 'checked' : ''}>
+                                                <label class="form-check-label" for="billing_card">
+                                                    <i class="bi bi-credit-card"></i> Tarjeta
+                                                </label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="payment_method" id="billing_transfer" value="transfer" ${order.payment_method === 'transfer' ? 'checked' : ''}>
+                                                <label class="form-check-label" for="billing_transfer">
+                                                    <i class="bi bi-bank"></i> Transferencia
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="billing_ncf_type" class="form-label"><strong>Tipo de Comprobante</strong></label>
+                                        <select class="form-select" id="billing_ncf_type" name="ncf_type">
+                                            <option value="consumo" ${(!order.customer_rnc && !order.customer_name) ? 'selected' : ''}>
+                                                Consumo (Público General)
+                                            </option>
+                                            <option value="credito_fiscal" ${order.customer_rnc ? 'selected' : ''}>
+                                                Crédito Fiscal (Con RNC/Cédula)
+                                            </option>
+                                            <option value="gubernamental" ${(order.customer_name && !order.customer_rnc) ? 'selected' : ''}>
+                                                Gubernamental (Instituciones)
+                                            </option>
+                                            <option value="sin_comprobante">
+                                                Sin Comprobante
+                                            </option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <!-- Client Info (will show/hide based on NCF type) -->
+                                <div id="billing_client_info" class="row mb-3" style="display: none;">
+                                    <div class="col-md-6">
+                                        <label for="billing_client_name" class="form-label">Nombre/Empresa</label>
+                                        <input type="text" class="form-control" id="billing_client_name" name="client_name" value="${order.customer_name || ''}" placeholder="Nombre completo o empresa">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="billing_client_rnc" class="form-label">RNC/Cédula</label>
+                                        <input type="text" class="form-control" id="billing_client_rnc" name="client_rnc" value="${order.customer_rnc || ''}" placeholder="RNC o cédula del cliente">
+                                    </div>
+                                </div>
+                                
+                                <!-- Cash Payment Details -->
+                                <div id="billing_cash_details" class="row mb-3" style="display: none;">
+                                    <div class="col-md-6">
+                                        <label for="billing_cash_received" class="form-label">Efectivo Recibido</label>
+                                        <input type="number" class="form-control" id="billing_cash_received" name="cash_received" step="0.01" min="0" value="${order.total.toFixed(2)}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Cambio</label>
+                                        <div class="form-control-plaintext" id="billing_change_display">RD$ 0.00</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Tax Type Selection -->
+                                <div class="row mb-3">
+                                    <div class="col-12">
+                                        <label class="form-label"><strong>Aplicar Impuesto</strong></label>
+                                        <div class="tax-types-grid">
+                                            ${taxTypes.map(tax => {
+                                                const isDefault = (tax.name === 'ITBIS Incluido 18%');
+                                                const rate = Math.round(tax.rate * 100);
+                                                const type = tax.is_inclusive ? 'Incluído' : 'Exclusivo';
+                                                return `
+                                                    <div class="form-check tax-option">
+                                                        <input class="form-check-input" type="radio" name="tax_type_id" id="billing_tax_${tax.id}" value="${tax.id}" ${isDefault ? 'checked' : ''}>
+                                                        <label class="form-check-label" for="billing_tax_${tax.id}">
+                                                            <strong>${tax.name}</strong><br>
+                                                            <small class="text-muted">${rate}% ${type}</small>
+                                                        </label>
+                                                    </div>
+                                                `;
+                                            }).join('')}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Order Summary -->
+                                <div class="billing-summary">
+                                    <h6><i class="bi bi-list-check"></i> Resumen de la Orden</h6>
+                                    <div class="summary-details">
+                                        <div class="row">
+                                            <div class="col-6"><strong>Total de productos:</strong></div>
+                                            <div class="col-6 text-end">RD$ ${order.total.toFixed(2)}</div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-6"><strong>Mesa:</strong></div>
+                                            <div class="col-6 text-end">${order.table_number || 'Sin asignar'}</div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-6"><strong>Productos:</strong></div>
+                                            <div class="col-6 text-end">${order.items ? order.items.length : 0} artículos</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="button" class="btn btn-success" id="finalizeBillingBtn">
+                                <i class="bi bi-check-circle"></i> Finalizar Facturación
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remove existing modal if any
+        const existingModal = document.getElementById('billingModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Add modal to DOM
+        document.body.insertAdjacentHTML('beforeend', billingFormHtml);
+        
+        // Initialize modal functionality
+        initializeBillingForm(order);
+        
+        // Show the modal
+        const modal = new bootstrap.Modal(document.getElementById('billingModal'));
+        modal.show();
+        
+    } catch (error) {
+        console.error('[Billing] Error loading tax types:', error);
+        showNotification('Error cargando formulario de facturación', 'error');
+    }
+}
+
+// Initialize billing form functionality
+function initializeBillingForm(order) {
+    const modal = document.getElementById('billingModal');
+    
+    // Handle NCF type change
+    const ncfSelect = modal.querySelector('#billing_ncf_type');
+    const clientInfoDiv = modal.querySelector('#billing_client_info');
+    
+    function toggleClientInfo() {
+        const selectedType = ncfSelect.value;
+        if (selectedType === 'credito_fiscal' || selectedType === 'gubernamental') {
+            clientInfoDiv.style.display = 'block';
+        } else {
+            clientInfoDiv.style.display = 'none';
+        }
+    }
+    
+    ncfSelect.addEventListener('change', toggleClientInfo);
+    toggleClientInfo(); // Initialize
+    
+    // Handle payment method change
+    const paymentRadios = modal.querySelectorAll('input[name="payment_method"]');
+    const cashDetailsDiv = modal.querySelector('#billing_cash_details');
+    const cashReceivedInput = modal.querySelector('#billing_cash_received');
+    const changeDisplay = modal.querySelector('#billing_change_display');
+    
+    function toggleCashDetails() {
+        const selectedPayment = modal.querySelector('input[name="payment_method"]:checked');
+        if (selectedPayment && selectedPayment.value === 'cash') {
+            cashDetailsDiv.style.display = 'block';
+            calculateChange();
+        } else {
+            cashDetailsDiv.style.display = 'none';
+        }
+    }
+    
+    function calculateChange() {
+        const total = parseFloat(order.total);
+        const received = parseFloat(cashReceivedInput.value) || 0;
+        const change = received - total;
+        
+        changeDisplay.textContent = `RD$ ${change.toFixed(2)}`;
+        changeDisplay.className = 'form-control-plaintext ' + (change < 0 ? 'text-danger' : 'text-success');
+    }
+    
+    paymentRadios.forEach(radio => {
+        radio.addEventListener('change', toggleCashDetails);
+    });
+    
+    cashReceivedInput.addEventListener('input', calculateChange);
+    toggleCashDetails(); // Initialize
+    
+    // Handle form submission
+    const finalizeBtn = modal.querySelector('#finalizeBillingBtn');
+    finalizeBtn.addEventListener('click', async () => {
+        await finalizeBillingOrder(order);
+    });
+}
+
+// Finalize the billing order
+async function finalizeBillingOrder(order) {
+    try {
+        const modal = document.getElementById('billingModal');
+        const formData = new FormData(modal.querySelector('#billingForm'));
+        
+        // Validate required fields
+        const paymentMethod = formData.get('payment_method');
+        const ncfType = formData.get('ncf_type');
+        const taxTypeId = formData.get('tax_type_id');
+        
+        if (!paymentMethod) {
+            showNotification('Debe seleccionar un método de pago', 'error');
+            return;
+        }
+        
+        if (!taxTypeId) {
+            showNotification('Debe seleccionar un tipo de impuesto', 'error');
+            return;
+        }
+        
+        // Validate client info for fiscal/government invoices
+        if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
+            const clientName = formData.get('client_name');
+            const clientRnc = formData.get('client_rnc');
+            
+            if (!clientName || !clientRnc) {
+                showNotification('Para comprobantes fiscales debe completar nombre/empresa y RNC/cédula', 'error');
+                return;
+            }
+        }
+        
+        // Validate cash payment
+        if (paymentMethod === 'cash') {
+            const cashReceived = parseFloat(formData.get('cash_received')) || 0;
+            const total = parseFloat(order.total);
+            
+            if (cashReceived < total) {
+                showNotification('El efectivo recibido debe ser mayor o igual al total', 'error');
+                return;
+            }
+        }
+        
+        // Disable button during processing
+        const finalizeBtn = modal.querySelector('#finalizeBillingBtn');
+        finalizeBtn.disabled = true;
+        finalizeBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Procesando...';
+        
+        // Prepare finalization data
+        const finalizeData = {
+            ncf_type: ncfType,
+            payment_method: paymentMethod,
+            client_name: formData.get('client_name') || '',
+            client_rnc: formData.get('client_rnc') || '',
+            tax_type_id: parseInt(taxTypeId)
+        };
+        
+        // Add cash payment details
+        if (paymentMethod === 'cash') {
+            finalizeData.cash_received = parseFloat(formData.get('cash_received'));
+            finalizeData.change_amount = finalizeData.cash_received - parseFloat(order.total);
+        }
+        
+        console.log('[Billing] Finalizing order:', order.id, finalizeData);
+        
+        // Finalize the order
+        const response = await apiRequest(`/api/sales/${order.id}/finalize`, {
+            method: 'POST',
+            body: JSON.stringify(finalizeData)
+        });
+        
+        // Close modal
+        const bootstrapModal = bootstrap.Modal.getInstance(modal);
+        bootstrapModal.hide();
+        
+        // Clear cart and reset form
+        cartManager.clear();
+        window.currentOrderId = null;
+        window.originalOrderData = null;
+        
+        // Refresh pending orders
+        loadPendingOrders();
+        
+        showNotification(`Orden #${order.id} facturada exitosamente - NCF: ${response.ncf || 'N/A'}`, 'success');
+        
+    } catch (error) {
+        console.error('[Billing] Error finalizing order:', error);
+        showNotification(`Error facturando la orden: ${error.message}`, 'error');
+        
+        // Re-enable button
+        const finalizeBtn = modal.querySelector('#finalizeBillingBtn');
+        if (finalizeBtn) {
+            finalizeBtn.disabled = false;
+            finalizeBtn.innerHTML = '<i class="bi bi-check-circle"></i> Finalizar Facturación';
+        }
     }
 }
 
