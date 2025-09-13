@@ -128,12 +128,20 @@ def create_sale():
         
         data = request.get_json() or {}  # Default to empty dict if no JSON
         
+        # Validate that table_id is provided (required for all sales)
+        table_id = data.get('table_id')
+        if not table_id:
+            return jsonify({'error': 'Una mesa debe ser asignada para crear una orden'}), 400
+        
+        # Validate that the table exists
+        table = models.Table.query.get(int(table_id))
+        if not table:
+            return jsonify({'error': f'Mesa {table_id} no encontrada'}), 400
+        
         # Create new sale (waiters don't need cash registers initially)
         sale = models.Sale()
         sale.user_id = user.id
-        table_id = data.get('table_id')
-        if table_id is not None:
-            sale.table_id = int(table_id)
+        sale.table_id = int(table_id)
         sale.description = data.get('description', '')
         sale.subtotal = 0
         sale.tax_amount = 0

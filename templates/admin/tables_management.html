@@ -20,9 +20,13 @@
     {% if tables_with_orders %}
     <div class="mb-5">
         <h4 class="text-primary mb-3">
-            <i class="bi bi-clipboard-check"></i> Mesas con Órdenes Activas 
+            <i class="bi bi-receipt-cutoff"></i> Mesas con Órdenes Pendientes de Facturación 
             <span class="badge bg-primary">{{ tables_with_orders|length }}</span>
         </h4>
+        <div class="alert alert-info mb-4">
+            <i class="bi bi-info-circle"></i>
+            <strong>Administradores y Cajeros:</strong> Pueden facturar las órdenes directamente desde aquí.
+        </div>
         <div class="row">
             {% for table_data in tables_with_orders %}
             {% set table = table_data.table %}
@@ -42,16 +46,21 @@
                     </div>
                     <div class="card-body">
                         <div class="row mb-3">
-                            <div class="col-6">
-                                <p class="mb-1"><i class="bi bi-people"></i> {{ table.capacity }} personas</p>
-                                <p class="mb-1">
-                                    <i class="bi bi-receipt"></i> 
-                                    {{ order_items_count }} {% if order_items_count == 1 %}producto{% else %}productos{% endif %}
-                                </p>
-                            </div>
-                            <div class="col-6 text-end">
-                                <p class="mb-1"><strong>Venta ID:</strong> {{ current_sale.id }}</p>
-                                <p class="mb-1 text-success"><strong>RD$ {{ "%.2f"|format(order_total) }}</strong></p>
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <p class="mb-1"><i class="bi bi-people"></i> {{ table.capacity }} personas</p>
+                                        <p class="mb-1">
+                                            <i class="bi bi-receipt"></i> 
+                                            {{ order_items_count }} {% if order_items_count == 1 %}producto{% else %}productos{% endif %}
+                                        </p>
+                                        <p class="mb-0"><strong>Orden #{{ current_sale.id }}</strong></p>
+                                    </div>
+                                    <div class="text-end">
+                                        <h4 class="text-success mb-0">RD$ {{ "%.2f"|format(order_total) }}</h4>
+                                        <small class="text-muted">Total a facturar</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         
@@ -76,12 +85,23 @@
                         {% endif %}
                         
                         <div class="d-grid gap-2">
-                            <button class="btn btn-success btn-lg" onclick="billTable({{ table.id }}, {{ current_sale.id }}, {{ order_total }})">
-                                <i class="bi bi-credit-card"></i> Facturar Mesa
-                            </button>
-                            <button class="btn btn-outline-info btn-sm" onclick="viewOrderDetails({{ current_sale.id }})">
-                                <i class="bi bi-eye"></i> Ver Detalles
-                            </button>
+                            {% if order_total > 0 %}
+                                <button class="btn btn-success btn-lg shadow" onclick="billTable({{ table.id }}, {{ current_sale.id }}, {{ order_total }})">
+                                    <i class="bi bi-credit-card"></i> <strong>Facturar Orden</strong>
+                                </button>
+                            {% else %}
+                                <button class="btn btn-outline-secondary btn-lg" disabled>
+                                    <i class="bi bi-exclamation-triangle"></i> Orden Vacía
+                                </button>
+                            {% endif %}
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-outline-info" onclick="viewOrderDetails({{ current_sale.id }})">
+                                    <i class="bi bi-eye"></i> Ver Detalles
+                                </button>
+                                <button class="btn btn-outline-warning" onclick="editOrder({{ current_sale.id }})">
+                                    <i class="bi bi-pencil"></i> Editar
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="card-footer text-muted text-center">
@@ -106,25 +126,38 @@
     <!-- Available Tables -->
     {% if tables_available %}
     <div>
-        <h4 class="text-muted mb-3">
-            <i class="bi bi-check-circle"></i> Mesas Disponibles 
-            <span class="badge bg-secondary">{{ tables_available|length }}</span>
+        <h4 class="text-success mb-3">
+            <i class="bi bi-check-circle"></i> Mesas Disponibles para Nuevas Órdenes
+            <span class="badge bg-success">{{ tables_available|length }}</span>
         </h4>
+        <div class="alert alert-success">
+            <i class="bi bi-info-circle"></i>
+            <strong>Meseros:</strong> Pueden crear nuevas órdenes en estas mesas desde el POS.
+        </div>
         <div class="row">
             {% for table_data in tables_available %}
             {% set table = table_data.table %}
             
             <div class="col-md-4 col-lg-3 mb-3">
                 <div class="card border-success h-100">
-                    <div class="card-body text-center">
-                        <h5>
+                    <div class="card-header bg-success text-white text-center">
+                        <h6 class="mb-0">
                             <i class="bi bi-table"></i> Mesa {{ table.number }}
-                        </h5>
+                        </h6>
+                    </div>
+                    <div class="card-body text-center">
                         {% if table.name %}
-                        <p class="text-muted">{{ table.name }}</p>
+                        <p class="text-muted mb-2">{{ table.name }}</p>
                         {% endif %}
-                        <p><i class="bi bi-people"></i> {{ table.capacity }} personas</p>
-                        <span class="badge bg-success">Disponible</span>
+                        <p class="mb-2"><i class="bi bi-people"></i> {{ table.capacity }} personas</p>
+                        <span class="badge bg-success mb-2">
+                            <i class="bi bi-check-circle"></i> Disponible
+                        </span>
+                        <div class="mt-2">
+                            <a href="/admin/pos?table_id={{ table.id }}" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-plus-circle"></i> Nueva Orden
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -389,6 +422,12 @@ async function viewOrderDetails(saleId) {
 function getCsrfToken() {
     const token = document.querySelector('meta[name=csrf-token]');
     return token ? token.getAttribute('content') : '';
+}
+
+// Edit order function
+function editOrder(saleId) {
+    // Redirect to POS with the sale ID to edit the order
+    window.location.href = `/admin/pos?edit_sale=${saleId}`;
 }
 
 // Auto refresh page every 30 seconds to show updated table status
