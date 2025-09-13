@@ -63,12 +63,12 @@
         </div>
         
         <div class="col-lg-3 col-md-6">
-            <div class="stats-card" style="background: var(--accent-primary); color: white;">
-                <div class="stats-label" style="color: rgba(255,255,255,1.0);">Promedio por Venta</div>
-                <div class="stats-value" style="color: #ffffff !important; font-weight: 700 !important; text-shadow: 0 2px 4px rgba(0,0,0,0.3) !important; font-size: 1.8rem !important;">
+            <div class="stats-card average-sale-card">
+                <div class="stats-label">Promedio por Venta</div>
+                <div class="stats-value average-sale-value">
                     RD$ {% if daily_transactions > 0 %}{{ "%.0f"|format(daily_sales / daily_transactions) }}{% else %}0{% endif %}
                 </div>
-                <div class="d-flex align-items-center" style="color: rgba(255,255,255,0.95);">
+                <div class="d-flex align-items-center text-info">
                     <i class="bi bi-calculator me-1"></i>
                     <small>Ticket promedio</small>
                 </div>
@@ -157,7 +157,7 @@
                                     <i class="bi bi-cart-plus me-2"></i>
                                     Módulo de Compras
                                 </a>
-                                <a href="{{ url_for('admin.company_settings') }}" class="btn btn-outline-dark">
+                                <a href="{{ url_for('admin.company_settings') }}" class="btn btn-outline-light">
                                     <i class="bi bi-gear me-2"></i>
                                     Configuración de Empresa
                                 </a>

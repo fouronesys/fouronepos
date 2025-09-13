@@ -184,6 +184,60 @@ body {
     transform: scale(1.1);
 }
 
+/* Specific styling for average sale card */
+.average-sale-card {
+    background: linear-gradient(135deg, #667eea 0%, #1e88e5 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.average-sale-value {
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+    font-size: 2.2rem !important;
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+    -webkit-text-fill-color: unset !important;
+}
+
+.average-sale-card .stats-label {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+}
+
+.average-sale-card .stats-icon {
+    color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.average-sale-card .text-info {
+    color: #ffffff !important;
+}
+
+/* Theme-aware company settings button */
+.btn-outline-light {
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+.btn-outline-light:hover {
+    background-color: var(--text-primary) !important;
+    border-color: var(--text-primary) !important;
+    color: var(--bg-primary) !important;
+}
+
+/* Light theme specific overrides */
+[data-theme='light'] .btn-outline-light {
+    color: #333333 !important;
+    border-color: #333333 !important;
+}
+
+[data-theme='light'] .btn-outline-light:hover {
+    background-color: #333333 !important;
+    border-color: #333333 !important;
+    color: #ffffff !important;
+}
+
 /* === MODERN BUTTONS === */
 .btn {
     border-radius: var(--radius-lg);
