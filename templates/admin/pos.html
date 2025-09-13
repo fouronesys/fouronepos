@@ -291,6 +291,129 @@
 // Get CSRF token from meta tag
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
+// Get CSRF token from document
+function getCsrfToken() {
+    const metaTag = document.querySelector('meta[name="csrf-token"]');
+    if (metaTag) {
+        return metaTag.content;
+    }
+    
+    // Fallback: try to get from hidden input
+    const hiddenInput = document.querySelector('input[name="csrf_token"]');
+    if (hiddenInput) {
+        return hiddenInput.value;
+    }
+    
+    console.error('[Utils] CSRF token not found');
+    return null;
+}
+
+// Centralized API request function with CSRF and proper error handling
+async function apiRequest(url, options = {}) {
+    const defaultOptions = {
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    };
+    
+    // Add CSRF token for non-GET requests
+    if (options.method && options.method !== 'GET') {
+        const csrfToken = getCsrfToken();
+        if (csrfToken) {
+            defaultOptions.headers['X-CSRFToken'] = csrfToken;
+        }
+    }
+    
+    // Merge options
+    const finalOptions = {
+        ...defaultOptions,
+        ...options,
+        headers: {
+            ...defaultOptions.headers,
+            ...options.headers
+        }
+    };
+    
+    try {
+        const response = await fetch(url, finalOptions);
+        
+        // Try to parse JSON response
+        let data = {};
+        try {
+            const text = await response.text();
+            if (text) {
+                data = JSON.parse(text);
+            }
+        } catch (parseError) {
+            console.error('[API] Failed to parse JSON response:', parseError);
+            data = { error: 'Invalid server response' };
+        }
+        
+        // Check if request was successful
+        if (!response.ok) {
+            const errorMessage = data.error || data.details || `${response.status} ${response.statusText}`;
+            throw new Error(errorMessage);
+        }
+        
+        return data;
+        
+    } catch (error) {
+        console.error('[API] Request failed:', error.message || error);
+        throw error;
+    }
+}
+
+// Show notification to user
+function showNotification(message, type = 'info') {
+    // Create or update notification element
+    let notification = document.getElementById('notification');
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.id = 'notification';
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            z-index: 9999;
+            font-weight: 600;
+            max-width: 300px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            transition: all 0.3s ease;
+            transform: translateX(100%);
+        `;
+        document.body.appendChild(notification);
+    }
+    
+    // Set notification style based on type
+    const colors = {
+        success: 'background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%); color: #000;',
+        error: 'background: linear-gradient(135deg, #ff4757 0%, #ff3742 100%); color: #fff;',
+        warning: 'background: linear-gradient(135deg, #ffa500 0%, #ff8c00 100%); color: #000;',
+        info: 'background: linear-gradient(135deg, #00d4ff 0%, #0ea5e9 100%); color: #000;'
+    };
+    
+    notification.style.cssText += colors[type] || colors.info;
+    notification.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <i class="bi bi-${type === 'success' ? 'check-circle' : type === 'error' ? 'x-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'}"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    // Show notification
+    setTimeout(() => notification.style.transform = 'translateX(0)', 100);
+    
+    // Hide notification after 5 seconds
+    setTimeout(() => {
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => notification.remove(), 300);
+    }, 5000);
+}
+
 // Cart Management with localStorage
 class CartManager {
     constructor() {
@@ -1359,7 +1482,7 @@ function getOrderStatusText(status) {
 async function billOrder(orderId) {
     try {
         // Clear current cart first
-        cartManager.clearCart();
+        cartManager.clear();
         
         // Get order details using centralized API function
         const orderData = await apiRequest(`/api/sales/${orderId}/details`);
