@@ -5,9 +5,9 @@
 {% block head %}
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pos-style.css') }}?v=20250912065500">
-<!-- Organized JavaScript Files -->
-<script src="{{ url_for('static', filename='js/pos-utils.js') }}?v={{ timestamp }}"></script>
-<script src="{{ url_for('static', filename='js/payment-system.js') }}?v={{ timestamp }}"></script>
+<!-- Organized JavaScript Files - Load with defer for proper DOM loading -->
+<script defer src="{{ url_for('static', filename='js/pos-utils.js') }}?v={{ timestamp }}"></script>
+<script defer src="{{ url_for('static', filename='js/payment-system.js') }}?v={{ timestamp }}"></script>
 {% endblock %}
 
 {% block content %}
