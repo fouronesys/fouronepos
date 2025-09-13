@@ -123,15 +123,23 @@ class DominicanReceiptGenerator:
     def _build_company_header(self, company_info: Dict[str, str]) -> List:
         content = []
 
-        if company_info.get('logo') and os.path.exists(company_info['logo']):
-            try:
-                logo_w, logo_h = (14*mm, 10*mm) if self.format_type == '58mm' else (20*mm, 15*mm)
-                logo = Image(company_info['logo'], width=logo_w, height=logo_h)
-                logo.hAlign = 'CENTER'
-                content.append(logo)
-                content.append(Spacer(1, 2*mm))
-            except:
-                pass
+        logo_path = company_info.get('logo', '')
+        if logo_path:
+            # Convert web URL to file system path
+            if logo_path.startswith('/'):
+                file_path = logo_path.lstrip('/')
+            else:
+                file_path = logo_path
+            
+            if os.path.exists(file_path):
+                try:
+                    logo_w, logo_h = (14*mm, 10*mm) if self.format_type == '58mm' else (20*mm, 15*mm)
+                    logo = Image(file_path, width=logo_w, height=logo_h)
+                    logo.hAlign = 'CENTER'
+                    content.append(logo)
+                    content.append(Spacer(1, 2*mm))
+                except:
+                    pass
 
         content.append(Paragraph(company_info['name'], self.styles['CompanyName']))
 
@@ -197,8 +205,17 @@ class DominicanReceiptGenerator:
         tax = sale_data.get('tax_amount', calculate_itbis(subtotal))
         total = sale_data.get('total', subtotal + tax)
 
+        # Calculate tax rate for display (avoid division by zero)
+        tax_rate_display = "ITBIS"
+        if subtotal > 0 and tax > 0:
+            tax_percentage = round((tax / subtotal) * 100)
+            tax_rate_display = f"ITBIS ({tax_percentage}%)"
+        elif tax == 0:
+            tax_rate_display = "Sin impuestos"
+
         content.append(Paragraph(f"Subtotal: {format_currency_rd(subtotal)}", self.styles['Item']))
-        content.append(Paragraph(f"ITBIS (18%): {format_currency_rd(tax)}", self.styles['Item']))
+        if tax > 0:  # Only show tax line if there is tax
+            content.append(Paragraph(f"{tax_rate_display}: {format_currency_rd(tax)}", self.styles['Item']))
         content.append(Paragraph(f"<b>TOTAL: {format_currency_rd(total)}</b>", self.styles['Total']))
         return content
 
@@ -265,8 +282,17 @@ class DominicanReceiptGenerator:
         tax = sale_data.get('tax_amount', calculate_itbis(subtotal))
         total = sale_data.get('total', subtotal + tax)
 
+        # Calculate tax rate for display (avoid division by zero)
+        tax_rate_display = "ITBIS"
+        if subtotal > 0 and tax > 0:
+            tax_percentage = round((tax / subtotal) * 100)
+            tax_rate_display = f"ITBIS ({tax_percentage}%)"
+        elif tax == 0:
+            tax_rate_display = "Sin impuestos"
+
         r.append(f"{'Subtotal:':<20}{format_currency_rd(subtotal):>12}")
-        r.append(f"{'ITBIS (18%):':<20}{format_currency_rd(tax):>12}")
+        if tax > 0:  # Only show tax line if there is tax
+            r.append(f"{tax_rate_display + ':':<20}{format_currency_rd(tax):>12}")
         r.append("=" * self.text_width)
         r.append(f"{'TOTAL:':<20}{format_currency_rd(total):>12}")
         r.append("=" * self.text_width)

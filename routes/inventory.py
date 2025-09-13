@@ -476,8 +476,16 @@ def create_purchase():
         except (ValueError, TypeError) as e:
             return jsonify({'error': f'Error en item {i+1}: {str(e)}'}), 400
     
-    # Calculate taxes using Dominican Republic rates
-    tax_rate = 0.18  # 18% ITBIS for Dominican Republic
+    # SECURITY: Validate tax rate to prevent compliance violations
+    tax_rate = data.get('tax_rate', 0.18)
+    try:
+        tax_rate = float(tax_rate)
+        # Only allow 0% (sin impuestos) or 18% (ITBIS) for Dominican Republic compliance
+        if tax_rate not in [0.0, 0.18]:
+            return jsonify({'error': 'Tasa de impuesto inválida. Solo se permite 0% o 18% ITBIS'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Tasa de impuesto debe ser un número válido'}), 400
+    
     calculated_tax = utils.calculate_itbis(calculated_subtotal, tax_rate)
     calculated_total = calculated_subtotal + calculated_tax
     

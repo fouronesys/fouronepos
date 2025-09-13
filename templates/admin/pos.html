@@ -132,6 +132,20 @@
                     </div>
                 </div>
                 
+                <!-- Tax Configuration Section -->
+                <div class="cart-config">
+                    <div class="config-item">
+                        <label for="tax-type-select" class="config-label">
+                            <i class="bi bi-percent"></i>
+                            <span>Tipo de Impuesto</span>
+                        </label>
+                        <select class="modern-input" id="tax-type-select" onchange="updateTaxCalculation()">
+                            <option value="0.18">ITBIS (18%)</option>
+                            <option value="0.00">Sin impuestos</option>
+                        </select>
+                    </div>
+                </div>
+                
                 <!-- Cart Items -->
                 <div class="cart-items-container">
                     <div id="cart-items" class="cart-items">
@@ -149,8 +163,8 @@
                         <span>Subtotal</span>
                         <span id="subtotal">RD$ 0.00</span>
                     </div>
-                    <div class="total-row tax-row">
-                        <span>ITBIS (18%)</span>
+                    <div class="total-row tax-row" id="tax-row">
+                        <span id="tax-label">ITBIS (18%)</span>
                         <span id="tax">RD$ 0.00</span>
                     </div>
                     <div class="total-row final-row">
@@ -310,9 +324,10 @@ class CartManager {
     // Get cart totals
     getTotals() {
         const subtotal = this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        const tax = subtotal * 0.18;
+        const taxRate = getCurrentTaxRate();
+        const tax = subtotal * taxRate;
         const total = subtotal + tax;
-        return { subtotal, tax, total };
+        return { subtotal, tax, total, taxRate };
     }
 
     // Setup service worker communication
@@ -575,6 +590,17 @@ function switchCategory(categoryId) {
     loadProducts(categoryId);
 }
 
+// Get current tax rate from selector
+function getCurrentTaxRate() {
+    const taxSelect = document.getElementById('tax-type-select');
+    return taxSelect ? parseFloat(taxSelect.value) : 0.18;
+}
+
+// Update tax calculation when type changes
+function updateTaxCalculation() {
+    updateCartDisplay();
+}
+
 // Add product to cart (using CartManager)
 function addToCart(productId, productName, price) {
     cartManager.addItem(productId, productName, price);
@@ -625,6 +651,20 @@ function updateCartDisplay() {
     document.getElementById('subtotal').textContent = `RD$ ${totals.subtotal.toFixed(2)}`;
     document.getElementById('tax').textContent = `RD$ ${totals.tax.toFixed(2)}`;
     document.getElementById('total').textContent = `RD$ ${totals.total.toFixed(2)}`;
+    
+    // Update tax label based on selected type
+    const taxRate = totals.taxRate || getCurrentTaxRate();
+    const taxLabel = document.getElementById('tax-label');
+    if (taxLabel) {
+        if (taxRate === 0) {
+            taxLabel.textContent = 'Sin impuestos';
+            document.getElementById('tax-row').style.display = 'none';
+        } else {
+            const percentage = Math.round(taxRate * 100);
+            taxLabel.textContent = `ITBIS (${percentage}%)`;
+            document.getElementById('tax-row').style.display = 'flex';
+        }
+    }
     
     // Update legacy cart variable for backward compatibility
     cart = items;
@@ -781,7 +821,8 @@ function processSale() {
         // Finalize sale
         const finalizationData = {
             payment_method: 'efectivo',
-            ncf_type: ncfType
+            ncf_type: ncfType,
+            tax_rate: getCurrentTaxRate()
         };
         
         // Add client info for fiscal/government invoices

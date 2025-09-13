@@ -100,7 +100,14 @@
                             </div>
                         </div>
                         <div class="col-md-6">
-                    </div>
+                            <div class="mb-3">
+                                <label for="purchaseTaxType" class="form-label">Tipo de Impuesto</label>
+                                <select class="form-select" id="purchaseTaxType" onchange="updatePurchaseTotals()">
+                                    <option value="0.18">ITBIS (18%)</option>
+                                    <option value="0.00">Sin impuestos</option>
+                                </select>
+                            </div>
+                        </div>
                     
                     <div class="mb-3">
                         <label for="purchaseNotes" class="form-label">Notas</label>
@@ -128,8 +135,8 @@
                                         <span>Subtotal:</span>
                                         <span id="purchaseSubtotal">RD$ 0.00</span>
                                     </div>
-                                    <div class="d-flex justify-content-between">
-                                        <span>ITBIS (18%):</span>
+                                    <div class="d-flex justify-content-between" id="purchaseTaxRow">
+                                        <span id="purchaseTaxLabel">ITBIS (18%):</span>
                                         <span id="purchaseTax">RD$ 0.00</span>
                                     </div>
                                     <hr>
@@ -254,8 +261,21 @@ function updatePurchaseTotals() {
         subtotal += total;
     });
     
-    const tax = subtotal * 0.18;
+    const taxRate = parseFloat(document.getElementById('purchaseTaxType').value || 0.18);
+    const tax = subtotal * taxRate;
     const total = subtotal + tax;
+    
+    // Update tax label and visibility
+    const taxRow = document.getElementById('purchaseTaxRow');
+    const taxLabel = document.getElementById('purchaseTaxLabel');
+    if (taxRate === 0) {
+        taxLabel.textContent = 'Sin impuestos:';
+        taxRow.style.display = 'none';
+    } else {
+        const percentage = Math.round(taxRate * 100);
+        taxLabel.textContent = `ITBIS (${percentage}%):`;
+        taxRow.style.display = 'flex';
+    }
     
     document.getElementById('purchaseSubtotal').textContent = `RD$ ${subtotal.toFixed(2)}`;
     document.getElementById('purchaseTax').textContent = `RD$ ${tax.toFixed(2)}`;
@@ -304,8 +324,9 @@ async function savePurchase() {
         return;
     }
     
+    const taxRate = parseFloat(document.getElementById('purchaseTaxType').value || 0.18);
     const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_cost), 0);
-    const tax = subtotal * 0.18;
+    const tax = subtotal * taxRate;
     const total = subtotal + tax;
     
     const purchaseData = {
@@ -314,6 +335,7 @@ async function savePurchase() {
         ncf_type: ncfType, // Include NCF type for validation
         total_amount: total,
         tax_amount: tax,
+        tax_rate: taxRate, // Include tax rate for backend
         notes: notes,
         items: items
     };

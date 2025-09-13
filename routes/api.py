@@ -235,6 +235,16 @@ def finalize_sale(sale_id):
     ncf_type = data.get('ncf_type', 'consumo')
     payment_method = data.get('payment_method', 'efectivo')
     
+    # SECURITY: Validate tax_rate to prevent compliance violations
+    tax_rate = data.get('tax_rate', 0.18)
+    try:
+        tax_rate = float(tax_rate)
+        # Only allow 0% (sin impuestos) or 18% (ITBIS) for Dominican Republic compliance
+        if tax_rate not in [0.0, 0.18]:
+            return jsonify({'error': 'Tasa de impuesto inválida. Solo se permite 0% o 18% ITBIS'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Tasa de impuesto debe ser un número válido'}), 400
+    
     # Get client info for fiscal/government invoices
     customer_name = data.get('client_name')
     customer_rnc = data.get('client_rnc')
@@ -343,6 +353,11 @@ def finalize_sale(sale_id):
         sale.ncf = ncf_number
         sale.payment_method = payment_method
         sale.status = 'completed'
+        
+        # Recalculate totals with the dynamic tax rate before finalizing
+        sale.subtotal = sum(item.total_price for item in sale.sale_items)
+        sale.tax_amount = sale.subtotal * tax_rate
+        sale.total = sale.subtotal + sale.tax_amount
         
         # Add client info for fiscal/government invoices (NCF compliance)
         if customer_name and customer_rnc and ncf_type in ['credito_fiscal', 'gubernamental']:
