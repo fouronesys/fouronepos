@@ -46,19 +46,11 @@ def validate_csrf_token():
         elif request.headers.get('X-CSRFToken'):
             csrf_token = request.headers.get('X-CSRFToken')
         
-        # DEBUG: Log what we found
-        print(f"[CSRF DEBUG] Token from header: {request.headers.get('X-CSRFToken')[:10] if request.headers.get('X-CSRFToken') else 'None'}")
-        print(f"[CSRF DEBUG] Token from JSON: {request.get_json().get('csrf_token')[:10] if request.is_json and request.get_json() and request.get_json().get('csrf_token') else 'None'}")
-        print(f"[CSRF DEBUG] Final token: {csrf_token[:10] if csrf_token else 'None'}")
-        
         if not csrf_token:
-            print("[CSRF DEBUG] No token found")
             return jsonify({'error': 'Token de seguridad requerido (csrf_token)'}), 400
             
         validate_csrf(csrf_token)
-        print("[CSRF DEBUG] Token validation successful")
-    except BadRequest as e:
-        print(f"[CSRF DEBUG] Token validation failed: {str(e)}")
+    except BadRequest:
         return jsonify({'error': 'Token de seguridad inválido'}), 400
     return None  # Success
 
@@ -200,28 +192,19 @@ def add_sale_item(sale_id):
     
     # CRITICAL: Use transactional locking to prevent post-finalization mutations
     try:
-        print(f"[DEBUG ADD ITEM] Adding item to sale {sale_id}, product {data['product_id']}, qty {data['quantity']}")
-        
         # Lock the sale to prevent concurrent finalization
         sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
         if not sale:
-            print(f"[DEBUG ADD ITEM] Sale {sale_id} not found")
             return jsonify({'error': 'Venta no encontrada'}), 404
-        
-        print(f"[DEBUG ADD ITEM] Sale {sale_id} found, status: {sale.status}")
         
         # CRITICAL: Re-check sale status after acquiring lock (prevents post-finalization mutations)
         if sale.status != 'pending':
-            print(f"[DEBUG ADD ITEM] Sale {sale_id} is not pending (status: {sale.status})")
             return jsonify({'error': 'Solo se pueden modificar ventas pendientes'}), 400
         
         # Lock product to ensure consistent stock validation
         product = db.session.query(models.Product).filter_by(id=data['product_id']).with_for_update().first()
         if not product:
-            print(f"[DEBUG ADD ITEM] Product {data['product_id']} not found")
             return jsonify({'error': 'Producto no encontrado'}), 404
-
-        print(f"[DEBUG ADD ITEM] Product found: {product.name}, stock: {product.stock}")
 
         # Check for existing sale items of the same product in this sale
         existing_quantity = db.session.query(db.func.sum(models.SaleItem.quantity)).filter_by(
@@ -229,21 +212,14 @@ def add_sale_item(sale_id):
             product_id=product.id
         ).scalar() or 0
         
-        print(f"[DEBUG ADD ITEM] Existing quantity in sale: {existing_quantity}")
-        
         # Calculate total quantity (existing + new)
         total_quantity = existing_quantity + quantity
         
-        print(f"[DEBUG ADD ITEM] Total quantity needed: {total_quantity}, available stock: {product.stock}")
-        
         # Check stock availability against total quantity
         if product.stock < total_quantity:
-            print(f"[DEBUG ADD ITEM] Insufficient stock: need {total_quantity}, have {product.stock}")
             return jsonify({
                 'error': f'Stock insuficiente para {product.name}. Disponible: {product.stock}, ya en venta: {existing_quantity}, solicitado: {quantity}'
             }), 400
-            
-        print(f"[DEBUG ADD ITEM] Stock check passed, proceeding to create/update sale item")
 
         # Check if product already exists in this sale - merge quantities instead of creating duplicate lines
         existing_item = models.SaleItem.query.filter_by(sale_id=sale_id, product_id=product.id).first()
