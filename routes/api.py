@@ -206,17 +206,17 @@ def add_sale_item(sale_id):
         if not product:
             return jsonify({'error': 'Producto no encontrado'}), 404
 
+        # Check for existing sale items of the same product in this sale (always needed)
+        existing_quantity = db.session.query(db.func.sum(models.SaleItem.quantity)).filter_by(
+            sale_id=sale_id, 
+            product_id=product.id
+        ).scalar() or 0
+        
+        # Calculate total quantity (existing + new) - needed for all products
+        total_quantity = existing_quantity + quantity
+        
         # Only validate stock for inventariable products, not consumables
         if product.product_type == 'inventariable':
-            # Check for existing sale items of the same product in this sale
-            existing_quantity = db.session.query(db.func.sum(models.SaleItem.quantity)).filter_by(
-                sale_id=sale_id, 
-                product_id=product.id
-            ).scalar() or 0
-            
-            # Calculate total quantity (existing + new)
-            total_quantity = existing_quantity + quantity
-            
             # Check stock availability against total quantity
             if product.stock < total_quantity:
                 return jsonify({
@@ -304,24 +304,39 @@ def add_sale_item(sale_id):
 
 @bp.route('/sales/<int:sale_id>/finalize', methods=['POST'])
 def finalize_sale(sale_id):
+    print(f"[DEBUG FINALIZE START] Finalize sale {sale_id} called")
+    
     user = require_login()
     if not isinstance(user, models.User):
+        print(f"[DEBUG FINALIZE] User login failed")
         return user
+    
+    print(f"[DEBUG FINALIZE] User logged in: {user.username}, role: {user.role.value}")
     
     # Validate CSRF token  
     csrf_error = validate_csrf_token()
     if csrf_error:
+        print(f"[DEBUG FINALIZE] CSRF validation failed")
         return csrf_error
+    
+    print(f"[DEBUG FINALIZE] CSRF validation passed")
     
     # ROLE RESTRICTION: Only cashiers and administrators can finalize sales
     if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
+        print(f"[DEBUG FINALIZE] Role check failed: {user.role.value}")
         return jsonify({'error': 'Solo cajeros y administradores pueden finalizar ventas'}), 403
     
     data = request.get_json()
     
     # Get NCF type from request (default to consumo)
-    ncf_type = data.get('ncf_type', 'consumo')
+    ncf_type_raw = data.get('ncf_type', 'consumo')
     payment_method = data.get('payment_method', 'efectivo')
+    
+    # Handle "sin_comprobante" case - treat as consumo type
+    if ncf_type_raw == 'sin_comprobante':
+        ncf_type = 'consumo'
+    else:
+        ncf_type = ncf_type_raw
     
     # NOTE: Tax rates are now calculated automatically from individual products
     # No need to validate user-provided tax_rate as we calculate from sale items
@@ -333,6 +348,8 @@ def finalize_sale(sale_id):
     # CRITICAL FIX: Idempotent sale finalization with proper locking to prevent NCF race conditions
     # This ensures exactly one NCF per sale even under concurrent finalization requests
     try:
+        print(f"[DEBUG FINALIZE] Attempting to finalize sale {sale_id} with NCF type {ncf_type}")
+        
         # Get sale with row-level lock to prevent concurrent modifications
         sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
         
