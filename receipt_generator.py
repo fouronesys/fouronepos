@@ -69,13 +69,13 @@ class DominicanReceiptGenerator:
         styles.add(ParagraphStyle(
             name='Item',
             fontSize=8,
-            alignment=TA_LEFT,
+            alignment=TA_CENTER,
             fontName='Helvetica'
         ))
         styles.add(ParagraphStyle(
             name='Total',
             fontSize=10,
-            alignment=TA_RIGHT,
+            alignment=TA_CENTER,
             fontName='Helvetica-Bold',
             textColor=colors.black,
             spaceBefore=4,
@@ -115,7 +115,6 @@ class DominicanReceiptGenerator:
         content.extend(self._build_receipt_details(sale_data))
         content.extend(self._build_items_list(sale_data))
         content.extend(self._build_totals_section(sale_data))
-        content.extend(self._build_fiscal_info(sale_data, company_info))
         content.extend(self._build_footer(company_info))
 
         doc.build(content)
@@ -146,7 +145,7 @@ class DominicanReceiptGenerator:
         return content
 
     def _build_receipt_details(self, sale_data: Dict[str, Any]) -> List:
-        content = [Paragraph("RECIBO FISCAL", self.styles['ReceiptHeader'])]
+        content = []
 
         sale_date = sale_data.get('created_at', datetime.now())
         if isinstance(sale_date, str):
@@ -171,7 +170,6 @@ class DominicanReceiptGenerator:
         """Build items list without table - optimized for thermal printing"""
         content = []
         
-        content.append(Paragraph("DETALLE DE COMPRA", self.styles['ReceiptHeader']))
         content.append(Paragraph("-" * (self.text_width if hasattr(self, 'text_width') else 32), self.styles['Item']))
         
         items = sale_data.get('items', [])
@@ -242,7 +240,6 @@ class DominicanReceiptGenerator:
         if company_info.get('address'): r.append(c(company_info['address']))
         if company_info.get('phone'): r.append(c(f"Tel: {company_info['phone']}"))
         r.append("=" * self.text_width)
-        r.append(c("RECIBO FISCAL"))
         r.append("-" * self.text_width)
 
         sale_date = sale_data.get('created_at', datetime.now())
