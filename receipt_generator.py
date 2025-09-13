@@ -202,20 +202,22 @@ class DominicanReceiptGenerator:
     def _build_totals_section(self, sale_data: Dict[str, Any]) -> List:
         content = []
         subtotal = sale_data.get('subtotal', 0)
-        tax = sale_data.get('tax_amount', calculate_itbis(subtotal))
+        # FIX: Don't calculate default ITBIS - use actual tax_amount from sale data
+        tax = sale_data.get('tax_amount', 0)  # Use 0 as default instead of calculating
         total = sale_data.get('total', subtotal + tax)
 
         # Calculate tax rate for display (avoid division by zero)
-        tax_rate_display = "ITBIS"
+        tax_rate_display = "Sin impuestos"
         if subtotal > 0 and tax > 0:
             tax_percentage = round((tax / subtotal) * 100)
             tax_rate_display = f"ITBIS ({tax_percentage}%)"
-        elif tax == 0:
-            tax_rate_display = "Sin impuestos"
 
         content.append(Paragraph(f"Subtotal: {format_currency_rd(subtotal)}", self.styles['Item']))
-        if tax > 0:  # Only show tax line if there is tax
+        # Only show tax line if there is actual tax (greater than 0.01 to avoid rounding issues)
+        if tax > 0.01:
             content.append(Paragraph(f"{tax_rate_display}: {format_currency_rd(tax)}", self.styles['Item']))
+        elif tax == 0:
+            content.append(Paragraph("Sin impuestos", self.styles['Item']))
         content.append(Paragraph(f"<b>TOTAL: {format_currency_rd(total)}</b>", self.styles['Total']))
         return content
 
@@ -279,20 +281,22 @@ class DominicanReceiptGenerator:
 
         r.append("-" * self.text_width)
         subtotal = sale_data.get('subtotal', 0)
-        tax = sale_data.get('tax_amount', calculate_itbis(subtotal))
+        # FIX: Don't calculate default ITBIS - use actual tax_amount from sale data
+        tax = sale_data.get('tax_amount', 0)  # Use 0 as default instead of calculating
         total = sale_data.get('total', subtotal + tax)
 
         # Calculate tax rate for display (avoid division by zero)
-        tax_rate_display = "ITBIS"
+        tax_rate_display = "Sin impuestos"
         if subtotal > 0 and tax > 0:
             tax_percentage = round((tax / subtotal) * 100)
             tax_rate_display = f"ITBIS ({tax_percentage}%)"
-        elif tax == 0:
-            tax_rate_display = "Sin impuestos"
 
         r.append(f"{'Subtotal:':<20}{format_currency_rd(subtotal):>12}")
-        if tax > 0:  # Only show tax line if there is tax
+        # Only show tax line if there is actual tax (greater than 0.01 to avoid rounding issues)
+        if tax > 0.01:
             r.append(f"{tax_rate_display + ':':<20}{format_currency_rd(tax):>12}")
+        elif tax == 0:
+            r.append(f"{'Sin impuestos':<20}{'':>12}")
         r.append("=" * self.text_width)
         r.append(f"{'TOTAL:':<20}{format_currency_rd(total):>12}")
         r.append("=" * self.text_width)
