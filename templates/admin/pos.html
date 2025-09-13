@@ -2721,9 +2721,20 @@ function printCashSummary() {
     `;
     
     const printWindow = window.open('', '_blank');
+    
+    // Set up load handler before writing content to avoid race condition
+    printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+        
+        // Close print window after printing
+        setTimeout(() => {
+            printWindow.close();
+        }, 500);
+    };
+    
     printWindow.document.write(printContent);
     printWindow.document.close();
-    printWindow.print();
 }
 </script>
 {% endblock %}
