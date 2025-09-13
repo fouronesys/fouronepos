@@ -349,16 +349,23 @@ def finalize_sale(sale_id):
     # This ensures exactly one NCF per sale even under concurrent finalization requests
     try:
         print(f"[DEBUG FINALIZE] Attempting to finalize sale {sale_id} with NCF type {ncf_type}")
+        print(f"[DEBUG FINALIZE] Payment method: {payment_method}")
+        print(f"[DEBUG FINALIZE] Customer info: name={customer_name}, rnc={customer_rnc}")
         
         # Get sale with row-level lock to prevent concurrent modifications
         sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
         
         if not sale:
-            raise ValueError('Venta no encontrada')
+            error_msg = f'Venta {sale_id} no encontrada'
+            print(f"[ERROR FINALIZE] {error_msg}")
+            raise ValueError(error_msg)
+        
+        print(f"[DEBUG FINALIZE] Sale found: ID={sale.id}, status={sale.status}, cash_register_id={sale.cash_register_id}")
         
         # IDEMPOTENCY CHECK: If sale is already completed, return existing data
         # This prevents duplicate NCF allocation for the same sale
         if sale.status == 'completed':
+            print(f"[DEBUG FINALIZE] Sale {sale_id} already completed with NCF {sale.ncf}")
             return jsonify({
                 'id': sale.id,
                 'ncf': sale.ncf,
@@ -371,11 +378,19 @@ def finalize_sale(sale_id):
         
         # Validate that sale is in pending status (only pending sales can be finalized)
         if sale.status != 'pending':
-            raise ValueError(f'No se puede finalizar una venta con estado {sale.status}')
+            error_msg = f'No se puede finalizar una venta con estado {sale.status}'
+            print(f"[ERROR FINALIZE] {error_msg}")
+            raise ValueError(error_msg)
+        
+        print(f"[DEBUG FINALIZE] Sale status validation passed")
         
         # PREVENT EMPTY SALES: Validate that sale has items before proceeding with NCF allocation
         if not sale.sale_items:
-            raise ValueError('No se puede finalizar una venta sin productos')
+            error_msg = 'No se puede finalizar una venta sin productos'
+            print(f"[ERROR FINALIZE] {error_msg}")
+            raise ValueError(error_msg)
+        
+        print(f"[DEBUG FINALIZE] Sale has {len(sale.sale_items)} items")
         
         # Validate stock availability before proceeding with NCF allocation with concurrent safety
         # Load sale items and group by product for aggregate validation
@@ -405,6 +420,7 @@ def finalize_sale(sale_id):
         
         # SALE REASSIGNMENT: If sale doesn't have cash register (waiter-created), assign finalizing user's cash register
         if not sale.cash_register_id:
+            print(f"[DEBUG FINALIZE] Sale has no cash register, searching for user's cash register")
             # Get cash register for the finalizing user (must be cashier/admin)
             user_cash_register = db.session.query(models.CashRegister).filter_by(
                 user_id=user.id, 
@@ -412,39 +428,81 @@ def finalize_sale(sale_id):
             ).first()
             
             if not user_cash_register:
-                raise ValueError('Solo usuarios con caja asignada pueden finalizar ventas. Contacta al administrador.')
+                error_msg = 'Solo usuarios con caja asignada pueden finalizar ventas. Contacta al administrador.'
+                print(f"[ERROR FINALIZE] {error_msg}")
+                raise ValueError(error_msg)
             
             # Assign the cash register to the sale for NCF generation
             sale.cash_register_id = user_cash_register.id
+            print(f"[DEBUG FINALIZE] Assigned cash register {user_cash_register.id} ({user_cash_register.name}) to sale")
+        else:
+            print(f"[DEBUG FINALIZE] Sale already has cash register: {sale.cash_register_id}")
         
-        # Get shared NCF sequence with row-level lock to prevent concurrent access
-        # Uses global shared sequences for fiscal compliance across all registers
+        # Get NCF sequence - try shared first, fallback to sale's cash register
+        print(f"[DEBUG FINALIZE] Looking for NCF sequences for type {ncf_type}")
+        
+        ncf_sequence = None
+        
+        # Try shared NCF sequences first
         shared_cash_register = db.session.query(models.CashRegister).filter_by(
             name="Secuencias NCF Compartidas",
             active=True
         ).first()
         
-        if not shared_cash_register:
-            raise ValueError('Configuración de secuencias NCF compartidas no encontrada. Contacta al administrador.')
+        if shared_cash_register:
+            print(f"[DEBUG FINALIZE] Found shared cash register: {shared_cash_register.id}")
+            ncf_sequence = db.session.query(models.NCFSequence).filter_by(
+                cash_register_id=shared_cash_register.id,
+                ncf_type=models.NCFType(ncf_type.upper()),
+                active=True
+            ).with_for_update().first()
             
-        ncf_sequence = db.session.query(models.NCFSequence).filter_by(
-            cash_register_id=shared_cash_register.id,
-            ncf_type=models.NCFType(ncf_type),
-            active=True
-        ).with_for_update().first()
+            if ncf_sequence:
+                print(f"[DEBUG FINALIZE] Found shared NCF sequence: {ncf_sequence.id} (serie: {ncf_sequence.serie})")
+            else:
+                print(f"[DEBUG FINALIZE] No shared NCF sequence found for type {ncf_type}")
+        else:
+            print(f"[DEBUG FINALIZE] No shared cash register found")
+        
+        # If no shared sequence found, try sale's cash register
+        if not ncf_sequence:
+            print(f"[DEBUG FINALIZE] Trying NCF sequence from sale's cash register: {sale.cash_register_id}")
+            ncf_sequence = db.session.query(models.NCFSequence).filter_by(
+                cash_register_id=sale.cash_register_id,
+                ncf_type=models.NCFType(ncf_type.upper()),
+                active=True
+            ).with_for_update().first()
+            
+            if ncf_sequence:
+                print(f"[DEBUG FINALIZE] Found NCF sequence in sale's cash register: {ncf_sequence.id} (serie: {ncf_sequence.serie})")
+            else:
+                print(f"[ERROR FINALIZE] No NCF sequence found in sale's cash register for type {ncf_type}")
         
         if not ncf_sequence:
-            raise ValueError(f'No hay secuencia NCF compartida activa para tipo {ncf_type}. Contacta al administrador.')
+            # Get all available sequences for debugging
+            all_sequences = db.session.query(models.NCFSequence).filter_by(active=True).all()
+            print(f"[DEBUG FINALIZE] Available NCF sequences:")
+            for seq in all_sequences:
+                print(f"  - ID: {seq.id}, Type: {seq.ncf_type}, Serie: {seq.serie}, Cash Register: {seq.cash_register_id}")
+            
+            error_msg = f'No hay secuencia NCF activa para tipo {ncf_type}. Tipos disponibles: {", ".join([str(s.ncf_type.value) for s in all_sequences])}'
+            print(f"[ERROR FINALIZE] {error_msg}")
+            raise ValueError(error_msg)
         
         # Check if sequence is exhausted (treat end_number as inclusive)
+        print(f"[DEBUG FINALIZE] NCF sequence status: current={ncf_sequence.current_number}, end={ncf_sequence.end_number}")
         if ncf_sequence.current_number > ncf_sequence.end_number:
-            raise ValueError('Secuencia NCF agotada. Contacta al administrador.')
+            error_msg = f'Secuencia NCF agotada. Actual: {ncf_sequence.current_number}, Límite: {ncf_sequence.end_number}'
+            print(f"[ERROR FINALIZE] {error_msg}")
+            raise ValueError(error_msg)
         
         # Generate NCF number using current number
         ncf_number = f"{ncf_sequence.serie}{ncf_sequence.current_number:08d}"
+        print(f"[DEBUG FINALIZE] Generated NCF: {ncf_number}")
         
         # Increment counter for next use
         ncf_sequence.current_number += 1
+        print(f"[DEBUG FINALIZE] NCF sequence incremented to: {ncf_sequence.current_number}")
         
         # Update sale with NCF and finalize (atomic state transition from pending to completed)
         sale.ncf_sequence_id = ncf_sequence.id
@@ -555,18 +613,30 @@ def finalize_sale(sale_id):
         
     except ValueError as e:
         # Handle business logic errors (no sale, wrong status, no NCF sequence, exhausted sequence, stock issues)
-        return jsonify({'error': str(e)}), 400
+        error_msg = str(e)
+        print(f"[ERROR FINALIZE] ValueError: {error_msg}")
+        db.session.rollback()
+        return jsonify({'error': error_msg}), 400
         
     except IntegrityError as e:
         # Handle database constraint violations
-        if 'unique constraint' in str(e).lower() and 'ncf' in str(e).lower():
+        error_msg = str(e)
+        print(f"[ERROR FINALIZE] IntegrityError: {error_msg}")
+        db.session.rollback()
+        if 'unique constraint' in error_msg.lower() and 'ncf' in error_msg.lower():
             return jsonify({'error': 'Error de concurrencia al generar NCF. Intente nuevamente.'}), 500
         else:
-            return jsonify({'error': f'Error de integridad de datos: {str(e)}'}), 500
+            return jsonify({'error': f'Error de integridad de datos: {error_msg}'}), 500
             
     except Exception as e:
         # Handle other unexpected errors
-        return jsonify({'error': f'Error interno: {str(e)}'}), 500
+        error_msg = str(e)
+        print(f"[ERROR FINALIZE] Unexpected error: {error_msg}")
+        print(f"[ERROR FINALIZE] Error type: {type(e).__name__}")
+        import traceback
+        print(f"[ERROR FINALIZE] Traceback: {traceback.format_exc()}")
+        db.session.rollback()
+        return jsonify({'error': f'Error interno: {error_msg}'}), 500
 
 
 
