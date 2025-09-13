@@ -321,65 +321,59 @@ async function processBilling() {
 // View order details
 async function viewOrderDetails(saleId) {
     try {
-        const response = await fetch(`/api/sales/${saleId}/details`);
+        const response = await fetch(`/api/sales/${saleId}/table-details`);
         if (response.ok) {
-            const result = await response.json();
+            const sale = await response.json();
+                
+            let detailsHtml = `
+                <div class="row mb-3">
+                    <div class="col-6"><strong>Venta ID:</strong> ${sale.id}</div>
+                    <div class="col-6"><strong>Mesa:</strong> ${sale.table_number}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-6"><strong>Fecha:</strong> ${new Date(sale.created_at).toLocaleString()}</div>
+                    <div class="col-6"><strong>Total:</strong> RD$ ${sale.total.toFixed(2)}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-6"><strong>Estado:</strong> ${sale.status}</div>
+                    <div class="col-6"><strong>Subtotal:</strong> RD$ ${sale.subtotal.toFixed(2)}</div>
+                </div>
+                
+                <h6>Productos:</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th>Cantidad</th>
+                                <th>Precio</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
             
-            if (result.success) {
-                const sale = result.sale;
-                
-                let detailsHtml = `
-                    <div class="row mb-3">
-                        <div class="col-6"><strong>Venta ID:</strong> ${sale.id}</div>
-                        <div class="col-6"><strong>NCF:</strong> ${sale.ncf || 'Sin NCF'}</div>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-6"><strong>Fecha:</strong> ${new Date(sale.created_at).toLocaleString()}</div>
-                        <div class="col-6"><strong>Total:</strong> RD$ ${sale.total.toFixed(2)}</div>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-6"><strong>Estado:</strong> ${sale.status}</div>
-                        <div class="col-6"><strong>Método Pago:</strong> ${sale.payment_method || 'Pendiente'}</div>
-                    </div>
-                    
-                    <h6>Productos:</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Producto</th>
-                                    <th>Cantidad</th>
-                                    <th>Precio</th>
-                                    <th>Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                `;
-                
-                sale.items.forEach(item => {
-                    detailsHtml += `
-                        <tr>
-                            <td>${item.product_name}</td>
-                            <td>${item.quantity}</td>
-                            <td>RD$ ${item.unit_price.toFixed(2)}</td>
-                            <td>RD$ ${item.total_price.toFixed(2)}</td>
-                        </tr>
-                    `;
-                });
-                
+            sale.items.forEach(item => {
                 detailsHtml += `
-                            </tbody>
-                        </table>
-                    </div>
+                    <tr>
+                        <td>${item.product_name}</td>
+                        <td>${item.quantity}</td>
+                        <td>RD$ ${item.unit_price.toFixed(2)}</td>
+                        <td>RD$ ${item.total_price.toFixed(2)}</td>
+                    </tr>
                 `;
-                
-                document.getElementById('orderDetailsContent').innerHTML = detailsHtml;
-                
-                const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
-                modal.show();
-            } else {
-                alert('Error cargando detalles: ' + (result.message || 'Error desconocido'));
-            }
+            });
+            
+            detailsHtml += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            document.getElementById('orderDetailsContent').innerHTML = detailsHtml;
+            
+            const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
+            modal.show();
             
         } else {
             const error = await response.json();
