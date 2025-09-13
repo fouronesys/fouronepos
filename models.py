@@ -56,7 +56,7 @@ class User(db.Model):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
     # Relationships
-    sales = relationship("Sale", back_populates="user")
+    sales = relationship("Sale", foreign_keys="Sale.user_id", back_populates="user")
     cash_registers = relationship("CashRegister", back_populates="user")
     password_reset_tokens = relationship("PasswordResetToken", back_populates="user")
 
@@ -216,7 +216,8 @@ class Sale(db.Model):
     
     # Relationships
     cash_register = relationship("CashRegister", back_populates="sales")
-    user = relationship("User", back_populates="sales")
+    user = relationship("User", foreign_keys=[user_id], back_populates="sales")
+    cancelled_by_user = relationship("User", foreign_keys=[cancelled_by])
     table = relationship("Table", back_populates="sales")
     ncf_sequence = relationship("NCFSequence", back_populates="sales")
     sale_items = relationship("SaleItem", back_populates="sale")
