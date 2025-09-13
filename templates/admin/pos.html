@@ -963,6 +963,11 @@ function updateCartDisplay() {
     
     // Update legacy cart variable for backward compatibility
     cart = items;
+    
+    // Recalculate change when cart totals change
+    if (window.paymentSystem) {
+        window.paymentSystem.calculateChange();
+    }
 }
 
 // Remove item from cart (using CartManager)
@@ -2148,6 +2153,10 @@ async function initializePOS() {
     cartManager = new CartManager();
     connectionManager = new ConnectionManager();
     deviceDetector = new DeviceDetector();
+    
+    // Initialize payment system (globally available)
+    window.paymentSystem = new PaymentSystem('{{ csrf_token() }}', cartManager);
+    window.paymentSystem.initializePaymentMethod();
     
     // Log device information for debugging
     deviceDetector.logDeviceInfo();
