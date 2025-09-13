@@ -530,6 +530,27 @@ def finalize_sale(sale_id):
             print(f"[ERROR FINALIZE] {error_msg}")
             raise ValueError(error_msg)
         
+        # Enforce cash session requirement BEFORE NCF generation
+        if payment_method == 'cash':
+            # Check if user has an open cash session for cash payments
+            if not sale.cash_register_id:
+                error_msg = 'No tienes una caja registradora asignada para procesar pagos en efectivo'
+                print(f"[ERROR FINALIZE] {error_msg}")
+                raise ValueError(error_msg)
+            
+            # Verify the cash register has an open session
+            open_session = models.CashSession.query.filter_by(
+                cash_register_id=sale.cash_register_id,
+                status='open'
+            ).order_by(models.CashSession.opened_at.desc()).first()
+            
+            if not open_session:
+                error_msg = 'Debes abrir la caja registradora antes de procesar pagos en efectivo'
+                print(f"[ERROR FINALIZE] {error_msg}")
+                raise ValueError(error_msg)
+            
+            print(f"[DEBUG FINALIZE] Cash payment validated with open session: {open_session.id}")
+        
         # Generate NCF number using current number
         ncf_number = f"{ncf_sequence.serie}{ncf_sequence.current_number:08d}"
         print(f"[DEBUG FINALIZE] Generated NCF: {ncf_number}")
@@ -1220,6 +1241,8 @@ def _prepare_sale_data_for_receipt(sale, sale_items):
         'ncf_type_display': _get_ncf_type_display(sale.ncf) if sale.ncf else None,
         'customer_name': sale.customer_name,
         'customer_rnc': sale.customer_rnc,
+        'cash_received': getattr(sale, 'cash_received', None),
+        'change_amount': getattr(sale, 'change_amount', None),
         'items': []
     }
     

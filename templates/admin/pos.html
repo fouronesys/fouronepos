@@ -2196,6 +2196,165 @@ async function initializePOS() {
     showNotification('Sistema POS iniciado - Modo offline disponible', 'success');
 }
 
+// Check cash register status and update UI accordingly
+async function checkCashRegisterStatus() {
+    try {
+        const response = await apiRequest('/api/cash-register/status');
+        
+        if (response.has_register) {
+            if (response.has_open_session) {
+                // Show cash controls for open session
+                showCashControls(response);
+            } else {
+                // Hide cash controls for closed session  
+                hideCashControls();
+                // Show modal to open cash register if user has one assigned
+                showOpenCashModal(response.register_name || 'Caja Registradora');
+            }
+        } else {
+            // No register assigned
+            console.warn('[Cash] No cash register assigned to user');
+            hideCashControls();
+        }
+    } catch (error) {
+        console.error('[Cash] Error checking cash register status:', error);
+    }
+}
+
+// Show cash controls when session is open
+function showCashControls(sessionData) {
+    const closeBtn = document.getElementById('close-cash-btn');
+    const statusIndicator = document.getElementById('cash-status-indicator');
+    const statusText = document.getElementById('cash-status-text');
+    
+    if (closeBtn) {
+        closeBtn.style.display = 'block';
+    }
+    
+    if (statusIndicator) {
+        statusIndicator.style.display = 'block';
+        const statusDot = statusIndicator.querySelector('.status-dot');
+        if (statusDot) {
+            statusDot.className = 'status-dot cash-open';
+        }
+    }
+    
+    if (statusText) {
+        statusText.textContent = `Caja: ${sessionData.register_name} (Abierta)`;
+    }
+}
+
+// Hide cash controls when session is closed
+function hideCashControls() {
+    const closeBtn = document.getElementById('close-cash-btn');
+    const statusIndicator = document.getElementById('cash-status-indicator');
+    const statusText = document.getElementById('cash-status-text');
+    
+    if (closeBtn) {
+        closeBtn.style.display = 'none';
+    }
+    
+    if (statusIndicator) {
+        statusIndicator.style.display = 'block';
+        const statusDot = statusIndicator.querySelector('.status-dot');
+        if (statusDot) {
+            statusDot.className = 'status-dot cash-closed';
+        }
+    }
+    
+    if (statusText) {
+        statusText.textContent = 'Caja: Cerrada';
+    }
+}
+
+// Show open cash modal
+function showOpenCashModal(registerName) {
+    const modalHtml = `
+        <div class="modal fade" id="openCashModal" tabindex="-1" aria-labelledby="openCashModalLabel" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="openCashModalLabel">
+                            <i class="bi bi-unlock me-2"></i>Abrir Caja Registradora
+                        </h5>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>Importante:</strong> Debes abrir la caja registradora antes de procesar ventas.
+                        </div>
+                        <form id="openCashForm">
+                            <div class="mb-3">
+                                <label for="opening-amount" class="form-label">Monto inicial en caja (RD$)</label>
+                                <input type="number" class="form-control" id="opening-amount" step="0.01" min="0" value="0" required>
+                                <div class="form-text">Cuenta todo el efectivo e ingresa el total inicial</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="opening-notes" class="form-label">Notas de apertura (opcional)</label>
+                                <textarea class="form-control" id="opening-notes" rows="2" placeholder="Observaciones de turno, billetes y monedas, etc."></textarea>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-success" onclick="openCashRegister()">
+                            <i class="bi bi-unlock me-1"></i>Abrir Caja
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('openCashModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('openCashModal'));
+    modal.show();
+}
+
+// Open cash register
+async function openCashRegister() {
+    try {
+        const openingAmount = parseFloat(document.getElementById('opening-amount').value) || 0;
+        const openingNotes = document.getElementById('opening-notes').value.trim();
+        
+        const response = await apiRequest('/api/cash-register/open', {
+            method: 'POST',
+            body: JSON.stringify({
+                opening_amount: openingAmount,
+                opening_notes: openingNotes
+            }),
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        if (response.success) {
+            showNotification(response.message, 'success');
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('openCashModal'));
+            modal.hide();
+            
+            // Refresh cash register status
+            await checkCashRegisterStatus();
+        } else {
+            showNotification(response.error || 'Error abriendo caja registradora', 'error');
+        }
+        
+    } catch (error) {
+        console.error('[Cash] Error opening cash register:', error);
+        showNotification('Error abriendo caja: ' + (error.message || error), 'error');
+    }
+}
+
 // Document ready event
 document.addEventListener('DOMContentLoaded', initializePOS);
 

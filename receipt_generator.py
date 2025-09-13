@@ -313,6 +313,14 @@ class DominicanReceiptGenerator:
             content.append(Paragraph("Sin impuestos", self.styles['Item']))
             
         content.append(Paragraph(f"<b>TOTAL: {format_currency_rd(total)}</b>", self.styles['Total']))
+        
+        # Show cash received and change for cash payments
+        cash_received = sale_data.get('cash_received')
+        change_amount = sale_data.get('change_amount')
+        if cash_received is not None and change_amount is not None and change_amount > 0:
+            content.append(Paragraph(f"Efectivo recibido: {format_currency_rd(cash_received)}", self.styles['Item']))
+            content.append(Paragraph(f"<b>Cambio: {format_currency_rd(change_amount)}</b>", self.styles['Total']))
+        
         return content
 
     def _build_fiscal_info(self, sale_data: Dict[str, Any], company_info: Dict[str, str]) -> List:
@@ -415,6 +423,14 @@ class DominicanReceiptGenerator:
             r.append(f"{'Sin impuestos':<20}{'':>12}")
         r.append("=" * self.text_width)
         r.append(f"{'TOTAL:':<20}{format_currency_rd(total):>12}")
+        
+        # Show cash received and change for cash payments
+        cash_received = sale_data.get('cash_received')
+        change_amount = sale_data.get('change_amount')
+        if cash_received is not None and change_amount is not None and change_amount > 0:
+            r.append(f"{'Efectivo recibido:':<20}{format_currency_rd(cash_received):>12}")
+            r.append(f"{'Cambio:':<20}{format_currency_rd(change_amount):>12}")
+            
         r.append("=" * self.text_width)
 
         if company_info.get('message'): r.append(c(company_info['message']))
