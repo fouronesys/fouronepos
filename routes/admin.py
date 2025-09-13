@@ -212,14 +212,8 @@ def pos():
 
 @bp.route('/products')
 def products():
-    user = require_admin_or_manager()
-    if not isinstance(user, models.User):
-        return user
-    
-    products = models.Product.query.filter_by(active=True).all()
-    categories = models.Category.query.filter_by(active=True).all()
-    
-    return render_template('admin/products.html', products=products, categories=categories)
+    """Redirect to inventory products to avoid duplication"""
+    return redirect(url_for('inventory.products'))
 
 
 @bp.route('/categories/create', methods=['POST'])
