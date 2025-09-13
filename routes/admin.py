@@ -203,12 +203,44 @@ def pos():
             flash('No tienes una caja asignada. Contacta al administrador.', 'error')
             return redirect(url_for('admin.dashboard'))
     
+    # Check if we're editing an existing sale
+    edit_sale_id = request.args.get('edit_sale')
+    edit_sale_data = None
+    
+    if edit_sale_id:
+        try:
+            # Get sale to edit
+            sale = models.Sale.query.get(int(edit_sale_id))
+            if sale and sale.status == 'pending':
+                # Get sale items
+                sale_items = models.SaleItem.query.filter_by(sale_id=sale.id).all()
+                
+                edit_sale_data = {
+                    'id': sale.id,
+                    'table_id': sale.table_id,
+                    'description': sale.description or '',
+                    'items': [
+                        {
+                            'product_id': item.product_id,
+                            'product_name': item.product.name,
+                            'price': float(item.unit_price),
+                            'quantity': item.quantity
+                        }
+                        for item in sale_items
+                    ]
+                }
+            else:
+                flash('La orden no existe o ya fue procesada.', 'error')
+        except (ValueError, TypeError):
+            flash('ID de orden inválido.', 'error')
+    
     # Get products by category
     categories = models.Category.query.filter_by(active=True).all()
     
     return render_template('admin/pos.html', 
                          cash_register=cash_register,
-                         categories=categories)
+                         categories=categories,
+                         edit_sale_data=edit_sale_data)
 
 
 @bp.route('/products')

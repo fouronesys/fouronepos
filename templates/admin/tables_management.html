@@ -354,22 +354,53 @@ async function processBilling() {
 // View order details
 async function viewOrderDetails(saleId) {
     try {
+        // Show loading state
+        const loadingHtml = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+                <p class="mt-2">Cargando detalles de la orden...</p>
+            </div>
+        `;
+        
+        // Get modal elements safely
+        const orderDetailsContent = document.getElementById('orderDetailsContent');
+        const orderDetailsModal = document.getElementById('orderDetailsModal');
+        
+        if (!orderDetailsContent || !orderDetailsModal) {
+            alert('Error: No se pudo encontrar el modal de detalles. Por favor recarga la página.');
+            return;
+        }
+        
+        orderDetailsContent.innerHTML = loadingHtml;
+        
+        // Show modal first with loading content
+        const modalInstance = new bootstrap.Modal(orderDetailsModal);
+        modalInstance.show();
+        
         const response = await fetch(`/api/sales/${saleId}/table-details`);
+        
         if (response.ok) {
             const sale = await response.json();
+            
+            // Validate response data
+            if (!sale || typeof sale !== 'object') {
+                throw new Error('Respuesta inválida del servidor');
+            }
                 
             let detailsHtml = `
                 <div class="row mb-3">
-                    <div class="col-6"><strong>Venta ID:</strong> ${sale.id}</div>
-                    <div class="col-6"><strong>Mesa:</strong> ${sale.table_number}</div>
+                    <div class="col-6"><strong>Venta ID:</strong> ${sale.id || 'N/A'}</div>
+                    <div class="col-6"><strong>Mesa:</strong> ${sale.table_number || 'N/A'}</div>
                 </div>
                 <div class="row mb-3">
-                    <div class="col-6"><strong>Fecha:</strong> ${new Date(sale.created_at).toLocaleString()}</div>
-                    <div class="col-6"><strong>Total:</strong> RD$ ${sale.total.toFixed(2)}</div>
+                    <div class="col-6"><strong>Fecha:</strong> ${sale.created_at ? new Date(sale.created_at).toLocaleString() : 'N/A'}</div>
+                    <div class="col-6"><strong>Total:</strong> RD$ ${sale.total ? sale.total.toFixed(2) : '0.00'}</div>
                 </div>
                 <div class="row mb-3">
-                    <div class="col-6"><strong>Estado:</strong> ${sale.status}</div>
-                    <div class="col-6"><strong>Subtotal:</strong> RD$ ${sale.subtotal.toFixed(2)}</div>
+                    <div class="col-6"><strong>Estado:</strong> ${sale.status || 'N/A'}</div>
+                    <div class="col-6"><strong>Subtotal:</strong> RD$ ${sale.subtotal ? sale.subtotal.toFixed(2) : '0.00'}</div>
                 </div>
                 
                 <h6>Productos:</h6>
@@ -386,16 +417,24 @@ async function viewOrderDetails(saleId) {
                         <tbody>
             `;
             
-            sale.items.forEach(item => {
+            if (sale.items && Array.isArray(sale.items) && sale.items.length > 0) {
+                sale.items.forEach(item => {
+                    detailsHtml += `
+                        <tr>
+                            <td>${item.product_name || 'N/A'}</td>
+                            <td>${item.quantity || 0}</td>
+                            <td>RD$ ${item.unit_price ? item.unit_price.toFixed(2) : '0.00'}</td>
+                            <td>RD$ ${item.total_price ? item.total_price.toFixed(2) : '0.00'}</td>
+                        </tr>
+                    `;
+                });
+            } else {
                 detailsHtml += `
                     <tr>
-                        <td>${item.product_name}</td>
-                        <td>${item.quantity}</td>
-                        <td>RD$ ${item.unit_price.toFixed(2)}</td>
-                        <td>RD$ ${item.total_price.toFixed(2)}</td>
+                        <td colspan="4" class="text-center text-muted">No hay productos en esta orden</td>
                     </tr>
                 `;
-            });
+            }
             
             detailsHtml += `
                         </tbody>
@@ -403,18 +442,49 @@ async function viewOrderDetails(saleId) {
                 </div>
             `;
             
-            document.getElementById('orderDetailsContent').innerHTML = detailsHtml;
-            
-            const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
-            modal.show();
+            orderDetailsContent.innerHTML = detailsHtml;
             
         } else {
-            const error = await response.json();
-            alert('Error cargando detalles de la orden: ' + (error.error || 'Error desconocido'));
+            let errorMessage = 'Error desconocido';
+            
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorMessage;
+            } catch (e) {
+                // If can't parse JSON, use status text
+                errorMessage = response.statusText || `Error HTTP ${response.status}`;
+            }
+            
+            if (response.status === 403) {
+                errorMessage = 'No tienes permisos para ver los detalles de esta orden';
+            } else if (response.status === 404) {
+                errorMessage = 'La orden no existe o fue eliminada';
+            }
+            
+            orderDetailsContent.innerHTML = `
+                <div class="alert alert-danger">
+                    <h5><i class="bi bi-exclamation-triangle"></i> Error</h5>
+                    <p>No se pudieron cargar los detalles de la orden:</p>
+                    <p><strong>${errorMessage}</strong></p>
+                    <button type="button" class="btn btn-secondary mt-2" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            `;
         }
     } catch (error) {
-        alert('Error de conexión al cargar detalles');
         console.error('[Orders] Error loading order details:', error);
+        
+        const orderDetailsContent = document.getElementById('orderDetailsContent');
+        if (orderDetailsContent) {
+            orderDetailsContent.innerHTML = `
+                <div class="alert alert-warning">
+                    <h5><i class="bi bi-wifi-off"></i> Error de Conexión</h5>
+                    <p>No se pudo conectar con el servidor. Verifica tu conexión a internet e inténtalo de nuevo.</p>
+                    <button type="button" class="btn btn-secondary mt-2" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            `;
+        } else {
+            alert('Error de conexión al cargar detalles. Por favor recarga la página e inténtalo de nuevo.');
+        }
     }
 }
 

@@ -379,6 +379,25 @@ class CartManager {
         showNotification(`${productName} agregado al carrito`, 'success');
     }
 
+    // Add item directly with specific quantity (for loading existing sales)
+    addItemDirectly(productId, productName, price, quantity) {
+        const existingItem = this.cart.find(item => item.id === productId);
+        
+        if (existingItem) {
+            existingItem.quantity = quantity;
+        } else {
+            this.cart.push({
+                id: productId,
+                name: productName,
+                price: price,
+                quantity: quantity,
+                addedAt: Date.now()
+            });
+        }
+        
+        this.saveCartToStorage();
+    }
+
     // Remove item from cart
     removeItem(productId) {
         const item = this.cart.find(item => item.id === productId);
@@ -1422,6 +1441,53 @@ function calculateChange() {
     }
 }
 
+// Load existing sale for editing
+async function loadSaleForEditing(saleData) {
+    console.log('[POS] Loading sale for editing:', saleData);
+    
+    try {
+        // Clear current cart
+        cartManager.clear();
+        
+        // Set table selection if applicable
+        if (saleData.table_id) {
+            const tableSelect = document.getElementById('table-select');
+            if (tableSelect) {
+                tableSelect.value = saleData.table_id;
+            }
+        }
+        
+        // Set description if available
+        if (saleData.description) {
+            const descriptionInput = document.getElementById('order-description');
+            if (descriptionInput) {
+                descriptionInput.value = saleData.description;
+            }
+        }
+        
+        // Add items to cart
+        for (const item of saleData.items) {
+            cartManager.addItemDirectly(
+                item.product_id,
+                item.product_name,
+                item.price,
+                item.quantity
+            );
+        }
+        
+        // Update cart display
+        updateCartDisplay();
+        
+        showNotification(`Orden #${saleData.id} cargada para edición`, 'info');
+        
+        console.log('[POS] Sale loaded successfully for editing');
+        
+    } catch (error) {
+        console.error('[POS] Error loading sale for editing:', error);
+        showNotification('Error cargando la orden para edición', 'error');
+    }
+}
+
 // Initialize POS System
 async function initializePOS() {
     console.log('[POS] Initializing POS system...');
@@ -1439,6 +1505,12 @@ async function initializePOS() {
     
     // Load initial cart state
     updateCartDisplay();
+    
+    // Check if we're editing an existing sale
+    {% if edit_sale_data %}
+    const editSaleData = {{ edit_sale_data | tojson }};
+    await loadSaleForEditing(editSaleData);
+    {% endif %}
     
     // Load products for the first category (default)
     const firstCategory = document.querySelector('[data-bs-toggle="pill"]');
