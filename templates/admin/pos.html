@@ -39,6 +39,12 @@
                         <div class="stat-label">Ventas del día</div>
                     </div>
                 </div>
+                <!-- Back to Waiter Tables Button (only for waiters) -->
+                {% if session.role == 'MESERO' %}
+                <a href="{{ url_for('waiter.tables') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-2"></i>Volver a Mesas
+                </a>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -156,6 +162,7 @@
                             <option value="consumo">Consumo</option>
                             <option value="credito_fiscal">Crédito Fiscal</option>
                             <option value="gubernamental">Gubernamental</option>
+                            <option value="sin_comprobante">Sin comprobante</option>
                         </select>
                     </div>
                     
@@ -222,7 +229,8 @@
                 <!-- Action Buttons -->
                 <div class="cart-actions">
                     <div class="d-grid gap-2">
-                        <button class="btn btn-success btn-lg" id="process-sale" onclick="processSale()">
+                        <button class="btn btn-success btn-lg" id="process-sale" onclick="processSale()" 
+                                {% if session.role == 'MESERO' %}disabled title="Los meseros no pueden procesar ventas directamente"{% endif %}>
                             <i class="bi bi-check-circle me-2"></i> Procesar Venta
                         </button>
                         <button class="btn btn-warning" id="assign-table" onclick="assignToTable()" style="background: linear-gradient(135deg, #ffa500 0%, #ff8c00 100%); color: #000; font-weight: 600;">
