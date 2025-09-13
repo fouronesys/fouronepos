@@ -1971,14 +1971,38 @@ def finalize_table_sale(sale_id):
         # Commit changes
         db.session.commit()
         
-        return jsonify({
+        # Prepare response data
+        response_data = {
             'success': True,
             'message': 'Venta facturada exitosamente',
             'sale_id': sale.id,
             'ncf': sale.ncf,
             'total': sale.total,
             'payment_method': sale.payment_method
-        })
+        }
+        
+        # Automatic receipt printing (same as POS finalization)
+        try:
+            # Check user device info to determine format preference
+            user_agent = request.headers.get('User-Agent', '').lower()
+            receipt_format = '58mm' if any(mobile in user_agent for mobile in ['mobile', 'android', 'iphone']) else '80mm'
+            
+            # Generate thermal receipt for automatic printing
+            sale_items = models.SaleItem.query.filter_by(sale_id=sale.id).all()
+            sale_data = _prepare_sale_data_for_receipt(sale, sale_items)
+            
+            receipt_text = generate_thermal_receipt_text(sale_data, receipt_format)
+            
+            # Add receipt data to response for automatic display
+            response_data['receipt_text'] = receipt_text
+            response_data['auto_print'] = True
+            
+        except Exception as e:
+            print(f"[ERROR PRINT] Auto receipt error for sale {sale.id}: {str(e)}")
+            # Don't fail the sale, just notify about printing issue
+            response_data['message'] = 'Venta facturada exitosamente. Error en impresión automática de recibo.'
+        
+        return jsonify(response_data)
         
     except Exception as e:
         db.session.rollback()

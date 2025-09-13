@@ -2,6 +2,7 @@
 
 {% block title %}Gestión de Mesas - {{ user_role }}{% endblock %}
 
+
 {% block content %}
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -332,14 +333,32 @@ async function processBilling() {
         if (response.ok) {
             const result = await response.json();
             
+            // Check if automatic receipt printing is enabled
+            if (result.auto_print && result.receipt_text) {
+                // Use the same printing function as POS
+                try {
+                    // Call printReceipt function if available (same as POS)
+                    if (typeof printReceipt === 'function') {
+                        await printReceipt(result);
+                    } else {
+                        // Show receipt text in a modal (fallback)
+                        showReceiptModal(result);
+                    }
+                } catch (error) {
+                    console.error('[Billing] Error printing receipt:', error);
+                }
+            }
+            
             alert(`✅ Factura procesada exitosamente!\n\n` +
                   `📋 NCF: ${result.ncf}\n` +
                   `💰 Total: RD$ ${result.total.toFixed(2)}\n` +
                   `🧾 ID Venta: ${result.sale_id}`);
             
-            // Hide modal and reload page
+            // Hide modal and reload page (with delay to allow printing to complete)
             bootstrap.Modal.getInstance(document.getElementById('billingModal')).hide();
-            location.reload();
+            setTimeout(() => {
+                location.reload();
+            }, 2000); // 2 second delay to allow printing/downloading to complete
             
         } else {
             const error = await response.json();
@@ -500,9 +519,67 @@ function editOrder(saleId) {
     window.location.href = `/admin/pos?edit_sale=${saleId}`;
 }
 
+// Fallback function to show receipt when printReceipt is not available
+function showReceiptModal(saleData) {
+    // Create receipt preview modal (simplified version)
+    const receiptModal = `
+        <div class="modal fade" id="receiptModalFallback" tabindex="-1" aria-labelledby="receiptModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="bi bi-receipt me-2"></i>Recibo Generado - Venta #${saleData.sale_id}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle me-2"></i>
+                            Recibo generado automáticamente después de la facturación
+                        </div>
+                        <div class="receipt-preview">
+                            <pre id="receiptText" style="font-family: 'Courier New', monospace; font-size: 12px; background: #f8f9fa; color: #000; padding: 15px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; border: 1px solid #dee2e6;"></pre>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <a href="/api/receipts/${saleData.sale_id}/pdf" class="btn btn-primary" download>
+                            <i class="bi bi-download me-1"></i>Descargar PDF
+                        </a>
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('receiptModalFallback');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', receiptModal);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('receiptModalFallback'));
+    modal.show();
+    
+    // Set receipt text safely to prevent XSS
+    document.getElementById('receiptText').textContent = saleData.receipt_text;
+    
+    // Auto-hide after 10 seconds
+    setTimeout(() => {
+        modal.hide();
+    }, 10000);
+}
+
 // Auto refresh page every 30 seconds to show updated table status
 setInterval(() => {
     location.reload();
 }, 30000);
 </script>
+
+<!-- Include payment system for unified printing -->
+<script defer src="{{ url_for('static', filename='js/payment-system.js') }}?v={{ timestamp }}"></script>
 {% endblock %}
