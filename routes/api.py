@@ -742,6 +742,60 @@ def get_tables():
     } for table in tables])
 
 
+@bp.route('/pending-orders')
+def get_pending_orders():
+    """Get pending orders that need to be finalized by cashiers/admins"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Only cashiers and admins can view pending orders for billing
+    if user.role.value not in ['administrador', 'cajero']:
+        return jsonify({'error': 'Solo cajeros y administradores pueden ver órdenes pendientes de facturación'}), 403
+    
+    try:
+        # Get pending sales with table and user information
+        pending_sales = models.Sale.query.filter_by(status='pending').options(
+            db.joinedload(models.Sale.table),
+            db.joinedload(models.Sale.user),
+            db.joinedload(models.Sale.sale_items).joinedload(models.SaleItem.product)
+        ).order_by(models.Sale.created_at.desc()).all()
+        
+        orders_data = []
+        for sale in pending_sales:
+            # Skip orders with no items
+            if not sale.sale_items:
+                continue
+                
+            order_data = {
+                'id': sale.id,
+                'table_number': sale.table.number if sale.table else None,
+                'table_name': sale.table.name if sale.table else None,
+                'waiter_name': sale.user.name if sale.user else 'Desconocido',
+                'created_at': sale.created_at.isoformat(),
+                'total': sale.total,
+                'order_status': sale.order_status.value if sale.order_status else 'not_sent',
+                'items_count': len(sale.sale_items),
+                'items': [{
+                    'id': item.id,
+                    'product_name': item.product.name,
+                    'quantity': item.quantity,
+                    'unit_price': item.unit_price,
+                    'total_price': item.total_price
+                } for item in sale.sale_items]
+            }
+            orders_data.append(order_data)
+        
+        return jsonify({
+            'success': True,
+            'orders': orders_data,
+            'total_orders': len(orders_data)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error obteniendo órdenes pendientes: {str(e)}'}), 500
+
+
 # Receipt Generation Routes
 @bp.route('/receipts/<int:sale_id>/view')
 def view_receipt(sale_id):
