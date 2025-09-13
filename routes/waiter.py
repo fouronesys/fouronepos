@@ -10,7 +10,7 @@ def require_waiter():
         return redirect(url_for('auth.login'))
     
     user = models.User.query.get(session['user_id'])
-    if not user or user.role.value != 'mesero':
+    if not user or user.role.value != 'MESERO':
         flash('Acceso denegado', 'error')
         return redirect(url_for('auth.login'))
     

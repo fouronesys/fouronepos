@@ -310,7 +310,7 @@ def finalize_sale(sale_id):
         return csrf_error
     
     # ROLE RESTRICTION: Only cashiers and administrators can finalize sales
-    if user.role.value not in ['administrador', 'cajero']:
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
         return jsonify({'error': 'Solo cajeros y administradores pueden finalizar ventas'}), 403
     
     data = request.get_json()
@@ -705,7 +705,7 @@ def close_table_properly(table_id):
             else:
                 # For finalization, only cashiers/admins can do this
                 # Waiters must hand over to cashier for finalization
-                if user.role.value == 'mesero':
+                if user.role.value == 'MESERO':
                     raise ValueError('Los meseros deben entregar la mesa al cajero para finalizar. Use "Enviar a Caja" en su lugar.')
                 
                 # This is just the table closing part - actual sale finalization happens via /sales/{id}/finalize
@@ -857,7 +857,7 @@ def get_pending_orders():
         return user
     
     # Only cashiers and admins can view pending orders for billing
-    if user.role.value not in ['administrador', 'cajero']:
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
         return jsonify({'error': 'Solo cajeros y administradores pueden ver órdenes pendientes de facturación'}), 403
     
     try:
@@ -927,10 +927,10 @@ def view_receipt(sale_id):
         return jsonify({'error': 'Esta venta no tiene NCF válido para generar recibo fiscal'}), 400
     
     # SECURITY: Verify user has access to this sale
-    if user.role.value not in ['administrador', 'cajero']:
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
         return jsonify({'error': 'No tienes permisos para ver recibos'}), 403
     
-    if user.role.value == 'cajero':
+    if user.role.value == 'CAJERO':
         # For cashiers, verify cash register ownership and it exists
         if not sale.cash_register:
             return jsonify({'error': 'Esta venta no tiene caja registradora asignada'}), 400
@@ -974,10 +974,10 @@ def generate_receipt_pdf(sale_id):
         return jsonify({'error': 'Esta venta no tiene NCF válido para generar recibo fiscal'}), 400
     
     # SECURITY: Verify user has access to this sale
-    if user.role.value not in ['administrador', 'cajero']:
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
         return jsonify({'error': 'No tienes permisos para generar recibos'}), 403
     
-    if user.role.value == 'cajero':
+    if user.role.value == 'CAJERO':
         # For cashiers, verify cash register ownership and it exists
         if not sale.cash_register:
             return jsonify({'error': 'Esta venta no tiene caja registradora asignada'}), 400
@@ -1024,10 +1024,10 @@ def generate_receipt_thermal(sale_id):
         return jsonify({'error': 'Esta venta no tiene NCF válido para generar recibo fiscal'}), 400
     
     # SECURITY: Verify user has access to this sale
-    if user.role.value not in ['administrador', 'cajero']:
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
         return jsonify({'error': 'No tienes permisos para generar recibos'}), 403
     
-    if user.role.value == 'cajero':
+    if user.role.value == 'CAJERO':
         # For cashiers, verify cash register ownership and it exists  
         if not sale.cash_register:
             return jsonify({'error': 'Esta venta no tiene caja registradora asignada'}), 400
@@ -1133,10 +1133,10 @@ def get_sale_details(sale_id):
     sale = models.Sale.query.get_or_404(sale_id)
     
     # SECURITY: Verify user has access to this sale
-    if user.role.value not in ['administrador', 'cajero']:
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
         return jsonify({'error': 'No tienes permisos para ver esta venta'}), 403
     
-    if user.role.value == 'cajero':
+    if user.role.value == 'CAJERO':
         # For cashiers, verify cash register ownership and it exists
         if not sale.cash_register:
             return jsonify({'error': 'Esta venta no tiene caja registradora asignada'}), 400
@@ -1195,7 +1195,7 @@ def create_credit_note(sale_id):
         return csrf_error
     
     # Only administrators and cashiers can create credit notes
-    if user.role.value not in ['administrador', 'cajero']:
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
         return jsonify({'error': 'No tienes permisos para crear notas de crédito'}), 403
     
     data = request.get_json()
@@ -1411,7 +1411,7 @@ def get_credit_notes():
         return user
     
     # Only administrators and cashiers can view credit notes
-    if user.role.value not in ['administrador', 'cajero']:
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
         return jsonify({'error': 'No tienes permisos para ver notas de crédito'}), 403
     
     # Get query parameters
@@ -1479,7 +1479,7 @@ def get_credit_note_detail(note_id):
         return user
     
     # Only administrators and cashiers can view credit notes
-    if user.role.value not in ['administrador', 'cajero']:
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
         return jsonify({'error': 'No tienes permisos para ver notas de crédito'}), 403
     
     # Get credit note
@@ -1539,7 +1539,7 @@ def cancel_sale(sale_id):
         return csrf_error
     
     # Only administrators and cashiers can cancel sales
-    if user.role.value not in ['administrador', 'cajero']:
+    if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
         return jsonify({'error': 'No tienes permisos para cancelar facturas'}), 403
     
     data = request.get_json()

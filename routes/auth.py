@@ -35,11 +35,11 @@ def login():
             flash('Inicio de sesión exitoso', 'success')
             
             # Redirect based on role
-            if user.role.value == 'administrador':
+            if user.role.value == 'ADMINISTRADOR':
                 return redirect(url_for('admin.dashboard'))
-            elif user.role.value == 'cajero':
+            elif user.role.value == 'CAJERO':
                 return redirect(url_for('admin.pos'))
-            elif user.role.value == 'mesero':
+            elif user.role.value == 'MESERO':
                 return redirect(url_for('waiter.tables'))
         else:
             flash('Usuario o contraseña incorrectos', 'error')
@@ -196,11 +196,11 @@ def change_password():
             flash('Contraseña cambiada exitosamente', 'success')
             
             # Redirect based on role
-            if user.role.value == 'administrador':
+            if user.role.value == 'ADMINISTRADOR':
                 return redirect(url_for('admin.dashboard'))
-            elif user.role.value == 'cajero':
+            elif user.role.value == 'CAJERO':
                 return redirect(url_for('admin.pos'))
-            elif user.role.value == 'mesero':
+            elif user.role.value == 'MESERO':
                 return redirect(url_for('waiter.tables'))
             else:
                 return redirect(url_for('auth.login'))

@@ -49,7 +49,7 @@ def require_admin_or_cashier():
         return redirect(url_for('auth.login'))
     
     user = models.User.query.get(session['user_id'])
-    if not user or user.role.value not in ['administrador', 'cajero']:
+    if not user or user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
         flash('Acceso denegado', 'error')
         return redirect(url_for('auth.login'))
     
@@ -61,7 +61,7 @@ def require_admin():
         return redirect(url_for('auth.login'))
     
     user = models.User.query.get(session['user_id'])
-    if not user or user.role.value != 'administrador':
+    if not user or user.role.value != 'ADMINISTRADOR':
         flash('Solo los administradores pueden acceder a esta sección', 'error')
         return redirect(url_for('admin.dashboard'))
     
@@ -123,7 +123,7 @@ def products():
     if not isinstance(user, models.User):
         return user
     
-    if user.role.value != 'administrador':
+    if user.role.value != 'ADMINISTRADOR':
         flash('Solo los administradores pueden gestionar productos', 'error')
         return redirect(url_for('admin.dashboard'))
     
@@ -495,7 +495,7 @@ def reports():
     if not isinstance(user, models.User):
         return user
     
-    if user.role.value != 'administrador':
+    if user.role.value != 'ADMINISTRADOR':
         flash('Solo los administradores pueden ver reportes', 'error')
         return redirect(url_for('admin.dashboard'))
     
@@ -548,7 +548,7 @@ def invoices():
             pass
     
     # Para cajeros, solo mostrar ventas de su caja registradora
-    if user.role.value == 'cajero':
+    if user.role.value == 'CAJERO':
         cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
         if not cash_register:
             # Si el cajero no tiene caja registradora activa, no puede ver ninguna venta
@@ -596,7 +596,7 @@ def invoices():
             pass
     
     # Para cajeros, aplicar mismo filtro de caja registradora
-    if user.role.value == 'cajero':
+    if user.role.value == 'CAJERO':
         cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
         if cash_register:
             stats_query = stats_query.filter(models.Sale.cash_register_id == cash_register.id)
@@ -622,7 +622,7 @@ def ncf_sequences():
     if not isinstance(user, models.User):
         return user
     
-    if user.role.value != 'administrador':
+    if user.role.value != 'ADMINISTRADOR':
         flash('Solo los administradores pueden gestionar secuencias NCF', 'error')
         return redirect(url_for('admin.dashboard'))
     
@@ -768,7 +768,7 @@ def create_user():
             flash('Todos los campos son obligatorios', 'error')
             return redirect(url_for('admin.users'))
         
-        if role not in ['administrador', 'cajero', 'mesero']:
+        if role not in ['ADMINISTRADOR', 'CAJERO', 'MESERO']:
             flash('Rol inválido', 'error')
             return redirect(url_for('admin.users'))
         

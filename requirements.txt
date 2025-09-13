@@ -9,7 +9,6 @@ python-escpos==3.0a9
 reportlab==4.0.7
 WTForms==3.1.1
 SQLAlchemy==2.0.23
-openpyxl
-xlsxwriter
-flask-limiter
-flask-limiter
+openpyxl==3.1.2
+xlsxwriter==3.1.9
+flask-limiter==3.5.0

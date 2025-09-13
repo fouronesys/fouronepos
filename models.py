@@ -14,9 +14,9 @@ import enum
 
 
 class UserRole(enum.Enum):
-    ADMINISTRADOR = "administrador"
-    CAJERO = "cajero"
-    MESERO = "mesero"
+    ADMINISTRADOR = "ADMINISTRADOR"
+    CAJERO = "CAJERO"
+    MESERO = "MESERO"
 
 
 class NCFType(enum.Enum):
