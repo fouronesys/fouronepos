@@ -722,6 +722,12 @@ def get_company_info_for_receipt() -> Dict[str, str]:
     
     settings = company_data['settings']
     
+    # Fix logo URL to be absolute
+    logo_path = settings.get('receipt_logo', '') or ''
+    if logo_path and not logo_path.startswith(('http://', 'https://', '/')):
+        # Make relative paths absolute by adding leading slash
+        logo_path = '/' + logo_path.lstrip('/')
+    
     return {
         'name': settings.get('company_name', 'Mi Empresa') or 'Mi Empresa',
         'rnc': settings.get('company_rnc', '') or '',
@@ -730,5 +736,5 @@ def get_company_info_for_receipt() -> Dict[str, str]:
         'email': settings.get('company_email', '') or '',
         'message': settings.get('receipt_message', 'Gracias por su compra') or 'Gracias por su compra',
         'footer': settings.get('receipt_footer', '') or '',
-        'logo': settings.get('receipt_logo', '') or ''
+        'logo': logo_path
     }

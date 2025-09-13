@@ -174,7 +174,7 @@
             <button type="button" class="btn btn-primary me-2" onclick="window.print()">
                 <i class="bi bi-printer"></i> Imprimir
             </button>
-            <button type="button" class="btn btn-success" onclick="downloadPDF()">
+            <button type="button" class="btn btn-success" onclick="downloadPDF(event, this)">
                 <i class="bi bi-file-earmark-pdf"></i> Descargar PDF
             </button>
         </div>
@@ -292,23 +292,152 @@
 </div>
 
 <script>
-function downloadPDF() {
+async function downloadPDF(event, buttonElement) {
     const saleId = {{ sale_data.id or 'null' }};
-    if (saleId) {
-        window.open(`/api/receipts/${saleId}/pdf`, '_blank');
-    } else {
+    if (!saleId) {
         alert('No se puede generar PDF: ID de venta no válido');
+        return;
+    }
+
+    // Determine button element - prefer passed parameter
+    let button = buttonElement;
+    if (!button && event) {
+        button = event.target.closest('button');
+    }
+    
+    let originalText = '';
+    
+    try {
+        // Show loading state
+        if (button) {
+            originalText = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<i class="bi bi-download"></i> Descargando...';
+        }
+
+        // Fetch PDF with proper session handling
+        const response = await fetch(`/api/receipts/${saleId}/pdf`, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/pdf'
+            }
+        });
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                throw new Error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+            } else if (response.status === 403) {
+                throw new Error('No tienes permisos para descargar este recibo.');
+            } else if (response.status === 404) {
+                throw new Error('Recibo no encontrado.');
+            } else if (response.status === 400) {
+                throw new Error('Esta venta no se puede imprimir (falta NCF o no está completada).');
+            } else {
+                throw new Error(`Error del servidor: ${response.status}`);
+            }
+        }
+
+        // Convert response to blob
+        const blob = await response.blob();
+        
+        // Verify PDF content type
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/pdf')) {
+            throw new Error('El archivo descargado no es un PDF válido');
+        }
+        
+        // Verify that we got content
+        if (blob.size === 0) {
+            throw new Error('El archivo PDF está vacío');
+        }
+        
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `recibo_fiscal_${saleId}_${new Date().toISOString().slice(0,10)}.pdf`;
+        
+        // Trigger download
+        document.body.appendChild(a);
+        a.click();
+        
+        // Cleanup
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+    } catch (error) {
+        console.error('Error downloading PDF:', error);
+        alert(`Error al descargar PDF: ${error.message}`);
+    } finally {
+        // Always restore button
+        if (button && originalText) {
+            button.disabled = false;
+            button.innerHTML = originalText;
+        }
     }
 }
 
-// Auto-print functionality for receipt automation
+// Enhanced auto-print functionality with fallbacks
 document.addEventListener('DOMContentLoaded', function() {
     // Auto-print if triggered by POS system
     {% if auto_print %}
-    setTimeout(() => {
+    let printAttempted = false;
+    
+    function attemptPrint() {
+        if (printAttempted) return;
+        printAttempted = true;
+        
         console.log('[Receipt] Auto-print triggered for {{ receipt_format }} format');
-        window.print();
-    }, 1000);
+        
+        // Check if printing is available
+        if (typeof window.print === 'function') {
+            try {
+                window.print();
+                console.log('[Receipt] Print dialog opened successfully');
+                
+                // If print fails, show manual instructions
+                setTimeout(() => {
+                    if (!window.document.hasFocus()) {
+                        console.log('[Receipt] Print dialog appears to be open');
+                    }
+                }, 1500);
+                
+            } catch (error) {
+                console.error('[Receipt] Print error:', error);
+                showPrintFallback();
+            }
+        } else {
+            console.warn('[Receipt] window.print not available');
+            showPrintFallback();
+        }
+    }
+    
+    function showPrintFallback() {
+        const fallbackMsg = document.createElement('div');
+        fallbackMsg.innerHTML = `
+            <div style="position: fixed; top: 20px; right: 20px; background: #ff6b6b; color: white; padding: 15px; border-radius: 8px; z-index: 10000; max-width: 300px;">
+                <strong>Impresión automática no disponible</strong><br>
+                Use Ctrl+P (Cmd+P en Mac) para imprimir manualmente.
+                <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; color: white; font-size: 18px; cursor: pointer;">&times;</button>
+            </div>
+        `;
+        document.body.appendChild(fallbackMsg);
+        
+        setTimeout(() => {
+            if (fallbackMsg.parentElement) {
+                fallbackMsg.remove();
+            }
+        }, 8000);
+    }
+    
+    // Multiple triggers to ensure print happens
+    setTimeout(attemptPrint, 1000);  // Primary trigger
+    setTimeout(() => {
+        if (!printAttempted) attemptPrint();
+    }, 2000);  // Fallback trigger
+    
     {% endif %}
     
     // Legacy support for hash-based printing
@@ -317,6 +446,13 @@ document.addEventListener('DOMContentLoaded', function() {
             window.print();
         }
     }, 500);
+    
+    // Handle visibility change to detect print completion
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden && printAttempted) {
+            console.log('[Receipt] Page became visible after print attempt');
+        }
+    });
 });
 </script>
 {% endblock %}
