@@ -1519,7 +1519,19 @@ async function billOrder(orderId) {
         // Store the order ID for finalization
         window.currentOrderId = orderId;
         
-        showNotification(`Orden de Mesa ${order.table?.number || 'Sin asignar'} cargada en el carrito`, 'success');
+        // Update order status to indicate it's being processed
+        try {
+            await apiRequest(`/api/sales/${orderId}/kitchen-status`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    order_status: 'in_preparation'
+                })
+            });
+        } catch (error) {
+            console.warn('[Orders] Could not update order status:', error.message);
+        }
+        
+        showNotification(`Orden de Mesa ${order.table_number || 'Sin asignar'} cargada en el carrito`, 'success');
         
     } catch (error) {
         console.error('[Orders] Error billing order:', error.message || error);

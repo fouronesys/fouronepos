@@ -1002,7 +1002,11 @@ def get_pending_orders():
     
     try:
         # Get pending sales with table and user information
-        pending_sales = models.Sale.query.filter_by(status='pending').options(
+        # Only show orders that are pending and not yet being processed (not_sent or sent_to_kitchen)
+        pending_sales = models.Sale.query.filter(
+            models.Sale.status == 'pending',
+            models.Sale.order_status.in_([models.OrderStatus.NOT_SENT, models.OrderStatus.SENT_TO_KITCHEN])
+        ).options(
             db.joinedload(models.Sale.table),
             db.joinedload(models.Sale.user),
             db.joinedload(models.Sale.sale_items).joinedload(models.SaleItem.product)
@@ -1304,6 +1308,9 @@ def get_sale_details(sale_id):
     # Prepare sale data
     sale_data = {
         'id': sale.id,
+        'table_id': sale.table_id,
+        'table_number': sale.table.number if sale.table else None,
+        'table_name': sale.table.name if sale.table else None,
         'ncf': sale.ncf,
         'created_at': sale.created_at.isoformat(),
         'customer_name': sale.customer_name,
