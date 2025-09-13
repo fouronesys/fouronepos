@@ -1631,3 +1631,117 @@ def cancel_sale(sale_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Error interno: {str(e)}'}), 500
+
+
+@bp.route('/sales/<int:sale_id>/details', methods=['GET'])
+def get_sale_details(sale_id):
+    """Get detailed information about a sale for display in table management"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    user = models.User.query.get(session['user_id'])
+    if not user or user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
+        return jsonify({'error': 'Solo administradores y cajeros pueden ver detalles de ventas'}), 403
+    
+    sale = models.Sale.query.get_or_404(sale_id)
+    sale_items = models.SaleItem.query.filter_by(sale_id=sale_id).all()
+    
+    # Prepare sale details
+    sale_details = {
+        'id': sale.id,
+        'created_at': sale.created_at.isoformat(),
+        'table_number': sale.table.number if sale.table else None,
+        'table_name': sale.table.name if sale.table else None,
+        'status': sale.status,
+        'total': sale.total,
+        'subtotal': sale.subtotal,
+        'tax_amount': sale.tax_amount,
+        'description': sale.description,
+        'items': []
+    }
+    
+    # Add sale items
+    for item in sale_items:
+        sale_details['items'].append({
+            'product_name': item.product.name,
+            'quantity': item.quantity,
+            'unit_price': item.unit_price,
+            'total_price': item.total_price
+        })
+    
+    return jsonify(sale_details)
+
+
+@bp.route('/sales/<int:sale_id>/finalize', methods=['POST'])
+def finalize_sale(sale_id):
+    """Finalize a sale with NCF generation and payment processing - Admin/Cashier only"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    user = models.User.query.get(session['user_id'])
+    if not user or user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
+        return jsonify({'error': 'Solo administradores y cajeros pueden facturar órdenes'}), 403
+    
+    # Get cash register for admin/cashier
+    cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
+    if not cash_register:
+        return jsonify({'error': 'No tienes una caja registradora asignada'}), 400
+    
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        payment_method = data.get('payment_method')
+        ncf_type = data.get('ncf_type')
+        
+        if not payment_method or not ncf_type:
+            return jsonify({'error': 'Método de pago y tipo de NCF son requeridos'}), 400
+        
+        sale = models.Sale.query.get_or_404(sale_id)
+        
+        # Ensure sale is pending
+        if sale.status != 'pending':
+            return jsonify({'error': f'Esta venta ya está {sale.status}'}), 400
+        
+        # Update sale with billing information
+        sale.payment_method = payment_method
+        sale.customer_name = data.get('customer_name', '')
+        sale.customer_rnc = data.get('customer_rnc', '')
+        sale.description = data.get('description', sale.description or '')
+        sale.cash_register_id = cash_register.id
+        sale.user_id = user.id
+        
+        # Generate NCF
+        ncf_sequence = _get_available_ncf_sequence(ncf_type)
+        if not ncf_sequence:
+            return jsonify({'error': f'No hay NCF disponibles del tipo {ncf_type}'}), 400
+        
+        sale.ncf_sequence_id = ncf_sequence.id
+        sale.ncf = _generate_ncf(ncf_sequence)
+        
+        # Mark NCF as used
+        ncf_sequence.current_number += 1
+        
+        # Complete the sale
+        sale.status = 'completed'
+        sale.completed_at = datetime.utcnow()
+        
+        # Update table status to available
+        if sale.table:
+            sale.table.status = models.TableStatus.AVAILABLE
+        
+        # Commit changes
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Venta facturada exitosamente',
+            'sale_id': sale.id,
+            'ncf': sale.ncf,
+            'total': sale.total,
+            'payment_method': sale.payment_method
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error finalizando venta: {str(e)}'}), 500

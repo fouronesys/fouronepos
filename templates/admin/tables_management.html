@@ -1,0 +1,386 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Mesas - {{ user_role }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-table"></i> Gestión de Mesas</h2>
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-house"></i> Dashboard
+            </a>
+            <a href="{{ url_for('admin.pos') }}" class="btn btn-outline-primary">
+                <i class="bi bi-cash-register"></i> POS
+            </a>
+        </div>
+    </div>
+    
+    <!-- Tables with Active Orders -->
+    {% if tables_with_orders %}
+    <div class="mb-5">
+        <h4 class="text-primary mb-3">
+            <i class="bi bi-clipboard-check"></i> Mesas con Órdenes Activas 
+            <span class="badge bg-primary">{{ tables_with_orders|length }}</span>
+        </h4>
+        <div class="row">
+            {% for table_data in tables_with_orders %}
+            {% set table = table_data.table %}
+            {% set current_sale = table_data.current_sale %}
+            {% set order_total = table_data.order_total %}
+            {% set order_items_count = table_data.order_items_count %}
+            
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card border-primary h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-table"></i> Mesa {{ table.number }}
+                            {% if table.name %}
+                            <small class="text-light">- {{ table.name }}</small>
+                            {% endif %}
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <p class="mb-1"><i class="bi bi-people"></i> {{ table.capacity }} personas</p>
+                                <p class="mb-1">
+                                    <i class="bi bi-receipt"></i> 
+                                    {{ order_items_count }} {% if order_items_count == 1 %}producto{% else %}productos{% endif %}
+                                </p>
+                            </div>
+                            <div class="col-6 text-end">
+                                <p class="mb-1"><strong>Venta ID:</strong> {{ current_sale.id }}</p>
+                                <p class="mb-1 text-success"><strong>RD$ {{ "%.2f"|format(order_total) }}</strong></p>
+                            </div>
+                        </div>
+                        
+                        <!-- Order Items Preview -->
+                        {% if current_sale.sale_items %}
+                        <div class="mb-3">
+                            <h6 class="text-muted mb-2">Productos en la orden:</h6>
+                            <div class="small">
+                                {% for item in current_sale.sale_items[:3] %}
+                                <div class="d-flex justify-content-between border-bottom py-1">
+                                    <span>{{ item.quantity }}x {{ item.product.name }}</span>
+                                    <span>RD$ {{ "%.2f"|format(item.total_price) }}</span>
+                                </div>
+                                {% endfor %}
+                                {% if current_sale.sale_items|length > 3 %}
+                                <div class="text-center text-muted mt-1">
+                                    <small>... y {{ current_sale.sale_items|length - 3 }} más</small>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-success btn-lg" onclick="billTable({{ table.id }}, {{ current_sale.id }}, {{ order_total }})">
+                                <i class="bi bi-credit-card"></i> Facturar Mesa
+                            </button>
+                            <button class="btn btn-outline-info btn-sm" onclick="viewOrderDetails({{ current_sale.id }})">
+                                <i class="bi bi-eye"></i> Ver Detalles
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-footer text-muted text-center">
+                        <small>
+                            <i class="bi bi-clock"></i> 
+                            Creada: {{ current_sale.created_at.strftime('%H:%M') }}
+                        </small>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info text-center">
+        <i class="bi bi-info-circle fs-4"></i>
+        <h5 class="mt-2">No hay mesas con órdenes activas</h5>
+        <p class="mb-0">Las mesas con órdenes pendientes aparecerán aquí para facturación.</p>
+    </div>
+    {% endif %}
+    
+    <!-- Available Tables -->
+    {% if tables_available %}
+    <div>
+        <h4 class="text-muted mb-3">
+            <i class="bi bi-check-circle"></i> Mesas Disponibles 
+            <span class="badge bg-secondary">{{ tables_available|length }}</span>
+        </h4>
+        <div class="row">
+            {% for table_data in tables_available %}
+            {% set table = table_data.table %}
+            
+            <div class="col-md-4 col-lg-3 mb-3">
+                <div class="card border-success h-100">
+                    <div class="card-body text-center">
+                        <h5>
+                            <i class="bi bi-table"></i> Mesa {{ table.number }}
+                        </h5>
+                        {% if table.name %}
+                        <p class="text-muted">{{ table.name }}</p>
+                        {% endif %}
+                        <p><i class="bi bi-people"></i> {{ table.capacity }} personas</p>
+                        <span class="badge bg-success">Disponible</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Order Details Modal -->
+<div class="modal fade" id="orderDetailsModal" tabindex="-1" aria-labelledby="orderDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="orderDetailsModalLabel">
+                    <i class="bi bi-receipt"></i> Detalles de la Orden
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="orderDetailsContent">
+                <!-- Content will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Billing Modal -->
+<div class="modal fade" id="billingModal" tabindex="-1" aria-labelledby="billingModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="billingModalLabel">
+                    <i class="bi bi-credit-card"></i> Facturar Mesa
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="billingContent">
+                    <!-- Billing form will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentTableId = null;
+let currentSaleId = null;
+let currentTotal = 0;
+
+// Bill a table order
+async function billTable(tableId, saleId, total) {
+    currentTableId = tableId;
+    currentSaleId = saleId;
+    currentTotal = total;
+    
+    // Create billing form content
+    const billingContent = `
+        <div class="text-center mb-3">
+            <h4>Mesa ${tableId}</h4>
+            <p class="text-muted">Venta ID: ${saleId}</p>
+            <h5 class="text-success">Total: RD$ ${total.toFixed(2)}</h5>
+        </div>
+        
+        <form id="billingForm">
+            <div class="mb-3">
+                <label for="paymentMethod" class="form-label">Método de Pago</label>
+                <select class="form-select" id="paymentMethod" required>
+                    <option value="">Seleccionar método</option>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="tarjeta">Tarjeta</option>
+                    <option value="transferencia">Transferencia</option>
+                </select>
+            </div>
+            
+            <div class="mb-3">
+                <label for="ncfType" class="form-label">Tipo de Comprobante</label>
+                <select class="form-select" id="ncfType" required>
+                    <option value="">Seleccionar tipo</option>
+                    <option value="consumo">Consumo (B01)</option>
+                    <option value="credito_fiscal">Crédito Fiscal (B02)</option>
+                    <option value="gubernamental">Gubernamental (B14)</option>
+                </select>
+            </div>
+            
+            <div class="mb-3" id="customerInfoSection" style="display: none;">
+                <label for="customerName" class="form-label">Nombre del Cliente</label>
+                <input type="text" class="form-control" id="customerName" placeholder="Nombre completo">
+                
+                <label for="customerRnc" class="form-label mt-2">RNC/Cédula</label>
+                <input type="text" class="form-control" id="customerRnc" placeholder="RNC (9 dígitos) o Cédula (11 dígitos)">
+            </div>
+            
+            <div class="mb-3">
+                <label for="description" class="form-label">Descripción (Opcional)</label>
+                <input type="text" class="form-control" id="description" placeholder="Nota interna de la venta">
+            </div>
+            
+            <div class="d-grid gap-2">
+                <button type="button" class="btn btn-success btn-lg" onclick="processBilling()">
+                    <i class="bi bi-check-circle"></i> Procesar Factura
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Cancelar
+                </button>
+            </div>
+        </form>
+    `;
+    
+    document.getElementById('billingContent').innerHTML = billingContent;
+    
+    // Show/hide customer info section based on NCF type
+    document.getElementById('ncfType').addEventListener('change', function() {
+        const customerSection = document.getElementById('customerInfoSection');
+        const requiresCustomer = ['credito_fiscal', 'gubernamental'].includes(this.value);
+        customerSection.style.display = requiresCustomer ? 'block' : 'none';
+    });
+    
+    // Show billing modal
+    const modal = new bootstrap.Modal(document.getElementById('billingModal'));
+    modal.show();
+}
+
+// Process billing
+async function processBilling() {
+    const form = document.getElementById('billingForm');
+    const formData = new FormData(form);
+    
+    const billingData = {
+        payment_method: document.getElementById('paymentMethod').value,
+        ncf_type: document.getElementById('ncfType').value,
+        customer_name: document.getElementById('customerName').value,
+        customer_rnc: document.getElementById('customerRnc').value,
+        description: document.getElementById('description').value
+    };
+    
+    // Validate required fields
+    if (!billingData.payment_method || !billingData.ncf_type) {
+        alert('Por favor completa todos los campos requeridos.');
+        return;
+    }
+    
+    // Validate customer info for fiscal receipts
+    if (['credito_fiscal', 'gubernamental'].includes(billingData.ncf_type)) {
+        if (!billingData.customer_name || !billingData.customer_rnc) {
+            alert('Los comprobantes fiscales y gubernamentales requieren información del cliente.');
+            return;
+        }
+    }
+    
+    try {
+        // Process the sale via API
+        const response = await fetch(`/api/sales/${currentSaleId}/finalize`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify(billingData)
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            
+            alert(`✅ Factura procesada exitosamente!\n\n` +
+                  `📋 NCF: ${result.ncf}\n` +
+                  `💰 Total: RD$ ${result.total.toFixed(2)}\n` +
+                  `🧾 ID Venta: ${result.sale_id}`);
+            
+            // Hide modal and reload page
+            bootstrap.Modal.getInstance(document.getElementById('billingModal')).hide();
+            location.reload();
+            
+        } else {
+            const error = await response.json();
+            alert('Error procesando factura: ' + (error.error || 'Error desconocido'));
+        }
+    } catch (error) {
+        alert('Error de conexión procesando factura');
+        console.error('Billing error:', error);
+    }
+}
+
+// View order details
+async function viewOrderDetails(saleId) {
+    try {
+        const response = await fetch(`/api/sales/${saleId}/details`);
+        if (response.ok) {
+            const sale = await response.json();
+            
+            let detailsHtml = `
+                <div class="row mb-3">
+                    <div class="col-6"><strong>Venta ID:</strong> ${sale.id}</div>
+                    <div class="col-6"><strong>Mesa:</strong> ${sale.table_number}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-6"><strong>Fecha:</strong> ${new Date(sale.created_at).toLocaleString()}</div>
+                    <div class="col-6"><strong>Total:</strong> RD$ ${sale.total.toFixed(2)}</div>
+                </div>
+                
+                <h6>Productos:</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th>Cantidad</th>
+                                <th>Precio</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            sale.items.forEach(item => {
+                detailsHtml += `
+                    <tr>
+                        <td>${item.product_name}</td>
+                        <td>${item.quantity}</td>
+                        <td>RD$ ${item.unit_price.toFixed(2)}</td>
+                        <td>RD$ ${item.total_price.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+            
+            detailsHtml += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            document.getElementById('orderDetailsContent').innerHTML = detailsHtml;
+            
+            const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
+            modal.show();
+            
+        } else {
+            alert('Error cargando detalles de la orden');
+        }
+    } catch (error) {
+        alert('Error de conexión');
+        console.error('Order details error:', error);
+    }
+}
+
+// Get CSRF token from meta tag or form
+function getCsrfToken() {
+    const token = document.querySelector('meta[name=csrf-token]');
+    return token ? token.getAttribute('content') : '';
+}
+
+// Auto refresh page every 30 seconds to show updated table status
+setInterval(() => {
+    location.reload();
+}, 30000);
+</script>
+{% endblock %}

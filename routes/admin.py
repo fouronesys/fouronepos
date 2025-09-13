@@ -110,6 +110,45 @@ def dashboard():
                          low_stock_products=low_stock_products)
 
 
+@bp.route('/tables-management')
+def tables_management():
+    """View for admin/cashier to manage table orders and billing"""
+    user = require_admin_or_cashier()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Get all tables with their current sales information
+    tables = models.Table.query.all()
+    
+    # Enrich tables with sale information for admin/cashier view
+    enriched_tables = []
+    for table in tables:
+        # Get current pending sale for this table
+        current_sale = models.Sale.query.filter_by(
+            table_id=table.id, 
+            status='pending'
+        ).first()
+        
+        table_data = {
+            'table': table,
+            'current_sale': current_sale,
+            'has_order': current_sale is not None,
+            'order_total': current_sale.total if current_sale else 0,
+            'order_items_count': len(current_sale.sale_items) if current_sale else 0,
+            'can_bill': current_sale is not None  # Only tables with orders can be billed
+        }
+        enriched_tables.append(table_data)
+    
+    # Filter to show only tables with orders first, then all tables
+    tables_with_orders = [t for t in enriched_tables if t['has_order']]
+    tables_available = [t for t in enriched_tables if not t['has_order']]
+    
+    return render_template('admin/tables_management.html', 
+                         tables_with_orders=tables_with_orders,
+                         tables_available=tables_available,
+                         user_role=user.role.value)
+
+
 @bp.route('/pos')
 def pos():
     user = require_pos_access()
