@@ -241,7 +241,9 @@ class Sale(db.Model):
     tax_amount: Mapped[float] = mapped_column(Float, default=0.0)
     service_charge_amount: Mapped[float] = mapped_column(Float, default=0.0)  # Propina/service charge
     total: Mapped[float] = mapped_column(Float, nullable=False)
-    payment_method: Mapped[str] = mapped_column(String(50), default="efectivo")
+    payment_method: Mapped[str] = mapped_column(String(50), default="cash")
+    cash_received: Mapped[float] = mapped_column(Float, nullable=True)  # Amount of cash received
+    change_amount: Mapped[float] = mapped_column(Float, nullable=True)  # Change to be given
     status: Mapped[str] = mapped_column(String(20), default="pending")  # completed, pending, cancelled
     order_status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.NOT_SENT)
     # Client info for fiscal/government invoices (NCF compliance)

@@ -5,6 +5,9 @@
 {% block head %}
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pos-style.css') }}?v=20250912065500">
+<!-- Organized JavaScript Files -->
+<script src="{{ url_for('static', filename='js/pos-utils.js') }}?v={{ timestamp }}"></script>
+<script src="{{ url_for('static', filename='js/payment-system.js') }}?v={{ timestamp }}"></script>
 {% endblock %}
 
 {% block content %}
@@ -182,6 +185,39 @@
                                 <span>RNC/Cédula</span>
                             </label>
                             <input type="text" class="modern-input" id="client-rnc" placeholder="RNC o número de cédula">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Payment Method Configuration Section -->
+                <div class="cart-config">
+                    <div class="config-item">
+                        <label for="payment-method-select" class="config-label">
+                            <i class="bi bi-credit-card"></i>
+                            <span>Método de Pago</span>
+                        </label>
+                        <select class="modern-select" id="payment-method-select" onchange="toggleCashFields()">
+                            <option value="cash">Efectivo</option>
+                            <option value="card">Tarjeta</option>
+                            <option value="transfer">Transferencia</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Cash Payment Fields -->
+                    <div id="cash-payment-section" class="cash-payment-section">
+                        <div class="config-item">
+                            <label for="cash-received" class="config-label">
+                                <i class="bi bi-cash-stack"></i>
+                                <span>Efectivo Recibido</span>
+                            </label>
+                            <input type="number" step="0.01" min="0" class="modern-input" id="cash-received" placeholder="0.00" onchange="calculateChange()">
+                        </div>
+                        <div class="config-item">
+                            <label class="config-label">
+                                <i class="bi bi-arrow-down-circle"></i>
+                                <span>Cambio a Entregar</span>
+                            </label>
+                            <div class="change-display" id="change-display">RD$ 0.00</div>
                         </div>
                     </div>
                 </div>
@@ -881,11 +917,26 @@ function processSale() {
     })
     .then(sale => {
         // Finalize sale
+        const paymentMethod = document.getElementById('payment-method-select').value;
         const finalizationData = {
-            payment_method: 'efectivo',
+            payment_method: paymentMethod,
             ncf_type: ncfType,
             tax_rate: getCurrentTaxRate()
         };
+        
+        // Add cash payment details if paying with cash
+        if (paymentMethod === 'cash') {
+            const cashReceived = parseFloat(document.getElementById('cash-received').value) || 0;
+            const total = cartManager.getTotals().total;
+            
+            if (cashReceived < total) {
+                showNotification('El efectivo recibido debe ser mayor o igual al total', 'error');
+                return Promise.reject('Efectivo insuficiente');
+            }
+            
+            finalizationData.cash_received = cashReceived;
+            finalizationData.change_amount = cashReceived - total;
+        }
         
         // Add client info for fiscal/government invoices
         if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
@@ -1330,6 +1381,45 @@ async function billOrder(orderId) {
 function viewOrderDetails(orderId) {
     // TODO: Implement order details modal
     showNotification(`Ver detalles de orden ${orderId} - Por implementar`, 'info');
+}
+
+// Toggle cash payment fields based on payment method
+function toggleCashFields() {
+    const paymentMethod = document.getElementById('payment-method-select').value;
+    const cashSection = document.getElementById('cash-payment-section');
+    
+    if (paymentMethod === 'cash') {
+        cashSection.style.display = 'block';
+        // Auto-fill cash received with total amount
+        const total = cartManager.getTotals().total;
+        document.getElementById('cash-received').value = total.toFixed(2);
+        calculateChange();
+    } else {
+        cashSection.style.display = 'none';
+        document.getElementById('cash-received').value = '';
+        document.getElementById('change-display').textContent = 'RD$ 0.00';
+    }
+}
+
+// Calculate change to be given
+function calculateChange() {
+    const cashReceived = parseFloat(document.getElementById('cash-received').value) || 0;
+    const total = cartManager.getTotals().total;
+    const change = Math.max(0, cashReceived - total);
+    
+    const changeDisplay = document.getElementById('change-display');
+    changeDisplay.textContent = `RD$ ${change.toFixed(2)}`;
+    
+    // Add visual feedback for insufficient cash
+    if (cashReceived > 0 && cashReceived < total) {
+        changeDisplay.style.color = '#dc3545';
+        changeDisplay.innerHTML = `<i class="bi bi-exclamation-triangle"></i> RD$ ${change.toFixed(2)} (Insuficiente)`;
+    } else if (change > 0) {
+        changeDisplay.style.color = '#28a745';
+        changeDisplay.innerHTML = `<i class="bi bi-check-circle"></i> RD$ ${change.toFixed(2)}`;
+    } else {
+        changeDisplay.style.color = '#6c757d';
+    }
 }
 
 // Initialize POS System

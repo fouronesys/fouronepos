@@ -353,7 +353,11 @@ def finalize_sale(sale_id):
     
     # Get NCF type from request (default to consumo)
     ncf_type_raw = data.get('ncf_type', 'consumo')
-    payment_method = data.get('payment_method', 'efectivo')
+    payment_method = data.get('payment_method', 'cash')
+    
+    # Handle cash payment details
+    cash_received = data.get('cash_received')
+    change_amount = data.get('change_amount')
     
     # Handle "sin_comprobante" case - treat as consumo type
     if ncf_type_raw == 'sin_comprobante':
@@ -541,6 +545,12 @@ def finalize_sale(sale_id):
         sale.ncf = ncf_number
         sale.payment_method = payment_method
         sale.status = 'completed'
+        
+        # Store cash payment details if provided
+        if cash_received is not None:
+            sale.cash_received = cash_received
+        if change_amount is not None:
+            sale.change_amount = change_amount
         
         # Calculate totals by tax rate categories with support for included taxes
         subtotal_by_rate = {}
@@ -1912,6 +1922,14 @@ def finalize_table_sale(sale_id):
         sale.customer_name = data.get('customer_name', '')
         sale.customer_rnc = data.get('customer_rnc', '')
         sale.description = data.get('description', sale.description or '')
+        
+        # Store cash payment details if provided
+        cash_received = data.get('cash_received')
+        change_amount = data.get('change_amount')
+        if cash_received is not None:
+            sale.cash_received = cash_received
+        if change_amount is not None:
+            sale.change_amount = change_amount
         sale.cash_register_id = cash_register.id
         sale.user_id = user.id
         
@@ -1961,3 +1979,56 @@ def finalize_table_sale(sale_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Error finalizando venta: {str(e)}'}), 500
+
+
+@bp.route('/sales/cash-summary', methods=['GET'])
+def get_cash_summary():
+    """Get cash summary for the current day broken down by payment method"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Get today's date
+    today = datetime.now().date()
+    
+    try:
+        # Get sales grouped by payment method for today
+        from sqlalchemy import func
+        
+        sales_summary = db.session.query(
+            models.Sale.payment_method,
+            func.sum(models.Sale.total).label('total'),
+            func.count(models.Sale.id).label('count')
+        ).filter(
+            func.date(models.Sale.created_at) == today,
+            models.Sale.status == 'completed'
+        ).group_by(models.Sale.payment_method).all()
+        
+        # Initialize totals
+        cash_total = 0.0
+        card_total = 0.0
+        transfer_total = 0.0
+        total_sales = 0.0
+        
+        # Process results (handle both 'cash' and 'efectivo' for backwards compatibility)
+        for payment_method, total, count in sales_summary:
+            if payment_method in ['cash', 'efectivo']:
+                cash_total += float(total or 0)
+            elif payment_method == 'card':
+                card_total = float(total or 0)
+            elif payment_method == 'transfer':
+                transfer_total = float(total or 0)
+            
+            total_sales += float(total or 0)
+        
+        return jsonify({
+            'cash_total': cash_total,
+            'card_total': card_total,
+            'transfer_total': transfer_total,
+            'total_sales': total_sales,
+            'date': today.isoformat()
+        })
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to get cash summary: {str(e)}")
+        return jsonify({'error': f'Error al obtener resumen de caja: {str(e)}'}), 500

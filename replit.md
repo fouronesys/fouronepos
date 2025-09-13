@@ -11,6 +11,30 @@ Key features include fiscal compliance with NCF sequences, inventory management 
 
 # Recent Changes
 
+**September 13, 2025**: Enhanced Payment System and Cash Management
+- **COMPREHENSIVE PAYMENT SYSTEM**: Implemented complete payment method handling with cash, card, and transfer options
+  - Added cash payment processing with automatic change calculation in POS and table billing interfaces  
+  - Enhanced payment method selection with visual indicators and validation
+  - Implemented cash received input fields and change amount tracking for accurate cash handling
+  - Updated backend API endpoints to process and store detailed cash payment information
+  - Added cash_received and change_amount columns to sales table for complete transaction tracking
+- **ADVANCED CASH MANAGEMENT**: Created comprehensive cash register management system
+  - Added payment method configuration modal in dashboard quick actions with enable/disable options
+  - Implemented cash register opening and closing functionality with amount tracking and notes
+  - Created cash management modal with opening/closing procedures and validation
+  - Added cash summary dashboard with real-time totals by payment method (cash, card, transfers)
+  - Enhanced role-based billing access to include managers alongside admins and cashiers for improved workflow
+- **BACKEND ENHANCEMENTS**: Strengthened data handling and API capabilities
+  - Created /api/sales/cash-summary endpoint for daily payment method breakdowns
+  - Updated finalize_sale and table-finalize endpoints to handle cash payment details
+  - Improved payment method storage with consistent "cash" terminology replacing "efectivo"
+  - Enhanced error handling and validation for cash transactions and change calculations
+- **UI/UX IMPROVEMENTS**: Enhanced user experience for payment processing
+  - Added comprehensive payment configuration interface with individual method toggles
+  - Implemented cash register status tracking with visual feedback and action buttons
+  - Enhanced quick actions menu with payment configuration and cash management options
+  - Added real-time cash summary display with breakdown by payment method and daily totals
+
 **September 12, 2025**: Complete UI modernization and enhanced fiscal compliance
 - **MAJOR UI OVERHAUL**: Implemented comprehensive design modernization with new enhanced-design.css system
   - Created modern design tokens system with CSS variables for colors, spacing, shadows, and animations

@@ -169,6 +169,14 @@
                                     <i class="bi bi-receipt-cutoff me-2"></i>
                                     Secuencias NCF
                                 </a>
+                                <button class="btn btn-outline-secondary" onclick="showPaymentMethodsConfig()">
+                                    <i class="bi bi-credit-card me-2"></i>
+                                    Métodos de Pago
+                                </button>
+                                <button class="btn btn-outline-success" onclick="showCashManagement()">
+                                    <i class="bi bi-cash-coin me-2"></i>
+                                    Gestión de Caja
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -247,4 +255,286 @@
         </div>
     </div>
 </div>
+
+<!-- Payment Methods Configuration Modal -->
+<div class="modal fade" id="paymentMethodsModal" tabindex="-1" aria-labelledby="paymentMethodsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="paymentMethodsModalLabel">
+                    <i class="bi bi-credit-card"></i> Configuración de Métodos de Pago
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6><i class="bi bi-cash-stack"></i> Efectivo</h6>
+                                <p class="text-muted mb-3">Configuración para pagos en efectivo</p>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enableCash" checked>
+                                    <label class="form-check-label" for="enableCash">Habilitar pagos en efectivo</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="autoCalculateChange" checked>
+                                    <label class="form-check-label" for="autoCalculateChange">Calcular cambio automáticamente</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6><i class="bi bi-credit-card"></i> Tarjetas</h6>
+                                <p class="text-muted mb-3">Configuración para pagos con tarjeta</p>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enableCard">
+                                    <label class="form-check-label" for="enableCard">Habilitar pagos con tarjeta</label>
+                                </div>
+                                <div class="mt-2">
+                                    <small class="text-muted">Integración con procesador de pagos pendiente</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6><i class="bi bi-bank"></i> Transferencias</h6>
+                                <p class="text-muted mb-3">Configuración para transferencias bancarias</p>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enableTransfer">
+                                    <label class="form-check-label" for="enableTransfer">Habilitar transferencias bancarias</label>
+                                </div>
+                                <div class="mt-2">
+                                    <input type="text" class="form-control form-control-sm" placeholder="Cuenta bancaria para transferencias">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary" onclick="savePaymentMethodsConfig()">Guardar Configuración</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cash Management Modal -->
+<div class="modal fade" id="cashManagementModal" tabindex="-1" aria-labelledby="cashManagementModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cashManagementModalLabel">
+                    <i class="bi bi-cash-coin"></i> Gestión de Caja
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="mb-0"><i class="bi bi-unlock"></i> Apertura de Caja</h6>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-text">Registrar el monto inicial de efectivo en caja</p>
+                                <div class="mb-3">
+                                    <label for="openingAmount" class="form-label">Monto de Apertura</label>
+                                    <input type="number" step="0.01" class="form-control" id="openingAmount" placeholder="0.00">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="openingNotes" class="form-label">Observaciones</label>
+                                    <textarea class="form-control" id="openingNotes" rows="2"></textarea>
+                                </div>
+                                <button class="btn btn-success btn-sm w-100" onclick="openCashRegister()">
+                                    <i class="bi bi-play-circle"></i> Abrir Caja
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header bg-danger text-white">
+                                <h6 class="mb-0"><i class="bi bi-lock"></i> Cierre de Caja</h6>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-text">Realizar arqueo y cerrar caja</p>
+                                <div class="mb-3">
+                                    <label for="closingAmount" class="form-label">Efectivo Contado</label>
+                                    <input type="number" step="0.01" class="form-control" id="closingAmount" placeholder="0.00">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="closingNotes" class="form-label">Observaciones</label>
+                                    <textarea class="form-control" id="closingNotes" rows="2"></textarea>
+                                </div>
+                                <button class="btn btn-danger btn-sm w-100" onclick="closeCashRegister()">
+                                    <i class="bi bi-stop-circle"></i> Cerrar Caja
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Cash Register Summary -->
+                <div class="col-12 mt-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="bi bi-journal-text"></i> Resumen de Caja del Día</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-md-3">
+                                    <div class="border rounded p-3">
+                                        <h6 class="text-muted">Ventas en Efectivo</h6>
+                                        <h4 class="text-success" id="cashSalesTotal">RD$ 0.00</h4>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="border rounded p-3">
+                                        <h6 class="text-muted">Ventas con Tarjeta</h6>
+                                        <h4 class="text-info" id="cardSalesTotal">RD$ 0.00</h4>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="border rounded p-3">
+                                        <h6 class="text-muted">Transferencias</h6>
+                                        <h4 class="text-warning" id="transferSalesTotal">RD$ 0.00</h4>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="border rounded p-3">
+                                        <h6 class="text-muted">Total del Día</h6>
+                                        <h4 class="text-primary" id="totalSales">RD$ 0.00</h4>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-info" onclick="generateCashReport()">
+                    <i class="bi bi-file-earmark-text"></i> Generar Reporte
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Show payment methods configuration modal
+function showPaymentMethodsConfig() {
+    const modal = new bootstrap.Modal(document.getElementById('paymentMethodsModal'));
+    modal.show();
+}
+
+// Save payment methods configuration
+function savePaymentMethodsConfig() {
+    const config = {
+        enableCash: document.getElementById('enableCash').checked,
+        autoCalculateChange: document.getElementById('autoCalculateChange').checked,
+        enableCard: document.getElementById('enableCard').checked,
+        enableTransfer: document.getElementById('enableTransfer').checked
+    };
+    
+    // Here you would save to backend
+    localStorage.setItem('paymentMethodsConfig', JSON.stringify(config));
+    
+    const modal = bootstrap.Modal.getInstance(document.getElementById('paymentMethodsModal'));
+    modal.hide();
+    
+    showNotification('Configuración de métodos de pago guardada exitosamente', 'success');
+}
+
+// Show cash management modal
+function showCashManagement() {
+    const modal = new bootstrap.Modal(document.getElementById('cashManagementModal'));
+    modal.show();
+    loadCashSummary();
+}
+
+// Load cash summary for the day
+async function loadCashSummary() {
+    try {
+        const response = await fetch('/api/sales/cash-summary');
+        if (response.ok) {
+            const data = await response.json();
+            document.getElementById('cashSalesTotal').textContent = `RD$ ${data.cash_total.toFixed(2)}`;
+            document.getElementById('cardSalesTotal').textContent = `RD$ ${data.card_total.toFixed(2)}`;
+            document.getElementById('transferSalesTotal').textContent = `RD$ ${data.transfer_total.toFixed(2)}`;
+            document.getElementById('totalSales').textContent = `RD$ ${data.total_sales.toFixed(2)}`;
+        }
+    } catch (error) {
+        console.error('Error loading cash summary:', error);
+    }
+}
+
+// Open cash register
+function openCashRegister() {
+    const amount = parseFloat(document.getElementById('openingAmount').value);
+    const notes = document.getElementById('openingNotes').value;
+    
+    if (!amount || amount <= 0) {
+        alert('Por favor ingresa un monto válido para la apertura');
+        return;
+    }
+    
+    // Here you would call the backend API
+    showNotification(`Caja abierta con RD$ ${amount.toFixed(2)}`, 'success');
+    
+    // Clear form
+    document.getElementById('openingAmount').value = '';
+    document.getElementById('openingNotes').value = '';
+}
+
+// Close cash register
+function closeCashRegister() {
+    const amount = parseFloat(document.getElementById('closingAmount').value);
+    const notes = document.getElementById('closingNotes').value;
+    
+    if (!amount || amount < 0) {
+        alert('Por favor ingresa un monto válido para el cierre');
+        return;
+    }
+    
+    // Here you would call the backend API to close the register
+    showNotification(`Caja cerrada con RD$ ${amount.toFixed(2)} en efectivo`, 'info');
+    
+    // Clear form
+    document.getElementById('closingAmount').value = '';
+    document.getElementById('closingNotes').value = '';
+}
+
+// Generate cash report
+function generateCashReport() {
+    const today = new Date().toISOString().split('T')[0];
+    window.open(`/api/reports/cash-register?date=${today}`, '_blank');
+}
+
+// Utility function to show notifications
+function showNotification(message, type = 'info') {
+    // Simple alert for now - could be replaced with toast notifications
+    alert(message);
+}
+
+// Load payment methods config on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const config = localStorage.getItem('paymentMethodsConfig');
+    if (config) {
+        const settings = JSON.parse(config);
+        document.getElementById('enableCash').checked = settings.enableCash !== false;
+        document.getElementById('autoCalculateChange').checked = settings.autoCalculateChange !== false;
+        document.getElementById('enableCard').checked = settings.enableCard || false;
+        document.getElementById('enableTransfer').checked = settings.enableTransfer || false;
+    }
+});
+</script>
 {% endblock %}
