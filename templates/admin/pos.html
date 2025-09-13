@@ -643,36 +643,44 @@ let deviceDetector;
 let cart = [];
 
 // Load products for category with offline support
-function loadProducts(categoryId) {
-    fetch(`/api/products?category_id=${categoryId}`, {
-        credentials: 'same-origin'
-    })
-        .then(response => response.json())
-        .then(products => {
-            const container = document.getElementById(`products-${categoryId}`);
-            container.innerHTML = '';
-            
-            products.forEach(product => {
-                const productCard = `
-                    <div class="col-md-4 col-lg-3 mb-3">
-                        <div class="product-card fade-in-up" onclick="addToCart(${product.id}, '${product.name}', ${product.price})">
-                            <div class="card-body">
-                                <div class="product-name">${product.name}</div>
-                                <div class="product-price">RD$ ${product.price.toFixed(2)}</div>
-                                <small class="opacity-75">Stock: ${product.stock}</small>
-                            </div>
+async function loadProducts(categoryId) {
+    try {
+        const products = await apiRequest(`/api/products?category_id=${categoryId}`);
+        
+        const container = document.getElementById(`products-${categoryId}`);
+        if (!container) {
+            console.error('[POS] Product container not found:', `products-${categoryId}`);
+            return;
+        }
+        
+        container.innerHTML = '';
+        
+        products.forEach(product => {
+            const productCard = `
+                <div class="col-md-4 col-lg-3 mb-3">
+                    <div class="product-card fade-in-up" onclick="addToCart(${product.id}, '${product.name}', ${product.price})">
+                        <div class="card-body">
+                            <div class="product-name">${product.name}</div>
+                            <div class="product-price">RD$ ${product.price.toFixed(2)}</div>
+                            <small class="opacity-75">Stock: ${product.stock}</small>
                         </div>
                     </div>
-                `;
-                container.innerHTML += productCard;
-            });
-        })
-        .catch(error => {
-            console.error('[POS] Error loading products:', error);
-            if (!navigator.onLine) {
-                showNotification('Cargando productos desde caché offline...', 'info');
-            }
+                </div>
+            `;
+            container.innerHTML += productCard;
         });
+        
+        console.log('[POS] Product data cached successfully');
+        
+    } catch (error) {
+        console.error('[POS] Error loading products:', error.message || error);
+        
+        if (!navigator.onLine) {
+            showNotification('Sin conexión - intentando cargar desde caché...', 'warning');
+        } else {
+            showNotification(`Error cargando productos: ${error.message}`, 'error');
+        }
+    }
 }
 
 // Switch between product categories
@@ -1353,14 +1361,13 @@ async function billOrder(orderId) {
         // Clear current cart first
         cartManager.clearCart();
         
-        // Get order details
-        const response = await fetch(`/api/sales/${orderId}/details`);
-        if (!response.ok) {
-            throw new Error('Error obteniendo detalles de la orden');
-        }
-        
-        const orderData = await response.json();
+        // Get order details using centralized API function
+        const orderData = await apiRequest(`/api/sales/${orderId}/details`);
         const order = orderData.sale;
+        
+        if (!order || !order.sale_items) {
+            throw new Error('Datos de orden inválidos recibidos del servidor');
+        }
         
         // Add order items to cart
         order.sale_items.forEach(item => {
@@ -1376,7 +1383,9 @@ async function billOrder(orderId) {
         // Set table if available
         if (order.table_id) {
             const tableSelect = document.getElementById('table-select');
-            tableSelect.value = order.table_id;
+            if (tableSelect) {
+                tableSelect.value = order.table_id;
+            }
         }
         
         // Switch to products tab to show the cart
@@ -1391,15 +1400,121 @@ async function billOrder(orderId) {
         showNotification(`Orden de Mesa ${order.table?.number || 'Sin asignar'} cargada en el carrito`, 'success');
         
     } catch (error) {
-        console.error('[Orders] Error billing order:', error);
-        showNotification('Error cargando la orden para facturación', 'error');
+        console.error('[Orders] Error billing order:', error.message || error);
+        showNotification(`Error cargando la orden: ${error.message}`, 'error');
     }
 }
 
-// View order details (placeholder for now)
-function viewOrderDetails(orderId) {
-    // TODO: Implement order details modal
-    showNotification(`Ver detalles de orden ${orderId} - Por implementar`, 'info');
+// View order details modal
+async function viewOrderDetails(orderId) {
+    try {
+        showNotification('Cargando detalles de la orden...', 'info');
+        
+        // Get order details using centralized API function
+        const sale = await apiRequest(`/api/sales/${orderId}/table-details`);
+        
+        if (!sale || typeof sale !== 'object') {
+            throw new Error('Respuesta inválida del servidor');
+        }
+        
+        // Create and show modal
+        showOrderDetailsModal(sale);
+        
+    } catch (error) {
+        console.error('[Orders] Error loading order details:', error.message || error);
+        showNotification(`Error cargando detalles: ${error.message}`, 'error');
+    }
+}
+
+// Show order details in a modal
+function showOrderDetailsModal(sale) {
+    let detailsHtml = `
+        <div class="row mb-3">
+            <div class="col-6"><strong>Venta ID:</strong> ${sale.id || 'N/A'}</div>
+            <div class="col-6"><strong>Mesa:</strong> ${sale.table_number || 'N/A'}</div>
+        </div>
+        <div class="row mb-3">
+            <div class="col-6"><strong>Fecha:</strong> ${sale.created_at ? new Date(sale.created_at).toLocaleString() : 'N/A'}</div>
+            <div class="col-6"><strong>Total:</strong> RD$ ${sale.total ? sale.total.toFixed(2) : '0.00'}</div>
+        </div>
+        <div class="row mb-3">
+            <div class="col-6"><strong>Estado:</strong> ${sale.status || 'N/A'}</div>
+            <div class="col-6"><strong>Subtotal:</strong> RD$ ${sale.subtotal ? sale.subtotal.toFixed(2) : '0.00'}</div>
+        </div>
+        
+        <h6>Productos:</h6>
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th>Precio</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    if (sale.items && Array.isArray(sale.items) && sale.items.length > 0) {
+        sale.items.forEach(item => {
+            detailsHtml += `
+                <tr>
+                    <td>${item.product_name || 'N/A'}</td>
+                    <td>${item.quantity || 0}</td>
+                    <td>RD$ ${item.unit_price ? item.unit_price.toFixed(2) : '0.00'}</td>
+                    <td>RD$ ${item.total_price ? item.total_price.toFixed(2) : '0.00'}</td>
+                </tr>
+            `;
+        });
+    } else {
+        detailsHtml += '<tr><td colspan="4" class="text-center">No hay productos en esta orden</td></tr>';
+    }
+    
+    detailsHtml += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    // Create temporary modal
+    const modalHtml = `
+        <div class="modal fade" id="tempOrderModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Detalles de Orden #${sale.id}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        ${detailsHtml}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove any existing temporary modal
+    const existingModal = document.getElementById('tempOrderModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to document
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Show modal
+    const modalElement = document.getElementById('tempOrderModal');
+    const modalInstance = new bootstrap.Modal(modalElement);
+    modalInstance.show();
+    
+    // Remove modal from DOM when hidden
+    modalElement.addEventListener('hidden.bs.modal', () => {
+        modalElement.remove();
+    });
 }
 
 // Toggle cash payment fields based on payment method

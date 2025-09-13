@@ -69,6 +69,63 @@ function getCsrfToken() {
     return null;
 }
 
+// Centralized API request function with CSRF and proper error handling
+async function apiRequest(url, options = {}) {
+    const defaultOptions = {
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    };
+    
+    // Add CSRF token for non-GET requests
+    if (options.method && options.method !== 'GET') {
+        const csrfToken = getCsrfToken();
+        if (csrfToken) {
+            defaultOptions.headers['X-CSRFToken'] = csrfToken;
+        }
+    }
+    
+    // Merge options
+    const finalOptions = {
+        ...defaultOptions,
+        ...options,
+        headers: {
+            ...defaultOptions.headers,
+            ...options.headers
+        }
+    };
+    
+    try {
+        const response = await fetch(url, finalOptions);
+        
+        // Try to parse JSON response
+        let data = {};
+        try {
+            const text = await response.text();
+            if (text) {
+                data = JSON.parse(text);
+            }
+        } catch (parseError) {
+            console.error('[API] Failed to parse JSON response:', parseError);
+            data = { error: 'Invalid server response' };
+        }
+        
+        // Check if request was successful
+        if (!response.ok) {
+            const errorMessage = data.error || data.details || `${response.status} ${response.statusText}`;
+            throw new Error(errorMessage);
+        }
+        
+        return data;
+        
+    } catch (error) {
+        console.error('[API] Request failed:', error.message || error);
+        throw error;
+    }
+}
+
 // Format currency for Dominican Republic
 function formatCurrency(amount) {
     return `RD$ ${parseFloat(amount).toFixed(2)}`;
