@@ -296,16 +296,16 @@ async function saveProduct() {
     
     const formData = new FormData(form);
     const productData = {
-        name: formData.get('name'),
-        description: formData.get('description'),
-        category_id: parseInt(formData.get('category_id')),
-        cost: parseFloat(formData.get('cost')),
-        price: parseFloat(formData.get('price')),
-        tax_rate: parseFloat(formData.get('tax_rate')) / 100,
-        product_type: formData.get('product_type'),
-        stock: formData.get('product_type') === 'inventariable' ? parseInt(formData.get('stock') || 0) : 0,
-        min_stock: formData.get('product_type') === 'inventariable' ? parseInt(formData.get('min_stock') || 5) : 0,
-        active: formData.has('active')
+        name: document.getElementById('productName').value.trim(),
+        description: document.getElementById('productDescription').value.trim(),
+        category_id: parseInt(document.getElementById('productCategory').value),
+        cost: parseFloat(document.getElementById('productCost').value || 0),
+        price: parseFloat(document.getElementById('productPrice').value || 0),
+        tax_rate: parseFloat(document.getElementById('productTaxRate').value || 18) / 100,
+        product_type: document.getElementById('productType').value,
+        stock: document.getElementById('productType').value === 'inventariable' ? parseInt(document.getElementById('productStock').value || 0) : 0,
+        min_stock: document.getElementById('productType').value === 'inventariable' ? parseInt(document.getElementById('productMinStock').value || 5) : 0,
+        active: document.getElementById('productActive').checked
     };
     
     try {
