@@ -1633,14 +1633,22 @@ def cancel_sale(sale_id):
         return jsonify({'error': f'Error interno: {str(e)}'}), 500
 
 
-@bp.route('/sales/<int:sale_id>/details', methods=['GET'])
-def get_sale_details(sale_id):
-    """Get detailed information about a sale for display in table management"""
+def require_admin_or_cashier_api():
+    """API-specific authorization check for admin/cashier - returns JSON response"""
     if 'user_id' not in session:
-        return jsonify({'error': 'No autorizado'}), 401
+        return None
     
     user = models.User.query.get(session['user_id'])
     if not user or user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
+        return None
+    
+    return user
+
+@bp.route('/sales/<int:sale_id>/table-details', methods=['GET'])
+def get_table_sale_details(sale_id):
+    """Get detailed information about a sale for table management - Admin/Cashier only"""
+    user = require_admin_or_cashier_api()
+    if not user:
         return jsonify({'error': 'Solo administradores y cajeros pueden ver detalles de ventas'}), 403
     
     sale = models.Sale.query.get_or_404(sale_id)
@@ -1672,15 +1680,22 @@ def get_sale_details(sale_id):
     return jsonify(sale_details)
 
 
-@bp.route('/sales/<int:sale_id>/finalize', methods=['POST'])
-def finalize_sale(sale_id):
-    """Finalize a sale with NCF generation and payment processing - Admin/Cashier only"""
-    if 'user_id' not in session:
-        return jsonify({'error': 'No autorizado'}), 401
-    
-    user = models.User.query.get(session['user_id'])
-    if not user or user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
+@bp.route('/sales/<int:sale_id>/table-finalize', methods=['POST'])
+def finalize_table_sale(sale_id):
+    """Finalize a table sale with NCF generation - Admin/Cashier only"""
+    user = require_admin_or_cashier_api()
+    if not user:
         return jsonify({'error': 'Solo administradores y cajeros pueden facturar órdenes'}), 403
+    
+    # Validate CSRF token
+    try:
+        data = request.get_json() or {}
+        csrf_token = request.headers.get('X-CSRFToken') or data.get('csrf_token')
+        if not csrf_token:
+            return jsonify({'error': 'Token CSRF requerido'}), 400
+        validate_csrf(csrf_token)
+    except BadRequest:
+        return jsonify({'error': 'Token CSRF inválido'}), 400
     
     # Get cash register for admin/cashier
     cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
@@ -1688,14 +1703,25 @@ def finalize_sale(sale_id):
         return jsonify({'error': 'No tienes una caja registradora asignada'}), 400
     
     try:
-        data = request.get_json()
+        # data already available from CSRF validation above
         
         # Validate required fields
         payment_method = data.get('payment_method')
-        ncf_type = data.get('ncf_type')
+        ncf_type_str = data.get('ncf_type')
         
-        if not payment_method or not ncf_type:
+        if not payment_method or not ncf_type_str:
             return jsonify({'error': 'Método de pago y tipo de NCF son requeridos'}), 400
+        
+        # Map string to NCF enum
+        ncf_type_mapping = {
+            'consumo': models.NCFType.CONSUMO,
+            'credito_fiscal': models.NCFType.CREDITO_FISCAL,
+            'gubernamental': models.NCFType.GUBERNAMENTAL
+        }
+        
+        ncf_type = ncf_type_mapping.get(ncf_type_str)
+        if not ncf_type:
+            return jsonify({'error': f'Tipo de NCF inválido: {ncf_type_str}'}), 400
         
         sale = models.Sale.query.get_or_404(sale_id)
         
@@ -1711,16 +1737,28 @@ def finalize_sale(sale_id):
         sale.cash_register_id = cash_register.id
         sale.user_id = user.id
         
-        # Generate NCF
-        ncf_sequence = _get_available_ncf_sequence(ncf_type)
-        if not ncf_sequence:
-            return jsonify({'error': f'No hay NCF disponibles del tipo {ncf_type}'}), 400
-        
-        sale.ncf_sequence_id = ncf_sequence.id
-        sale.ncf = _generate_ncf(ncf_sequence)
-        
-        # Mark NCF as used
-        ncf_sequence.current_number += 1
+        # Use existing atomic NCF allocation logic (reuse from existing finalize_sale)
+        with db.session.begin_nested():  # Atomic transaction
+            ncf_sequence = db.session.query(models.NCFSequence).filter_by(
+                ncf_type=ncf_type,
+                active=True
+            ).filter(
+                models.NCFSequence.current_number < models.NCFSequence.end_number
+            ).with_for_update().first()  # Lock the row
+            
+            if not ncf_sequence:
+                return jsonify({'error': f'No hay NCF disponibles del tipo {ncf_type_str}'}), 400
+            
+            # Generate NCF using the existing system format
+            sale.ncf_sequence_id = ncf_sequence.id
+            next_number = ncf_sequence.current_number + 1
+            
+            # Use existing NCF format (B01 prefix + series + number)
+            prefix = ncf_sequence.serie  # B01, B02, B14 etc
+            sale.ncf = f"{prefix}{next_number:08d}"
+            
+            # Mark NCF as used atomically
+            ncf_sequence.current_number = next_number
         
         # Complete the sale
         sale.status = 'completed'

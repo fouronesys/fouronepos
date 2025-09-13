@@ -278,12 +278,20 @@ async function processBilling() {
     }
     
     try {
-        // Process the sale via API
-        const response = await fetch(`/api/sales/${currentSaleId}/finalize`, {
+        // Process the sale via API with CSRF token
+        const csrfToken = getCsrfToken();
+        if (!csrfToken) {
+            alert('Error: Token de seguridad no disponible. Por favor recarga la página.');
+            return;
+        }
+        
+        billingData.csrf_token = csrfToken; // Also include in body for redundancy
+        
+        const response = await fetch(`/api/sales/${currentSaleId}/table-finalize`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': getCsrfToken()
+                'X-CSRFToken': csrfToken
             },
             body: JSON.stringify(billingData)
         });
@@ -313,7 +321,7 @@ async function processBilling() {
 // View order details
 async function viewOrderDetails(saleId) {
     try {
-        const response = await fetch(`/api/sales/${saleId}/details`);
+        const response = await fetch(`/api/sales/${saleId}/table-details`);
         if (response.ok) {
             const sale = await response.json();
             
