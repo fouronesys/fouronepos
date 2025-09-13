@@ -789,7 +789,7 @@ def create_user():
         new_user.name = name
         new_user.email = email
         new_user.password_hash = password_hash
-        new_user.role = getattr(models.UserRole, role.upper())
+        new_user.role = models.UserRole(role)
         new_user.active = True
         new_user.must_change_password = True
         

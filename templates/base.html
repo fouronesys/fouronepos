@@ -129,7 +129,7 @@
     <!-- Quick Navigation Sidebar for Desktop -->
     <div class="d-none d-lg-block position-fixed" style="top: 50%; left: 20px; transform: translateY(-50%); z-index: 1000;">
         <div class="d-flex flex-column gap-2">
-            {% if session.role in ['administrador', 'cajero'] %}
+            {% if session.role in ['ADMINISTRADOR', 'CAJERO'] %}
                 <a href="{{ url_for('admin.dashboard') }}" class="btn btn-sm" 
                    style="background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); width: 48px; height: 48px; border-radius: 50%;"
                    title="Dashboard" data-bs-toggle="tooltip">
@@ -146,7 +146,7 @@
                     <i class="bi bi-receipt"></i>
                 </a>
             {% endif %}
-            {% if session.role == 'mesero' %}
+            {% if session.role == 'MESERO' %}
                 <a href="{{ url_for('waiter.tables') }}" class="btn btn-sm"
                    style="background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); width: 48px; height: 48px; border-radius: 50%;"
                    title="Mesas" data-bs-toggle="tooltip">

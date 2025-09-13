@@ -47,8 +47,8 @@
                             <td>{{ user.email }}</td>
                             <td>
                                 <span class="badge 
-                                    {% if user.role.value == 'administrador' %}bg-danger
-                                    {% elif user.role.value == 'cajero' %}bg-primary
+                                    {% if user.role.value == 'ADMINISTRADOR' %}bg-danger
+                                    {% elif user.role.value == 'CAJERO' %}bg-primary
                                     {% else %}bg-success{% endif %}">
                                     {{ user.role.value.title() }}
                                 </span>
@@ -116,9 +116,9 @@
                         <label for="role" class="form-label">Rol</label>
                         <select class="form-select" id="role" name="role" required>
                             <option value="">Seleccionar rol...</option>
-                            <option value="administrador">Administrador</option>
-                            <option value="cajero">Cajero</option>
-                            <option value="mesero">Mesero</option>
+                            <option value="ADMINISTRADOR">Administrador</option>
+                            <option value="CAJERO">Cajero</option>
+                            <option value="MESERO">Mesero</option>
                         </select>
                     </div>
                     
