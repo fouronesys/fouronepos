@@ -108,6 +108,42 @@ class Category(db.Model):
     products = relationship("Product", back_populates="category")
 
 
+class TaxType(db.Model):
+    __tablename__ = 'tax_types'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)  # e.g., "ITBIS", "Propina", "IVA"
+    description: Mapped[str] = mapped_column(Text)
+    rate: Mapped[float] = mapped_column(Float, nullable=False)  # e.g., 0.18, 0.10
+    is_inclusive: Mapped[bool] = mapped_column(Boolean, default=False)  # True si está incluido en el precio
+    is_percentage: Mapped[bool] = mapped_column(Boolean, default=True)  # True para porcentaje, False para monto fijo
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)  # Para ordenar en formularios
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    # Relationships - productos podrán tener múltiples tipos de impuestos
+    product_taxes = relationship("ProductTax", back_populates="tax_type")
+
+
+class ProductTax(db.Model):
+    """Tabla intermedia para relacionar productos con múltiples tipos de impuestos"""
+    __tablename__ = 'product_taxes'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey('products.id'), nullable=False)
+    tax_type_id: Mapped[int] = mapped_column(Integer, ForeignKey('tax_types.id'), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    product = relationship("Product", back_populates="product_taxes")
+    tax_type = relationship("TaxType", back_populates="product_taxes")
+    
+    # Constraint para evitar duplicados
+    __table_args__ = (
+        db.UniqueConstraint('product_id', 'tax_type_id', name='unique_product_tax'),
+    )
+
+
 class Product(db.Model):
     __tablename__ = 'products'
     
@@ -128,6 +164,7 @@ class Product(db.Model):
     # Relationships
     category = relationship("Category", back_populates="products")
     sale_items = relationship("SaleItem", back_populates="product")
+    product_taxes = relationship("ProductTax", back_populates="product")
 
 
 class Supplier(db.Model):
