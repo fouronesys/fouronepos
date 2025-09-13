@@ -309,7 +309,7 @@ async function saveProduct() {
     };
     
     try {
-        const url = currentProductId ? `/api/products/${currentProductId}` : '/api/products';
+        const url = currentProductId ? `/inventory/api/products/${currentProductId}` : '/inventory/api/products';
         const method = currentProductId ? 'PUT' : 'POST';
         
         // Get CSRF token
