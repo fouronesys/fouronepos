@@ -432,8 +432,13 @@ def finalize_sale(sale_id):
         ).with_for_update().all()
         
         # Validate stock availability per product (aggregated quantities)
+        # Only validate stock for inventariable products, not consumible ones
         for product in locked_products:
             required_quantity = product_quantities[product.id]
+            # Skip stock validation for consumible products (food, drinks, services)
+            if product.product_type == 'consumible':
+                continue
+            # Only validate stock for inventariable products
             if product.stock < required_quantity:
                 raise ValueError(f'Stock insuficiente para {product.name}. Disponible: {product.stock}, requerido: {required_quantity}')
         
