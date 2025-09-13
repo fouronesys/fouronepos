@@ -100,8 +100,9 @@ def update_table_status(table_id):
         return user
     
     # Validate CSRF token
-    if not validate_csrf_token():
-        return jsonify({'error': 'Token CSRF inválido'}), 400
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
     
     table = models.Table.query.get_or_404(table_id)
     data = request.get_json()
@@ -169,8 +170,9 @@ def add_sale_item(sale_id):
         return user
     
     # Validate CSRF token
-    if not validate_csrf_token():
-        return jsonify({'error': 'Token CSRF inválido'}), 400
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
     
     data = request.get_json()
     
@@ -555,8 +557,9 @@ def remove_sale_item(sale_id, item_id):
         return user
     
     # Validate CSRF token
-    if not validate_csrf_token():
-        return jsonify({'error': 'Token CSRF inválido'}), 400
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
     
     try:
         with db.session.begin():
@@ -661,8 +664,9 @@ def close_table_properly(table_id):
         return user
     
     # Validate CSRF token
-    if not validate_csrf_token():
-        return jsonify({'error': 'Token CSRF inválido'}), 400
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
     
     data = request.get_json() or {}
     action = data.get('action', 'finalize')  # 'finalize' or 'cancel'
@@ -728,8 +732,9 @@ def update_kitchen_status(sale_id):
         return user
     
     # Validate CSRF token
-    if not validate_csrf_token():
-        return jsonify({'error': 'Token CSRF inválido'}), 400
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
     
     data = request.get_json()
     new_status = data.get('order_status')
@@ -777,8 +782,9 @@ def send_to_kitchen(sale_id):
         return user
     
     # Validate CSRF token
-    if not validate_csrf_token():
-        return jsonify({'error': 'Token CSRF inválido'}), 400
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
     
     try:
         with db.session.begin():
@@ -1187,8 +1193,9 @@ def create_credit_note(sale_id):
         return user
     
     # Validate CSRF token
-    if not validate_csrf_token():
-        return jsonify({'error': 'Token CSRF inválido'}), 400
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
     
     # Only administrators and cashiers can create credit notes
     if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
@@ -1530,8 +1537,9 @@ def cancel_sale(sale_id):
         return user
     
     # Validate CSRF token
-    if not validate_csrf_token():
-        return jsonify({'error': 'Token CSRF inválido'}), 400
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
     
     # Only administrators and cashiers can cancel sales
     if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
