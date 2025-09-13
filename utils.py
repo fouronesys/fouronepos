@@ -117,7 +117,7 @@ def validate_ncf(ncf: str, ncf_type: Optional[str] = None) -> Dict[str, Any]:
     # XX = Series (01-99)
     # NNNNNNNN = Sequential number (8 digits)
     
-    ncf_pattern = r'^([BEPAFGKL])(\d{2})(\d{8})$'
+    ncf_pattern = r'^([BEPAFGKLC])(\d{2})(\d{8})$'
     match = re.match(ncf_pattern, clean_ncf)
     
     if not match:
@@ -161,11 +161,12 @@ def validate_ncf(ncf: str, ncf_type: Optional[str] = None) -> Dict[str, Any]:
         'B': 'Crédito Fiscal',
         'E': 'Consumidor Final',
         'P': 'Pagos al Exterior',
-        'A': 'Comprobante de Ingreso',
+        'A': 'Nota de Crédito',
         'F': 'Facturas de Consumo',
         'G': 'Gastos Menores',
         'K': 'Único de Ingresos',
-        'L': 'Liquidación'
+        'L': 'Liquidación',
+        'C': 'Nota de Débito'
     }
     
     detected_type = ncf_types.get(type_code, 'Tipo Desconocido')
@@ -175,7 +176,9 @@ def validate_ncf(ncf: str, ncf_type: Optional[str] = None) -> Dict[str, Any]:
         expected_codes = {
             'credito_fiscal': ['B'],
             'consumo': ['E', 'F'],
-            'gubernamental': ['A', 'G', 'K', 'L'],
+            'gubernamental': ['G', 'K', 'L'],
+            'nota_credito': ['A'],
+            'nota_debito': ['C'],
             'exterior': ['P']
         }
         

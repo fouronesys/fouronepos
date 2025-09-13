@@ -127,6 +127,24 @@
                                                 class="btn btn-sm btn-outline-secondary" title="Descargar PDF">
                                             <i class="bi bi-download"></i>
                                         </button>
+                                        <!-- Dropdown for fiscal operations -->
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-sm btn-outline-warning dropdown-toggle" 
+                                                    data-bs-toggle="dropdown" title="Operaciones Fiscales">
+                                                <i class="bi bi-gear"></i>
+                                            </button>
+                                            <ul class="dropdown-menu">
+                                                <li><button class="dropdown-item" onclick="cancelSale({{ sale.id }}, '{{ sale.ncf }}')">
+                                                    <i class="bi bi-x-circle text-danger"></i> Cancelar Factura
+                                                </button></li>
+                                                <li><button class="dropdown-item" onclick="createCreditNote({{ sale.id }}, '{{ sale.ncf }}')">
+                                                    <i class="bi bi-arrow-counterclockwise text-info"></i> Nota de Crédito
+                                                </button></li>
+                                                <li><button class="dropdown-item" onclick="createDebitNote({{ sale.id }}, '{{ sale.ncf }}')">
+                                                    <i class="bi bi-arrow-clockwise text-warning"></i> Nota de Débito
+                                                </button></li>
+                                            </ul>
+                                        </div>
                                     {% endif %}
                                     <button class="btn btn-sm btn-outline-info" 
                                             onclick="viewSaleDetails({{ sale.id }})" title="Ver Detalles">
@@ -208,6 +226,118 @@
                         <span class="visually-hidden">Cargando...</span>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Cancelar Factura -->
+<div class="modal fade" id="cancelSaleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Cancelar Factura</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <strong>¡Atención!</strong> Esta acción no se puede deshacer. La factura será marcada como cancelada y se registrará el NCF cancelado para cumplimiento fiscal con DGII.
+                </div>
+                <form id="cancelSaleForm">
+                    <div class="mb-3">
+                        <label for="cancelReason" class="form-label">Motivo de la cancelación <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="cancelReason" rows="3" 
+                                  placeholder="Especifique el motivo de la cancelación..." required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <strong>NCF:</strong> <span id="cancelSaleNCF"></span>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" onclick="confirmCancelSale()">
+                    <i class="bi bi-x-circle"></i> Confirmar Cancelación
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Crear Nota de Crédito/Débito -->
+<div class="modal fade" id="creditNoteModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="creditNoteTitle">
+                    <i class="bi bi-arrow-counterclockwise"></i> Crear Nota de Crédito
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="creditNoteForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="noteReason" class="form-label">Motivo <span class="text-danger">*</span></label>
+                                <textarea class="form-control" id="noteReason" rows="3" 
+                                          placeholder="Especifique el motivo de la nota..." required></textarea>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <strong>NCF Original:</strong> <span id="originalNCF"></span><br>
+                                <strong>Tipo de Nota:</strong> <span id="noteTypeDisplay"></span>
+                                <input type="hidden" id="noteType" value="">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <h6>Productos de la Venta Original</h6>
+                    <div class="table-responsive">
+                        <table class="table table-striped" id="originalProductsTable">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Cantidad Original</th>
+                                    <th>Precio Unit.</th>
+                                    <th>Total Original</th>
+                                    <th>Cantidad en Nota</th>
+                                    <th>Total Nota</th>
+                                </tr>
+                            </thead>
+                            <tbody id="originalProductsBody">
+                                <!-- Los productos se cargarán aquí -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="row mt-3">
+                        <div class="col-md-6"></div>
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Subtotal:</strong></td>
+                                    <td class="text-end" id="noteSubtotal">$0.00</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Impuestos:</strong></td>
+                                    <td class="text-end" id="noteTax">$0.00</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Total:</strong></td>
+                                    <td class="text-end"><strong id="noteTotal">$0.00</strong></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="confirmCreateNote()">
+                    <i class="bi bi-check-circle"></i> Crear Nota
+                </button>
             </div>
         </div>
     </div>
@@ -421,6 +551,282 @@ async function downloadReceiptPDF(saleId, buttonElement) {
             }
         }, 8000);
     }
+}
+
+// Variables globales para manejar operaciones fiscales
+let currentSaleId = null;
+let currentSaleNCF = null;
+let currentSaleData = null;
+
+// Función para cancelar una venta
+function cancelSale(saleId, ncf) {
+    currentSaleId = saleId;
+    currentSaleNCF = ncf;
+    
+    document.getElementById('cancelSaleNCF').textContent = ncf;
+    document.getElementById('cancelReason').value = '';
+    
+    const modal = new bootstrap.Modal(document.getElementById('cancelSaleModal'));
+    modal.show();
+}
+
+// Confirmar cancelación de venta
+async function confirmCancelSale() {
+    const reason = document.getElementById('cancelReason').value.trim();
+    
+    if (!reason) {
+        alert('Por favor, especifique el motivo de la cancelación');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/sales/${currentSaleId}/cancel`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                reason: reason
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success || response.ok) {
+            showSuccessMessage('Factura cancelada exitosamente');
+            // Cerrar modal
+            bootstrap.Modal.getInstance(document.getElementById('cancelSaleModal')).hide();
+            // Recargar página para mostrar el estado actualizado
+            location.reload();
+        } else {
+            showErrorMessage(data.error || 'Error al cancelar la factura');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showErrorMessage('Error de conexión al cancelar la factura');
+    }
+}
+
+// Función para crear nota de crédito
+function createCreditNote(saleId, ncf) {
+    currentSaleId = saleId;
+    currentSaleNCF = ncf;
+    
+    document.getElementById('noteType').value = 'nota_credito';
+    document.getElementById('creditNoteTitle').innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Crear Nota de Crédito';
+    document.getElementById('noteTypeDisplay').textContent = 'Nota de Crédito';
+    document.getElementById('originalNCF').textContent = ncf;
+    document.getElementById('noteReason').value = '';
+    
+    loadSaleDetailsForNote(saleId);
+    
+    const modal = new bootstrap.Modal(document.getElementById('creditNoteModal'));
+    modal.show();
+}
+
+// Función para crear nota de débito
+function createDebitNote(saleId, ncf) {
+    currentSaleId = saleId;
+    currentSaleNCF = ncf;
+    
+    document.getElementById('noteType').value = 'nota_debito';
+    document.getElementById('creditNoteTitle').innerHTML = '<i class="bi bi-arrow-clockwise"></i> Crear Nota de Débito';
+    document.getElementById('noteTypeDisplay').textContent = 'Nota de Débito';
+    document.getElementById('originalNCF').textContent = ncf;
+    document.getElementById('noteReason').value = '';
+    
+    loadSaleDetailsForNote(saleId);
+    
+    const modal = new bootstrap.Modal(document.getElementById('creditNoteModal'));
+    modal.show();
+}
+
+// Cargar detalles de la venta para la nota
+async function loadSaleDetailsForNote(saleId) {
+    const tbody = document.getElementById('originalProductsBody');
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center"><div class="spinner-border spinner-border-sm"></div> Cargando...</td></tr>';
+    
+    try {
+        const response = await fetch(`/api/sales/${saleId}/details`);
+        const data = await response.json();
+        
+        if (data.success) {
+            currentSaleData = data.sale;
+            renderProductsForNote(data.sale.items);
+        } else {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error al cargar los productos</td></tr>';
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error de conexión</td></tr>';
+    }
+}
+
+// Renderizar productos para la nota
+function renderProductsForNote(items) {
+    const tbody = document.getElementById('originalProductsBody');
+    let html = '';
+    
+    items.forEach((item, index) => {
+        html += `
+            <tr>
+                <td>${item.product_name}</td>
+                <td>${item.quantity}</td>
+                <td>$${item.unit_price.toFixed(2)}</td>
+                <td>$${item.total_price.toFixed(2)}</td>
+                <td>
+                    <input type="number" class="form-control form-control-sm" 
+                           id="noteQty_${index}" 
+                           min="0" max="${item.quantity}" value="0" 
+                           style="width: 80px;"
+                           onchange="calculateNoteTotal()"
+                           data-product-id="${item.product_id}"
+                           data-unit-price="${item.unit_price}"
+                           data-original-item-id="${item.id}">
+                </td>
+                <td id="noteLineTotal_${index}">$0.00</td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+    calculateNoteTotal();
+}
+
+// Calcular total de la nota
+function calculateNoteTotal() {
+    let subtotal = 0;
+    let taxAmount = 0;
+    
+    const tbody = document.getElementById('originalProductsBody');
+    const rows = tbody.querySelectorAll('tr');
+    
+    rows.forEach((row, index) => {
+        const qtyInput = row.querySelector(`#noteQty_${index}`);
+        if (qtyInput) {
+            const quantity = parseFloat(qtyInput.value) || 0;
+            const unitPrice = parseFloat(qtyInput.dataset.unitPrice) || 0;
+            const lineTotal = quantity * unitPrice;
+            
+            // Calcular impuestos (asumiendo 18% ITBIS)
+            const lineTax = lineTotal * 0.18;
+            
+            subtotal += lineTotal;
+            taxAmount += lineTax;
+            
+            // Actualizar total de línea
+            const lineTotalCell = row.querySelector(`#noteLineTotal_${index}`);
+            if (lineTotalCell) {
+                lineTotalCell.textContent = `$${lineTotal.toFixed(2)}`;
+            }
+        }
+    });
+    
+    const total = subtotal + taxAmount;
+    
+    // Actualizar totales en la interfaz
+    document.getElementById('noteSubtotal').textContent = `$${subtotal.toFixed(2)}`;
+    document.getElementById('noteTax').textContent = `$${taxAmount.toFixed(2)}`;
+    document.getElementById('noteTotal').textContent = `$${total.toFixed(2)}`;
+}
+
+// Confirmar creación de nota
+async function confirmCreateNote() {
+    const reason = document.getElementById('noteReason').value.trim();
+    const noteType = document.getElementById('noteType').value;
+    
+    if (!reason) {
+        alert('Por favor, especifique el motivo de la nota');
+        return;
+    }
+    
+    // Recopilar productos con cantidad > 0
+    const items = [];
+    const tbody = document.getElementById('originalProductsBody');
+    const rows = tbody.querySelectorAll('tr');
+    
+    rows.forEach((row, index) => {
+        const qtyInput = row.querySelector(`#noteQty_${index}`);
+        if (qtyInput) {
+            const quantity = parseFloat(qtyInput.value) || 0;
+            if (quantity > 0) {
+                items.push({
+                    product_id: parseInt(qtyInput.dataset.productId),
+                    quantity: quantity,
+                    unit_price: parseFloat(qtyInput.dataset.unitPrice),
+                    original_sale_item_id: qtyInput.dataset.originalItemId
+                });
+            }
+        }
+    });
+    
+    if (items.length === 0) {
+        alert('Debe especificar al menos un producto con cantidad mayor a 0');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/sales/${currentSaleId}/credit-note`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                reason: reason,
+                note_type: noteType,
+                items: items
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showSuccessMessage(`${noteType === 'nota_credito' ? 'Nota de crédito' : 'Nota de débito'} creada exitosamente. NCF: ${data.credit_note.ncf}`);
+            // Cerrar modal
+            bootstrap.Modal.getInstance(document.getElementById('creditNoteModal')).hide();
+            // Recargar página para mostrar el estado actualizado
+            location.reload();
+        } else {
+            showErrorMessage(data.error || 'Error al crear la nota');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showErrorMessage('Error de conexión al crear la nota');
+    }
+}
+
+// Funciones de utilidad para mostrar mensajes
+function showSuccessMessage(message) {
+    const toast = document.createElement('div');
+    toast.innerHTML = `
+        <div style="position: fixed; top: 20px; right: 20px; background: #28a745; color: white; padding: 12px 20px; border-radius: 6px; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+            <i class="bi bi-check-circle"></i> ${message}
+        </div>
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.remove();
+        }
+    }, 5000);
+}
+
+function showErrorMessage(message) {
+    const toast = document.createElement('div');
+    toast.innerHTML = `
+        <div style="position: fixed; top: 20px; right: 20px; background: #dc3545; color: white; padding: 12px 20px; border-radius: 6px; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-width: 350px;">
+            <strong>Error:</strong><br>${message}
+            <button onclick="this.parentElement.parentElement.remove()" style="float: right; background: none; border: none; color: white; font-size: 16px; cursor: pointer; margin-left: 10px;">&times;</button>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    
+    // Auto-remove error after 8 seconds
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.remove();
+        }
+    }, 8000);
 }
 </script>
 {% endblock %}

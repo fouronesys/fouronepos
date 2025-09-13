@@ -8,7 +8,7 @@ import time
 import random
 import os
 from receipt_generator import generate_pdf_receipt, generate_thermal_receipt_text
-from utils import get_company_info_for_receipt
+from utils import get_company_info_for_receipt, validate_ncf
 # CSRF exempt decorator will be applied at app level
 
 bp = Blueprint('api', __name__, url_prefix='/api')
@@ -460,94 +460,6 @@ def finalize_sale(sale_id):
         # Handle other unexpected errors
         return jsonify({'error': f'Error interno: {str(e)}'}), 500
 
-
-@bp.route('/sales/<int:sale_id>/cancel', methods=['POST'])
-def cancel_sale(sale_id):
-    user = require_login()
-    if not isinstance(user, models.User):
-        return user
-    
-    data = request.get_json() or {}
-    reason = data.get('reason', 'Cancelación de venta')
-    
-    # CRITICAL FIX: Atomic cancellation with proper locking to prevent race conditions with finalize_sale
-    # This ensures DGII fiscal audit compliance by preventing NCF state inconsistencies
-    try:
-        with db.session.begin():
-            # Get sale with row-level lock to prevent concurrent modifications
-            sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
-            
-            if not sale:
-                raise ValueError('Venta no encontrada')
-            
-            # IDEMPOTENCY CHECK: If sale is already cancelled, return existing state
-            # This prevents duplicate CancelledNCF records and ensures safe retry behavior
-            if sale.status == 'cancelled':
-                # Check if CancelledNCF record exists for this sale's NCF
-                cancelled_ncf_exists = False
-                if sale.ncf:
-                    existing_cancelled = db.session.query(models.CancelledNCF).filter_by(ncf=sale.ncf).first()
-                    cancelled_ncf_exists = existing_cancelled is not None
-                
-                return jsonify({
-                    'id': sale.id,
-                    'status': sale.status,
-                    'ncf': sale.ncf,
-                    'cancelled_ncf_exists': cancelled_ncf_exists,
-                    'message': 'Venta ya estaba cancelada'
-                })
-            
-            # Validate that sale can be cancelled (only pending or completed sales)
-            if sale.status not in ['pending', 'completed']:
-                raise ValueError(f'No se puede cancelar una venta con estado {sale.status}')
-            
-            # FISCAL AUDIT COMPLIANCE: Create CancelledNCF record if sale has NCF
-            # This is CRITICAL for DGII compliance - every NCF cancellation must be recorded
-            cancelled_ncf_created = False
-            if sale.status == 'completed' and sale.ncf:
-                # Check if CancelledNCF already exists (handle edge cases)
-                existing_cancelled = db.session.query(models.CancelledNCF).filter_by(ncf=sale.ncf).first()
-                
-                if not existing_cancelled:
-                    # Create new CancelledNCF record for fiscal audit trail
-                    cancelled_ncf = models.CancelledNCF()
-                    cancelled_ncf.ncf = sale.ncf
-                    cancelled_ncf.ncf_type = sale.ncf_sequence.ncf_type
-                    cancelled_ncf.reason = reason
-                    cancelled_ncf.cancelled_by = user.id
-                    
-                    db.session.add(cancelled_ncf)
-                    cancelled_ncf_created = True
-            
-            # Atomic state transition to cancelled
-            sale.status = 'cancelled'
-            
-            # Transaction commits automatically at the end of this block
-            # If ANY part fails, everything rolls back and no inconsistent state occurs
-        
-        # Return success response with fiscal audit information
-        return jsonify({
-            'id': sale.id,
-            'status': sale.status,
-            'ncf': sale.ncf,
-            'cancelled_ncf_created': cancelled_ncf_created,
-            'message': 'Venta cancelada exitosamente'
-        })
-        
-    except ValueError as e:
-        # Handle business logic errors (no sale, wrong status)
-        return jsonify({'error': str(e)}), 400
-        
-    except IntegrityError as e:
-        # Handle database constraint violations (e.g., duplicate CancelledNCF)
-        if 'unique constraint' in str(e).lower() and 'cancelled_ncfs' in str(e).lower():
-            return jsonify({'error': 'NCF ya fue cancelado previamente. Operación duplicada detectada.'}), 409
-        else:
-            return jsonify({'error': f'Error de integridad de datos: {str(e)}'}), 500
-            
-    except Exception as e:
-        # Handle other unexpected errors
-        return jsonify({'error': f'Error interno: {str(e)}'}), 500
 
 
 @bp.route('/sales/<int:sale_id>/items/<int:item_id>', methods=['DELETE'])
@@ -1106,3 +1018,442 @@ def get_sale_details(sale_id):
         'success': True,
         'sale': sale_data
     })
+
+
+# Credit/Debit Note Routes
+@bp.route('/sales/<int:sale_id>/credit-note', methods=['POST'])
+def create_credit_note(sale_id):
+    """Create a credit note for a completed sale"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Only administrators and cashiers can create credit notes
+    if user.role.value not in ['administrador', 'cajero']:
+        return jsonify({'error': 'No tienes permisos para crear notas de crédito'}), 403
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Datos no proporcionados'}), 400
+    
+    reason = data.get('reason')
+    items = data.get('items', [])
+    note_type = data.get('note_type', 'nota_credito')  # nota_credito or nota_debito
+    
+    if not reason:
+        return jsonify({'error': 'La razón es requerida'}), 400
+    
+    if not items:
+        return jsonify({'error': 'Debe especificar al menos un producto'}), 400
+    
+    try:
+        with db.session.begin():
+            # Get original sale with lock
+            sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
+            
+            if not sale:
+                raise ValueError('Venta no encontrada')
+            
+            # Validate that sale is completed
+            if sale.status != 'completed':
+                raise ValueError('Solo se pueden crear notas para ventas completadas')
+            
+            if not sale.ncf:
+                raise ValueError('La venta debe tener un NCF válido')
+            
+            # Validate NCF type
+            if note_type not in ['nota_credito', 'nota_debito']:
+                raise ValueError('Tipo de nota inválido')
+            
+            # Use CREDITO_FISCAL sequence but generate appropriate NCF type
+            # Since credit/debit note sequences may not exist, use existing CREDITO_FISCAL sequence
+            cash_register = sale.cash_register
+            if not cash_register:
+                raise ValueError('La venta no tiene caja registradora asignada')
+            
+            # Lock NCF sequence for atomic operation to prevent race conditions
+            # Use CREDITO_FISCAL sequence and replace B with A or C as needed
+            ncf_sequence = db.session.query(models.NCFSequence).filter_by(
+                cash_register_id=cash_register.id,
+                ncf_type=models.NCFType.CREDITO_FISCAL,
+                active=True
+            ).with_for_update().first()
+            
+            if not ncf_sequence:
+                raise ValueError('No hay secuencia de NCF de crédito fiscal activa')
+            
+            # Check if sequence has available numbers
+            if ncf_sequence.current_number >= ncf_sequence.end_number:
+                raise ValueError(f'Secuencia de NCF agotada')
+            
+            # Generate next NCF number atomically
+            next_number = ncf_sequence.current_number + 1
+            
+            # Generate appropriate NCF: replace B in serie with A (credit) or C (debit)
+            ncf_type_code = 'A' if note_type == 'nota_credito' else 'C'
+            # Replace the B in serie (e.g., "B01") with appropriate letter (e.g., "A01" or "C01")
+            note_serie = ncf_sequence.serie.replace('B', ncf_type_code, 1)
+            ncf = f"{note_serie}{next_number:08d}"
+            
+            # Validate generated NCF
+            if not validate_ncf(ncf):
+                raise ValueError(f'NCF generado inválido: {ncf}')
+            
+            # Validate items and calculate totals using SERVER-SIDE pricing only
+            note_subtotal = 0
+            note_tax_amount = 0
+            valid_items = []
+            
+            for item_data in items:
+                product_id = item_data.get('product_id')
+                quantity = item_data.get('quantity', 1)
+                original_sale_item_id = item_data.get('original_sale_item_id')
+                
+                if not product_id or quantity <= 0:
+                    raise ValueError('Datos de producto inválidos')
+                
+                # SECURITY: Always derive pricing from original sale items - NEVER trust client prices
+                original_item = models.SaleItem.query.filter_by(
+                    sale_id=sale_id, 
+                    product_id=product_id
+                ).first()
+                
+                if not original_item:
+                    raise ValueError(f'Producto {product_id} no está en la venta original')
+                
+                # Validate quantity doesn't exceed original quantity sold
+                if quantity > original_item.quantity:
+                    raise ValueError(f'La cantidad para {original_item.product.name} no puede exceder la cantidad original vendida ({original_item.quantity})')
+                
+                # Use original sale item pricing - never client-provided prices
+                unit_price = original_item.unit_price
+                tax_rate = original_item.tax_rate
+                is_tax_included = original_item.is_tax_included
+                
+                # Calculate item totals
+                line_total = unit_price * quantity
+                
+                if is_tax_included:
+                    line_tax = line_total * (tax_rate / (1 + tax_rate))
+                    line_subtotal = line_total - line_tax
+                else:
+                    line_subtotal = line_total
+                    line_tax = line_subtotal * tax_rate
+                
+                note_subtotal += line_subtotal
+                note_tax_amount += line_tax
+                
+                valid_items.append({
+                    'product_id': product_id,
+                    'product': original_item.product,
+                    'quantity': quantity,
+                    'unit_price': unit_price,
+                    'total_price': line_total,
+                    'tax_rate': tax_rate,
+                    'is_tax_included': is_tax_included,
+                    'original_sale_item_id': original_item.id
+                })
+            
+            note_total = note_subtotal + note_tax_amount
+            
+            # Create credit note
+            credit_note = models.CreditNote()
+            credit_note.original_sale_id = sale_id
+            credit_note.ncf_sequence_id = ncf_sequence.id
+            credit_note.ncf = ncf
+            credit_note.note_type = ncf_enum_type
+            credit_note.amount = note_subtotal
+            credit_note.tax_amount = note_tax_amount
+            credit_note.total = note_total
+            credit_note.reason = reason
+            credit_note.customer_name = sale.customer_name
+            credit_note.customer_rnc = sale.customer_rnc
+            credit_note.created_by = user.id
+            
+            db.session.add(credit_note)
+            db.session.flush()  # Get the credit note ID
+            
+            # Create credit note items
+            for item_data in valid_items:
+                note_item = models.CreditNoteItem()
+                note_item.credit_note_id = credit_note.id
+                note_item.original_sale_item_id = item_data.get('original_sale_item_id')
+                note_item.product_id = item_data['product_id']
+                note_item.quantity = item_data['quantity']
+                note_item.unit_price = item_data['unit_price']
+                note_item.total_price = item_data['total_price']
+                note_item.tax_rate = item_data['tax_rate']
+                note_item.is_tax_included = item_data['is_tax_included']
+                
+                db.session.add(note_item)
+            
+            # Update NCF sequence
+            ncf_sequence.current_number = next_number
+            
+            # For credit notes, increase inventory (returned goods)
+            # For debit notes, no stock adjustment typically needed
+            if note_type == 'nota_credito':
+                for item_data in valid_items:
+                    product = item_data['product']
+                    if product and product.product_type == 'inventariable':
+                        old_stock = product.stock
+                        product.stock += item_data['quantity']
+                        
+                        # Create stock adjustment record for audit trail
+                        stock_adjustment = models.StockAdjustment()
+                        stock_adjustment.product_id = product.id
+                        stock_adjustment.user_id = user.id
+                        stock_adjustment.adjustment_type = 'credit_note'
+                        stock_adjustment.old_stock = old_stock
+                        stock_adjustment.adjustment = item_data['quantity']
+                        stock_adjustment.new_stock = product.stock
+                        stock_adjustment.reason = f'Nota de crédito NCF {ncf}: {reason}'
+                        stock_adjustment.reference_id = credit_note.id
+                        stock_adjustment.reference_type = 'credit_note'
+                        
+                        db.session.add(stock_adjustment)
+            
+            # Commit transaction
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'credit_note': {
+                    'id': credit_note.id,
+                    'ncf': credit_note.ncf,
+                    'note_type': credit_note.note_type.value,
+                    'total': float(credit_note.total),
+                    'reason': credit_note.reason,
+                    'created_at': credit_note.created_at.isoformat()
+                },
+                'message': f'{"Nota de crédito" if note_type == "nota_credito" else "Nota de débito"} creada exitosamente'
+            })
+            
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error interno: {str(e)}'}), 500
+
+
+@bp.route('/credit-notes')
+def get_credit_notes():
+    """Get list of credit/debit notes"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Only administrators and cashiers can view credit notes
+    if user.role.value not in ['administrador', 'cajero']:
+        return jsonify({'error': 'No tienes permisos para ver notas de crédito'}), 403
+    
+    # Get query parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 20, type=int), 100)
+    note_type = request.args.get('note_type')  # nota_credito, nota_debito
+    
+    # Build query
+    query = models.CreditNote.query
+    
+    if note_type:
+        if note_type == 'nota_credito':
+            query = query.filter_by(note_type=models.NCFType.NOTA_CREDITO)
+        elif note_type == 'nota_debito':
+            query = query.filter_by(note_type=models.NCFType.NOTA_DEBITO)
+    
+    # Order by creation date (newest first)
+    query = query.order_by(models.CreditNote.created_at.desc())
+    
+    # Paginate
+    credit_notes = query.paginate(
+        page=page, 
+        per_page=per_page, 
+        error_out=False
+    )
+    
+    # Format response
+    notes_data = []
+    for note in credit_notes.items:
+        notes_data.append({
+            'id': note.id,
+            'ncf': note.ncf,
+            'note_type': note.note_type.value,
+            'original_sale_id': note.original_sale_id,
+            'original_sale_ncf': note.original_sale.ncf if note.original_sale else None,
+            'total': float(note.total),
+            'tax_amount': float(note.tax_amount),
+            'reason': note.reason,
+            'customer_name': note.customer_name,
+            'customer_rnc': note.customer_rnc,
+            'status': note.status,
+            'created_at': note.created_at.isoformat(),
+            'created_by_name': note.created_by_user.name if note.created_by_user else None
+        })
+    
+    return jsonify({
+        'success': True,
+        'credit_notes': notes_data,
+        'pagination': {
+            'page': credit_notes.page,
+            'pages': credit_notes.pages,
+            'per_page': credit_notes.per_page,
+            'total': credit_notes.total,
+            'has_next': credit_notes.has_next,
+            'has_prev': credit_notes.has_prev
+        }
+    })
+
+
+@bp.route('/credit-notes/<int:note_id>')
+def get_credit_note_detail(note_id):
+    """Get detailed information about a credit/debit note"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Only administrators and cashiers can view credit notes
+    if user.role.value not in ['administrador', 'cajero']:
+        return jsonify({'error': 'No tienes permisos para ver notas de crédito'}), 403
+    
+    # Get credit note
+    credit_note = models.CreditNote.query.get_or_404(note_id)
+    
+    # Get credit note items
+    note_items = models.CreditNoteItem.query.filter_by(credit_note_id=note_id).all()
+    
+    # Format response
+    items_data = []
+    for item in note_items:
+        items_data.append({
+            'id': item.id,
+            'product_id': item.product_id,
+            'product_name': item.product.name if item.product else 'Producto eliminado',
+            'quantity': item.quantity,
+            'unit_price': float(item.unit_price),
+            'total_price': float(item.total_price),
+            'tax_rate': float(item.tax_rate),
+            'is_tax_included': item.is_tax_included
+        })
+    
+    note_data = {
+        'id': credit_note.id,
+        'ncf': credit_note.ncf,
+        'note_type': credit_note.note_type.value,
+        'original_sale_id': credit_note.original_sale_id,
+        'original_sale_ncf': credit_note.original_sale.ncf if credit_note.original_sale else None,
+        'amount': float(credit_note.amount),
+        'tax_amount': float(credit_note.tax_amount),
+        'total': float(credit_note.total),
+        'reason': credit_note.reason,
+        'customer_name': credit_note.customer_name,
+        'customer_rnc': credit_note.customer_rnc,
+        'status': credit_note.status,
+        'created_at': credit_note.created_at.isoformat(),
+        'created_by_name': credit_note.created_by_user.name if credit_note.created_by_user else None,
+        'items': items_data
+    }
+    
+    return jsonify({
+        'success': True,
+        'credit_note': note_data
+    })
+
+
+@bp.route('/sales/<int:sale_id>/cancel', methods=['POST'])
+def cancel_sale(sale_id):
+    """Cancel a completed sale and mark NCF as cancelled"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Only administrators and cashiers can cancel sales
+    if user.role.value not in ['administrador', 'cajero']:
+        return jsonify({'error': 'No tienes permisos para cancelar facturas'}), 403
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Datos no proporcionados'}), 400
+    
+    reason = data.get('reason')
+    
+    if not reason:
+        return jsonify({'error': 'La razón de cancelación es requerida'}), 400
+    
+    try:
+        with db.session.begin():
+            # Get sale with lock
+            sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
+            
+            if not sale:
+                raise ValueError('Venta no encontrada')
+            
+            # Validate that sale can be cancelled
+            if sale.status == 'cancelled':
+                raise ValueError('La venta ya está cancelada')
+            
+            if sale.status != 'completed':
+                raise ValueError('Solo se pueden cancelar ventas completadas')
+            
+            if not sale.ncf:
+                raise ValueError('La venta debe tener un NCF válido para cancelar')
+            
+            # Update sale status
+            sale.status = 'cancelled'
+            sale.cancellation_reason = reason
+            sale.cancelled_at = datetime.utcnow()
+            sale.cancelled_by = user.id
+            
+            # Register cancelled NCF for DGII compliance
+            if sale.ncf_sequence_id:
+                cancelled_ncf = models.CancelledNCF()
+                cancelled_ncf.ncf_sequence_id = sale.ncf_sequence_id
+                cancelled_ncf.ncf = sale.ncf
+                cancelled_ncf.original_sale_id = sale.id
+                cancelled_ncf.reason = reason
+                cancelled_ncf.cancelled_by = user.id
+                
+                db.session.add(cancelled_ncf)
+            
+            # For inventoriable products, restore stock
+            sale_items = models.SaleItem.query.filter_by(sale_id=sale_id).all()
+            for item in sale_items:
+                product = item.product
+                if product and product.product_type == 'inventariable':
+                    old_stock = product.stock
+                    product.stock += item.quantity
+                    
+                    # Create stock adjustment record
+                    stock_adjustment = models.StockAdjustment()
+                    stock_adjustment.product_id = product.id
+                    stock_adjustment.user_id = user.id
+                    stock_adjustment.adjustment_type = 'sale_cancellation'
+                    stock_adjustment.old_stock = old_stock
+                    stock_adjustment.adjustment = item.quantity
+                    stock_adjustment.new_stock = product.stock
+                    stock_adjustment.reason = f'Cancelación de venta: {reason}'
+                    stock_adjustment.reference_id = sale.id
+                    stock_adjustment.reference_type = 'sale_cancellation'
+                    
+                    db.session.add(stock_adjustment)
+            
+            # Commit transaction
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Venta cancelada exitosamente',
+                'sale': {
+                    'id': sale.id,
+                    'ncf': sale.ncf,
+                    'status': sale.status,
+                    'cancelled_at': sale.cancelled_at.isoformat() if sale.cancelled_at else None
+                }
+            })
+            
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error interno: {str(e)}'}), 500

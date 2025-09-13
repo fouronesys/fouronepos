@@ -20,9 +20,11 @@ class UserRole(enum.Enum):
 
 
 class NCFType(enum.Enum):
-    CONSUMO = "consumo"
-    CREDITO_FISCAL = "credito_fiscal"
-    GUBERNAMENTAL = "gubernamental"
+    CONSUMO = "CONSUMO"
+    CREDITO_FISCAL = "CREDITO_FISCAL"
+    GUBERNAMENTAL = "GUBERNAMENTAL"
+    NOTA_CREDITO = "NOTA_CREDITO"
+    NOTA_DEBITO = "NOTA_DEBITO"
 
 
 class TableStatus(enum.Enum):
@@ -245,6 +247,50 @@ class CancelledNCF(db.Model):
     
     # Relationships
     cancelled_by_user = relationship("User")
+
+
+class CreditNote(db.Model):
+    __tablename__ = 'credit_notes'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    original_sale_id: Mapped[int] = mapped_column(Integer, ForeignKey('sales.id'), nullable=False)
+    ncf_sequence_id: Mapped[int] = mapped_column(Integer, ForeignKey('ncf_sequences.id'), nullable=False)
+    ncf: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
+    note_type: Mapped[NCFType] = mapped_column(Enum(NCFType), nullable=False)  # NOTA_CREDITO or NOTA_DEBITO
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    tax_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    total: Mapped[float] = mapped_column(Float, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="completed")  # completed, cancelled
+    customer_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    customer_rnc: Mapped[str] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    
+    # Relationships
+    original_sale = relationship("Sale", foreign_keys=[original_sale_id])
+    ncf_sequence = relationship("NCFSequence")
+    created_by_user = relationship("User", foreign_keys=[created_by])
+    credit_note_items = relationship("CreditNoteItem", back_populates="credit_note")
+
+
+class CreditNoteItem(db.Model):
+    __tablename__ = 'credit_note_items'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    credit_note_id: Mapped[int] = mapped_column(Integer, ForeignKey('credit_notes.id'), nullable=False)
+    original_sale_item_id: Mapped[int] = mapped_column(Integer, ForeignKey('sale_items.id'), nullable=True)
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey('products.id'), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    unit_price: Mapped[float] = mapped_column(Float, nullable=False)
+    total_price: Mapped[float] = mapped_column(Float, nullable=False)
+    tax_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.18)
+    is_tax_included: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    
+    # Relationships
+    credit_note = relationship("CreditNote", back_populates="credit_note_items")
+    original_sale_item = relationship("SaleItem", foreign_keys=[original_sale_item_id])
+    product = relationship("Product")
 
 
 class StockAdjustment(db.Model):
