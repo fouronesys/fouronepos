@@ -6,9 +6,14 @@
 <div class="container-fluid tablet-friendly">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><i class="bi bi-book"></i> Menú del Restaurante</h2>
-        <a href="{{ url_for('waiter.tables') }}" class="btn btn-outline-secondary btn-touch">
-            <i class="bi bi-arrow-left"></i> Volver a Mesas
-        </a>
+        <div class="btn-group">
+            <a href="{{ url_for('admin.pos') }}" class="btn btn-success btn-touch">
+                <i class="bi bi-calculator"></i> POS (Punto de Venta)
+            </a>
+            <a href="{{ url_for('waiter.tables') }}" class="btn btn-outline-secondary btn-touch">
+                <i class="bi bi-arrow-left"></i> Volver a Mesas
+            </a>
+        </div>
     </div>
     
     {% for category in categories %}
