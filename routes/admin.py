@@ -140,7 +140,8 @@ def dashboard():
     
     low_stock_products = models.Product.query.filter(
         models.Product.stock <= models.Product.min_stock,
-        models.Product.active == True
+        models.Product.active == True,
+        models.Product.product_type == 'inventariable'
     ).all()
     
     return render_template('admin/dashboard.html', 
@@ -712,7 +713,25 @@ def ncf_sequences():
     sequences = models.NCFSequence.query.filter_by(active=True).all()
     cash_registers = models.CashRegister.query.filter_by(active=True).all()
     
-    return render_template('admin/ncf_sequences.html', sequences=sequences, cash_registers=cash_registers)
+    # Get or create shared cash register for NCF sequences
+    shared_cash_register = models.CashRegister.query.filter_by(
+        name="Secuencias NCF Compartidas",
+        active=True
+    ).first()
+    
+    # Create shared cash register if it doesn't exist
+    if not shared_cash_register:
+        shared_cash_register = models.CashRegister()
+        shared_cash_register.name = "Secuencias NCF Compartidas"
+        shared_cash_register.user_id = user.id  # Assign to current admin user
+        shared_cash_register.active = True
+        db.session.add(shared_cash_register)
+        db.session.commit()
+    
+    return render_template('admin/ncf_sequences.html', 
+                         sequences=sequences, 
+                         cash_registers=cash_registers,
+                         shared_cash_register_id=shared_cash_register.id)
 
 
 @bp.route('/ncf-sequences/create', methods=['POST'])

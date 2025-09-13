@@ -3,6 +3,7 @@
 {% block title %}Punto de Venta - Four One POS{% endblock %}
 
 {% block head %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pos-style.css') }}?v=20250912065500">
 {% endblock %}
 
@@ -250,6 +251,9 @@
 {% block scripts %}
 <script>
 // Enhanced POS functionality with offline support and cart persistence
+
+// Get CSRF token from meta tag
+const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
 // Cart Management with localStorage
 class CartManager {
@@ -842,6 +846,7 @@ function processSale() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
         },
         credentials: 'same-origin',
         body: JSON.stringify({
@@ -862,6 +867,7 @@ function processSale() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
                 },
                 credentials: 'same-origin',
                 body: JSON.stringify({
@@ -891,6 +897,7 @@ function processSale() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
             },
             credentials: 'same-origin',
             body: JSON.stringify(finalizationData)
@@ -968,6 +975,7 @@ function assignToTable() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
         },
         credentials: 'same-origin',
         body: JSON.stringify({
@@ -988,6 +996,7 @@ function assignToTable() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
                 },
                 credentials: 'same-origin',
                 body: JSON.stringify({
@@ -1005,6 +1014,7 @@ function assignToTable() {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
             },
             credentials: 'same-origin',
             body: JSON.stringify({

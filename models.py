@@ -117,7 +117,7 @@ class Product(db.Model):
     category_id: Mapped[int] = mapped_column(Integer, ForeignKey('categories.id'))
     cost: Mapped[float] = mapped_column(Float, default=0.0)
     price: Mapped[float] = mapped_column(Float, nullable=False)
-    tax_rate: Mapped[float] = mapped_column(Float, default=0.18)  # ITBIS: 18% estándar, 16% reducido (lácteos, café, azúcares, cacao), 0% exento
+    tax_rate: Mapped[float] = mapped_column(Float, default=0.18)  # ITBIS: 0% exento, 16% reducido (lácteos, café, azúcares, cacao), 18% estándar
     is_tax_included: Mapped[bool] = mapped_column(Boolean, default=False)  # True si el impuesto está incluido en el precio
     stock: Mapped[int] = mapped_column(Integer, default=0)
     min_stock: Mapped[int] = mapped_column(Integer, default=5)

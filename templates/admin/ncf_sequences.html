@@ -15,7 +15,7 @@
     <div class="alert alert-info" role="alert">
         <i class="bi bi-info-circle"></i>
         <strong>Información:</strong> Las secuencias NCF son obligatorias en República Dominicana para la emisión de comprobantes fiscales válidos.
-        Cada caja debe tener secuencias asignadas para los diferentes tipos de comprobantes.
+        Las secuencias son compartidas entre todas las cajas registradoras para simplificar la gestión fiscal.
     </div>
 
     <!-- NCF Sequences Table -->
@@ -122,19 +122,11 @@
             <form id="ncfForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
+                    <!-- Hidden field for shared cash register -->
+                    <input type="hidden" name="cash_register_id" value="{{ shared_cash_register_id }}">
+                    
                     <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="cashRegister" class="form-label">Caja Registradora</label>
-                                <select class="form-control" name="cash_register_id" id="cashRegister" required>
-                                    <option value="">Seleccionar caja</option>
-                                    {% for register in cash_registers %}
-                                    <option value="{{ register.id }}">{{ register.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
+                        <div class="col-md-12">
                             <div class="mb-3">
                                 <label for="ncfType" class="form-label">Tipo de NCF</label>
                                 <select class="form-control" name="ncf_type" id="ncfType" required>

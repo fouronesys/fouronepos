@@ -493,9 +493,9 @@ def create_purchase():
     tax_rate = data.get('tax_rate', 0.18)
     try:
         tax_rate = float(tax_rate)
-        # Only allow 0% (sin impuestos) or 18% (ITBIS) for Dominican Republic compliance
-        if tax_rate not in [0.0, 0.18]:
-            return jsonify({'error': 'Tasa de impuesto inválida. Solo se permite 0% o 18% ITBIS'}), 400
+        # Allow Dominican Republic ITBIS rates: 0% (exento), 16% (reducido), 18% (estándar)
+        if tax_rate not in [0.0, 0.16, 0.18]:
+            return jsonify({'error': 'Tasa de impuesto inválida. Solo se permite 0% (exento), 16% (reducido), o 18% (estándar) ITBIS'}), 400
     except (ValueError, TypeError):
         return jsonify({'error': 'Tasa de impuesto debe ser un número válido'}), 400
     
@@ -696,16 +696,18 @@ def stock_alerts_api():
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
-    # Get products with low stock
+    # Get products with low stock (only inventariables)
     low_stock_products = models.Product.query.filter(
         models.Product.stock <= models.Product.min_stock,
-        models.Product.active == True
+        models.Product.active == True,
+        models.Product.product_type == 'inventariable'
     ).all()
     
-    # Get products with critical stock (less than half of minimum)
+    # Get products with critical stock (less than half of minimum, only inventariables)
     critical_stock_products = models.Product.query.filter(
         models.Product.stock <= (models.Product.min_stock / 2),
-        models.Product.active == True
+        models.Product.active == True,
+        models.Product.product_type == 'inventariable'
     ).all()
     
     low_stock_list = []
