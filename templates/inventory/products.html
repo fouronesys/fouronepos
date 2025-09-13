@@ -287,15 +287,70 @@ function toggleStockFields() {
     }
 }
 
-function saveProduct() {
+async function saveProduct() {
     const form = document.getElementById('productForm');
     if (!form.checkValidity()) {
         form.reportValidity();
         return;
     }
     
-    // Here you would implement the save logic
-    alert('Funcionalidad de guardado pendiente de implementar');
+    const formData = new FormData(form);
+    const productData = {
+        name: formData.get('name'),
+        description: formData.get('description'),
+        category_id: parseInt(formData.get('category_id')),
+        cost: parseFloat(formData.get('cost')),
+        price: parseFloat(formData.get('price')),
+        tax_rate: parseFloat(formData.get('tax_rate')) / 100,
+        product_type: formData.get('product_type'),
+        stock: formData.get('product_type') === 'inventariable' ? parseInt(formData.get('stock') || 0) : 0,
+        min_stock: formData.get('product_type') === 'inventariable' ? parseInt(formData.get('min_stock') || 5) : 0,
+        active: formData.has('active')
+    };
+    
+    try {
+        const url = currentProductId ? `/api/products/${currentProductId}` : '/api/products';
+        const method = currentProductId ? 'PUT' : 'POST';
+        
+        // Get CSRF token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+                         document.querySelector('input[name="csrf_token"]')?.value;
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify(productData)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('productModal'));
+            modal.hide();
+            
+            // Show success message
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <strong>¡Éxito!</strong> ${currentProductId ? 'Producto actualizado' : 'Producto creado'} correctamente.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('.container-fluid').insertBefore(alertDiv, document.querySelector('.container-fluid').firstChild);
+            
+            // Reload page to show updated data
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            throw new Error(result.error || 'Error al guardar el producto');
+        }
+    } catch (error) {
+        console.error('Error saving product:', error);
+        alert('Error al guardar el producto: ' + error.message);
+    }
 }
 
 function adjustStock(productId) {
