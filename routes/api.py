@@ -266,6 +266,10 @@ def finalize_sale(sale_id):
     if not isinstance(user, models.User):
         return user
     
+    # ROLE RESTRICTION: Only cashiers and administrators can finalize sales
+    if user.role.value not in ['administrador', 'cajero']:
+        return jsonify({'error': 'Solo cajeros y administradores pueden finalizar ventas'}), 403
+    
     data = request.get_json()
     
     # Get NCF type from request (default to consumo)
