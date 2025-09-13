@@ -190,6 +190,7 @@ def add_sale_item(sale_id):
             existing_item.quantity = total_quantity
             existing_item.total_price = product.price * total_quantity
             existing_item.tax_rate = product.tax_rate  # Actualizar tasa de impuesto desde producto
+            existing_item.is_tax_included = product.is_tax_included  # Actualizar si impuesto está incluido
             sale_item = existing_item
         else:
             # Create new sale item
@@ -200,14 +201,46 @@ def add_sale_item(sale_id):
             sale_item.unit_price = product.price
             sale_item.total_price = product.price * quantity
             sale_item.tax_rate = product.tax_rate  # Capturar tasa de impuesto desde producto
+            sale_item.is_tax_included = product.is_tax_included  # Capturar si impuesto está incluido
             
             db.session.add(sale_item)
         
-        # Recalculate sale totals from all items (to handle both new and updated items correctly)
-        total_items_price = sum(item.total_price for item in sale.sale_items)
-        sale.subtotal = total_items_price
-        sale.tax_amount = sale.subtotal * 0.18  # 18% ITBIS
-        sale.total = sale.subtotal + sale.tax_amount
+        # Recalculate sale totals from all items using proper per-item tax calculation
+        # Calculate totals by tax rate categories with support for included taxes
+        subtotal_by_rate = {}
+        total_subtotal = 0
+        total_tax_included = 0  # Tax that was already included in prices
+        total_tax_added = 0     # Tax that gets added to prices
+        
+        # Group items by tax rate and calculate totals per category
+        for item in sale.sale_items:
+            # Defensive fallback: if fields are NULL, use product's current values
+            rate = item.tax_rate if item.tax_rate is not None else item.product.tax_rate
+            is_included = item.is_tax_included if hasattr(item, 'is_tax_included') else item.product.is_tax_included
+            
+            if rate not in subtotal_by_rate:
+                subtotal_by_rate[rate] = 0
+            
+            if is_included and rate > 0:
+                # Tax is included in the price - calculate base amount and included tax
+                # Formula: base = total / (1 + rate), tax = total - base
+                base_amount = item.total_price / (1 + rate)
+                tax_amount = item.total_price - base_amount
+                subtotal_by_rate[rate] += base_amount
+                total_subtotal += base_amount
+                total_tax_included += round(tax_amount, 2)
+            else:
+                # Tax is added to price (normal behavior) or no tax
+                subtotal_by_rate[rate] += item.total_price
+                total_subtotal += item.total_price
+                if rate > 0:
+                    tax_amount = round(item.total_price * rate, 2)
+                    total_tax_added += tax_amount
+        
+        # Set sale totals
+        sale.subtotal = round(total_subtotal, 2)
+        sale.tax_amount = round(total_tax_included + total_tax_added, 2)
+        sale.total = round(total_subtotal + total_tax_added, 2)  # Only add non-included taxes
         
         # Commit the transaction
         db.session.commit()
@@ -217,7 +250,9 @@ def add_sale_item(sale_id):
             'product_name': product.name,
             'quantity': sale_item.quantity,
             'unit_price': sale_item.unit_price,
-            'total_price': sale_item.total_price
+            'total_price': sale_item.total_price,
+            'tax_rate': sale_item.tax_rate,
+            'is_tax_included': sale_item.is_tax_included
         })
         
     except Exception as e:
@@ -349,25 +384,41 @@ def finalize_sale(sale_id):
         sale.payment_method = payment_method
         sale.status = 'completed'
         
-        # Calculate totals by tax rate categories (proper per-item tax calculation)
+        # Calculate totals by tax rate categories with support for included taxes
         subtotal_by_rate = {}
         total_subtotal = 0
-        total_tax = 0
+        total_tax_included = 0  # Tax that was already included in prices
+        total_tax_added = 0     # Tax that gets added to prices
         
         # Group items by tax rate and calculate totals per category
         for item in sale.sale_items:
-            # Defensive fallback: if tax_rate is NULL, use product's current rate
+            # Defensive fallback: if fields are NULL, use product's current values
             rate = item.tax_rate if item.tax_rate is not None else item.product.tax_rate
+            is_included = item.is_tax_included if hasattr(item, 'is_tax_included') else item.product.is_tax_included
+            
             if rate not in subtotal_by_rate:
                 subtotal_by_rate[rate] = 0
-            subtotal_by_rate[rate] += item.total_price
-            total_subtotal += item.total_price
-            # Round tax per item to 2 decimals to prevent DGII rounding discrepancies
-            total_tax += round(item.total_price * rate, 2)
+            
+            if is_included and rate > 0:
+                # Tax is included in the price - calculate base amount and included tax
+                # Formula: base = total / (1 + rate), tax = total - base
+                base_amount = item.total_price / (1 + rate)
+                tax_amount = item.total_price - base_amount
+                subtotal_by_rate[rate] += base_amount
+                total_subtotal += base_amount
+                total_tax_included += round(tax_amount, 2)
+            else:
+                # Tax is added to price (normal behavior) or no tax
+                subtotal_by_rate[rate] += item.total_price
+                total_subtotal += item.total_price
+                if rate > 0:
+                    tax_amount = round(item.total_price * rate, 2)
+                    total_tax_added += tax_amount
         
-        sale.subtotal = total_subtotal
-        sale.tax_amount = total_tax
-        sale.total = total_subtotal + total_tax
+        # Set sale totals
+        sale.subtotal = round(total_subtotal, 2)
+        sale.tax_amount = round(total_tax_included + total_tax_added, 2)
+        sale.total = round(total_subtotal + total_tax_added, 2)  # Only add non-included taxes
         
         # Add client info for fiscal/government invoices (NCF compliance)
         if customer_name and customer_rnc and ncf_type in ['credito_fiscal', 'gubernamental']:
@@ -933,19 +984,17 @@ def generate_receipt_thermal(sale_id):
 def _prepare_sale_data_for_receipt(sale, sale_items):
     """Helper function to prepare sale data for receipt generation"""
     
-    # Calculate totals
-    subtotal = sum(item.quantity * item.unit_price for item in sale_items)
-    tax_amount = subtotal * 0.18  # 18% ITBIS
-    total = subtotal + tax_amount
+    # CRITICAL FIX: Use already calculated totals from sale object instead of recalculating
+    # The finalize_sale function already computed these correctly with per-item tax rates
     
-    # Prepare sale data
+    # Prepare sale data with correct totals from sale object
     sale_data = {
         'id': sale.id,
         'created_at': sale.created_at,
         'ncf': sale.ncf,
-        'total': total,
-        'subtotal': subtotal,
-        'tax_amount': tax_amount,
+        'total': sale.total,        # Use calculated total from sale
+        'subtotal': sale.subtotal,  # Use calculated subtotal from sale  
+        'tax_amount': sale.tax_amount,  # Use calculated tax from sale
         'payment_method': sale.payment_method,
         'payment_method_display': {
             'efectivo': 'Efectivo',
@@ -957,13 +1006,19 @@ def _prepare_sale_data_for_receipt(sale, sale_items):
         'items': []
     }
     
-    # Add items
+    # Add items with CRITICAL tax fields needed for line-by-line tax display
     for item in sale_items:
+        # Defensive fallback: if fields are NULL, use product's current values
+        tax_rate = item.tax_rate if hasattr(item, 'tax_rate') and item.tax_rate is not None else item.product.tax_rate
+        is_tax_included = item.is_tax_included if hasattr(item, 'is_tax_included') and item.is_tax_included is not None else item.product.is_tax_included
+        
         sale_data['items'].append({
             'quantity': item.quantity,
             'product_name': item.product.name,
             'name': item.product.name,  # Alternative name field
-            'price': item.unit_price
+            'price': item.unit_price,
+            'tax_rate': tax_rate,  # CRITICAL: Add tax rate for line-by-line display
+            'is_tax_included': is_tax_included  # CRITICAL: Add tax inclusion flag
         })
     
     return sale_data

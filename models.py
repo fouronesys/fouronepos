@@ -115,6 +115,7 @@ class Product(db.Model):
     cost: Mapped[float] = mapped_column(Float, default=0.0)
     price: Mapped[float] = mapped_column(Float, nullable=False)
     tax_rate: Mapped[float] = mapped_column(Float, default=0.18)  # ITBIS: 18% estándar, 16% reducido (lácteos, café, azúcares, cacao), 0% exento
+    is_tax_included: Mapped[bool] = mapped_column(Boolean, default=False)  # True si el impuesto está incluido en el precio
     stock: Mapped[int] = mapped_column(Integer, default=0)
     min_stock: Mapped[int] = mapped_column(Integer, default=5)
     product_type: Mapped[str] = mapped_column(String(20), default='inventariable')  # 'inventariable' o 'consumible'
@@ -225,6 +226,7 @@ class SaleItem(db.Model):
     unit_price: Mapped[float] = mapped_column(Float, nullable=False)
     total_price: Mapped[float] = mapped_column(Float, nullable=False)
     tax_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.18)  # Almacena la tasa de impuesto del producto
+    is_tax_included: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # Si el impuesto está incluido en el precio
     
     # Relationships
     sale = relationship("Sale", back_populates="sale_items")

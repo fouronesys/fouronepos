@@ -175,7 +175,7 @@ class DominicanReceiptGenerator:
         return content
 
     def _build_items_list(self, sale_data: Dict[str, Any]) -> List:
-        """Build items list without table - optimized for thermal printing"""
+        """Build items list with line-by-line tax display for included taxes"""
         content = []
         
         content.append(Paragraph("-" * (self.text_width if hasattr(self, 'text_width') else 32), self.styles['Item']))
@@ -186,6 +186,8 @@ class DominicanReceiptGenerator:
             name = item.get("product_name", item.get("name", "Producto"))
             price = item.get("price", 0)
             total = qty * price
+            tax_rate = item.get("tax_rate", 0)
+            is_tax_included = item.get("is_tax_included", False)
             
             # Truncate name based on format
             max_name_len = 20 if self.format_type == '58mm' else 25
@@ -195,6 +197,13 @@ class DominicanReceiptGenerator:
             # Format item line
             content.append(Paragraph(f"{qty}x {name}", self.styles['Item']))
             content.append(Paragraph(f"    {format_currency_rd(price)} c/u = {format_currency_rd(total)}", self.styles['Item']))
+            
+            # Show tax line for included taxes
+            if is_tax_included and tax_rate > 0:
+                # Calculate included tax amount per line
+                tax_amount = total - (total / (1 + tax_rate))
+                tax_percentage = int(tax_rate * 100)
+                content.append(Paragraph(f"    (ITBIS {tax_percentage}%)      {format_currency_rd(tax_amount)}", self.styles['Item']))
         
         content.append(Paragraph("-" * (self.text_width if hasattr(self, 'text_width') else 32), self.styles['Item']))
         return content
@@ -202,22 +211,31 @@ class DominicanReceiptGenerator:
     def _build_totals_section(self, sale_data: Dict[str, Any]) -> List:
         content = []
         subtotal = sale_data.get('subtotal', 0)
-        # FIX: Don't calculate default ITBIS - use actual tax_amount from sale data
-        tax = sale_data.get('tax_amount', 0)  # Use 0 as default instead of calculating
+        tax = sale_data.get('tax_amount', 0)
         total = sale_data.get('total', subtotal + tax)
-
-        # Calculate tax rate for display (avoid division by zero)
-        tax_rate_display = "Sin impuestos"
-        if subtotal > 0 and tax > 0:
-            tax_percentage = round((tax / subtotal) * 100)
-            tax_rate_display = f"ITBIS ({tax_percentage}%)"
+        
+        # Check if there are any items with included taxes
+        items = sale_data.get('items', [])
+        has_included_tax = any(item.get('is_tax_included', False) and item.get('tax_rate', 0) > 0 for item in items)
+        has_added_tax = any(not item.get('is_tax_included', False) and item.get('tax_rate', 0) > 0 for item in items)
 
         content.append(Paragraph(f"Subtotal: {format_currency_rd(subtotal)}", self.styles['Item']))
-        # Only show tax line if there is actual tax (greater than 0.01 to avoid rounding issues)
+        
+        # Show tax information based on type
         if tax > 0.01:
-            content.append(Paragraph(f"{tax_rate_display}: {format_currency_rd(tax)}", self.styles['Item']))
+            if has_included_tax and not has_added_tax:
+                # Only included taxes
+                content.append(Paragraph(f"ITBIS (incl.): {format_currency_rd(tax)}", self.styles['Item']))
+            elif has_added_tax and not has_included_tax:
+                # Only added taxes - calculate percentage
+                tax_percentage = round((tax / subtotal) * 100) if subtotal > 0 else 0
+                content.append(Paragraph(f"ITBIS ({tax_percentage}%): {format_currency_rd(tax)}", self.styles['Item']))
+            else:
+                # Mixed taxes
+                content.append(Paragraph(f"ITBIS: {format_currency_rd(tax)}", self.styles['Item']))
         elif tax == 0:
             content.append(Paragraph("Sin impuestos", self.styles['Item']))
+            
         content.append(Paragraph(f"<b>TOTAL: {format_currency_rd(total)}</b>", self.styles['Total']))
         return content
 
@@ -276,8 +294,19 @@ class DominicanReceiptGenerator:
             qty = item.get('quantity', 1)
             name = item.get('product_name', item.get('name', 'Producto'))[:18]
             total = qty * item.get('price', 0)
+            tax_rate = item.get('tax_rate', 0)
+            is_tax_included = item.get('is_tax_included', False)
+            
             line = f"{qty:<3} {name:<18}{format_currency_rd(total):>8}"
             r.append(line)
+            
+            # Show tax line for included taxes
+            if is_tax_included and tax_rate > 0:
+                # Calculate included tax amount per line
+                tax_amount = total - (total / (1 + tax_rate))
+                tax_percentage = int(tax_rate * 100)
+                tax_line = f"   (ITBIS {tax_percentage}%)       {format_currency_rd(tax_amount):>8}"
+                r.append(tax_line)
 
         r.append("-" * self.text_width)
         subtotal = sale_data.get('subtotal', 0)
