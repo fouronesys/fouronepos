@@ -23,8 +23,28 @@ def tables():
     if not isinstance(user, models.User):
         return user
     
+    # Get tables with their current sales information
     tables = models.Table.query.all()
-    return render_template('waiter/tables.html', tables=tables)
+    
+    # Enrich tables with sale information
+    enriched_tables = []
+    for table in tables:
+        # Get current pending sale for this table
+        current_sale = models.Sale.query.filter_by(
+            table_id=table.id, 
+            status='pending'
+        ).first()
+        
+        table_data = {
+            'table': table,
+            'current_sale': current_sale,
+            'has_order': current_sale is not None,
+            'order_total': current_sale.total if current_sale else 0,
+            'order_items_count': len(current_sale.sale_items) if current_sale else 0
+        }
+        enriched_tables.append(table_data)
+    
+    return render_template('waiter/tables.html', tables=enriched_tables)
 
 
 @bp.route('/table/<int:table_id>')
