@@ -69,13 +69,52 @@ def require_admin():
 
 
 def require_pos_access():
-    """Allow admin, cashier, or waiter access to POS system"""
+    """Allow admin, manager, cashier, or waiter access to POS system"""
     if 'user_id' not in session:
         return redirect(url_for('auth.login'))
     
     user = models.User.query.get(session['user_id'])
-    if not user or user.role.value not in ['ADMINISTRADOR', 'CAJERO', 'MESERO']:
+    if not user or user.role.value not in ['ADMINISTRADOR', 'GERENTE', 'CAJERO', 'MESERO']:
         flash('No tienes permisos para acceder al punto de venta.', 'error')
+        return redirect(url_for('auth.login'))
+    
+    return user
+
+
+def require_manager():
+    """Only manager access"""
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login'))
+    
+    user = models.User.query.get(session['user_id'])
+    if not user or user.role.value != 'GERENTE':
+        flash('Solo los gerentes pueden acceder a esta sección', 'error')
+        return redirect(url_for('admin.dashboard'))
+    
+    return user
+
+
+def require_admin_or_manager():
+    """Allow admin or manager access"""
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login'))
+    
+    user = models.User.query.get(session['user_id'])
+    if not user or user.role.value not in ['ADMINISTRADOR', 'GERENTE']:
+        flash('Solo administradores y gerentes pueden acceder a esta sección', 'error')
+        return redirect(url_for('admin.dashboard'))
+    
+    return user
+
+
+def require_admin_or_manager_or_cashier():
+    """Allow admin, manager, or cashier access"""
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login'))
+    
+    user = models.User.query.get(session['user_id'])
+    if not user or user.role.value not in ['ADMINISTRADOR', 'GERENTE', 'CAJERO']:
+        flash('Acceso denegado', 'error')
         return redirect(url_for('auth.login'))
     
     return user
@@ -83,7 +122,7 @@ def require_pos_access():
 
 @bp.route('/dashboard')
 def dashboard():
-    user = require_admin_or_cashier()
+    user = require_admin_or_manager_or_cashier()
     if not isinstance(user, models.User):
         return user
     
@@ -112,8 +151,8 @@ def dashboard():
 
 @bp.route('/tables-management')
 def tables_management():
-    """View for admin/cashier to manage table orders and billing"""
-    user = require_admin_or_cashier()
+    """View for admin/manager/cashier to manage table orders and billing"""
+    user = require_admin_or_manager_or_cashier()
     if not isinstance(user, models.User):
         return user
     
@@ -173,13 +212,9 @@ def pos():
 
 @bp.route('/products')
 def products():
-    user = require_admin_or_cashier()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return user
-    
-    if user.role.value != 'ADMINISTRADOR':
-        flash('Solo los administradores pueden gestionar productos', 'error')
-        return redirect(url_for('admin.dashboard'))
     
     products = models.Product.query.filter_by(active=True).all()
     categories = models.Category.query.filter_by(active=True).all()
@@ -189,7 +224,7 @@ def products():
 
 @bp.route('/categories/create', methods=['POST'])
 def create_category():
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
@@ -229,7 +264,7 @@ def create_category():
 
 @bp.route('/categories/<int:category_id>/edit', methods=['POST'])
 def edit_category(category_id):
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
@@ -272,7 +307,7 @@ def edit_category(category_id):
 
 @bp.route('/categories/<int:category_id>/delete', methods=['POST'])
 def delete_category(category_id):
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
@@ -304,7 +339,7 @@ def delete_category(category_id):
 # Table Management Routes  
 @bp.route('/tables')
 def tables():
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return user
     
@@ -313,7 +348,7 @@ def tables():
 
 @bp.route('/tables/create', methods=['POST'])
 def create_table():
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
@@ -355,7 +390,7 @@ def create_table():
 
 @bp.route('/tables/<int:table_id>/edit', methods=['POST'])
 def edit_table(table_id):
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
@@ -401,7 +436,7 @@ def edit_table(table_id):
 
 @bp.route('/tables/<int:table_id>/delete', methods=['POST'])
 def delete_table(table_id):
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
@@ -688,7 +723,7 @@ def ncf_sequences():
 
 @bp.route('/ncf-sequences/create', methods=['POST'])
 def create_ncf_sequence():
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
@@ -792,7 +827,7 @@ def create_ncf_sequence():
 # User Management Routes
 @bp.route('/users')
 def users():
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return user
     
@@ -802,7 +837,7 @@ def users():
 
 @bp.route('/users/create', methods=['POST'])
 def create_user():
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
@@ -822,7 +857,7 @@ def create_user():
             flash('Todos los campos son obligatorios', 'error')
             return redirect(url_for('admin.users'))
         
-        if role not in ['ADMINISTRADOR', 'CAJERO', 'MESERO']:
+        if role not in ['ADMINISTRADOR', 'CAJERO', 'MESERO', 'GERENTE']:
             flash('Rol inválido', 'error')
             return redirect(url_for('admin.users'))
         
@@ -861,7 +896,7 @@ def create_user():
 
 @bp.route('/users/<int:user_id>/edit', methods=['POST'])
 def edit_user(user_id):
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
@@ -922,7 +957,7 @@ def reset_user_password(user_id):
 # Cash Register Management Routes
 @bp.route('/cash-registers')
 def cash_registers():
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return user
     
@@ -936,7 +971,7 @@ def cash_registers():
 
 @bp.route('/cash-registers/create', methods=['POST'])
 def create_cash_register():
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     
@@ -975,7 +1010,7 @@ def create_cash_register():
 
 @bp.route('/cash-registers/<int:register_id>/assign', methods=['POST'])
 def assign_cash_register(register_id):
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return jsonify({'error': 'No autorizado'}), 401
     

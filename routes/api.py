@@ -1644,12 +1644,48 @@ def require_admin_or_cashier_api():
     
     return user
 
+
+def require_admin_or_manager_api():
+    """API-specific authorization check for admin/manager - returns JSON response"""
+    if 'user_id' not in session:
+        return None
+    
+    user = models.User.query.get(session['user_id'])
+    if not user or user.role.value not in ['ADMINISTRADOR', 'GERENTE']:
+        return None
+    
+    return user
+
+
+def require_manager_api():
+    """API-specific authorization check for manager only - returns JSON response"""
+    if 'user_id' not in session:
+        return None
+    
+    user = models.User.query.get(session['user_id'])
+    if not user or user.role.value != 'GERENTE':
+        return None
+    
+    return user
+
+
+def require_admin_or_manager_or_cashier_api():
+    """API-specific authorization check for admin/manager/cashier - returns JSON response"""
+    if 'user_id' not in session:
+        return None
+    
+    user = models.User.query.get(session['user_id'])
+    if not user or user.role.value not in ['ADMINISTRADOR', 'GERENTE', 'CAJERO']:
+        return None
+    
+    return user
+
 @bp.route('/sales/<int:sale_id>/table-details', methods=['GET'])
 def get_table_sale_details(sale_id):
-    """Get detailed information about a sale for table management - Admin/Cashier only"""
-    user = require_admin_or_cashier_api()
+    """Get detailed information about a sale for table management - Admin/Manager/Cashier only"""
+    user = require_admin_or_manager_or_cashier_api()
     if not user:
-        return jsonify({'error': 'Solo administradores y cajeros pueden ver detalles de ventas'}), 403
+        return jsonify({'error': 'Solo administradores, gerentes y cajeros pueden ver detalles de ventas'}), 403
     
     sale = models.Sale.query.get_or_404(sale_id)
     sale_items = models.SaleItem.query.filter_by(sale_id=sale_id).all()
@@ -1682,10 +1718,10 @@ def get_table_sale_details(sale_id):
 
 @bp.route('/sales/<int:sale_id>/table-finalize', methods=['POST'])
 def finalize_table_sale(sale_id):
-    """Finalize a table sale with NCF generation - Admin/Cashier only"""
-    user = require_admin_or_cashier_api()
+    """Finalize a table sale with NCF generation - Admin/Manager/Cashier only"""
+    user = require_admin_or_manager_or_cashier_api()
     if not user:
-        return jsonify({'error': 'Solo administradores y cajeros pueden facturar órdenes'}), 403
+        return jsonify({'error': 'Solo administradores, gerentes y cajeros pueden facturar órdenes'}), 403
     
     # Validate CSRF token
     try:

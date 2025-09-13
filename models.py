@@ -17,6 +17,7 @@ class UserRole(enum.Enum):
     ADMINISTRADOR = "ADMINISTRADOR"
     CAJERO = "CAJERO"
     MESERO = "MESERO"
+    GERENTE = "GERENTE"
 
 
 class NCFType(enum.Enum):
@@ -48,7 +49,7 @@ class User(db.Model):
     username: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
     email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
-    role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False)
+    role: Mapped[UserRole] = mapped_column(Enum(UserRole, native_enum=False), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)

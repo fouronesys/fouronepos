@@ -12,8 +12,21 @@ def require_admin():
         return redirect(url_for('auth.login'))
     
     user = models.User.query.get(session['user_id'])
-    if not user or user.role.value != 'administrador':
+    if not user or user.role.value != 'ADMINISTRADOR':
         flash('Solo los administradores pueden acceder al inventario', 'error')
+        return redirect(url_for('admin.dashboard'))
+    
+    return user
+
+
+def require_admin_or_manager():
+    """Allow admin or manager access to inventory"""
+    if 'user_id' not in session:
+        return redirect(url_for('auth.login'))
+    
+    user = models.User.query.get(session['user_id'])
+    if not user or user.role.value not in ['ADMINISTRADOR', 'GERENTE']:
+        flash('Solo administradores y gerentes pueden acceder al inventario', 'error')
         return redirect(url_for('admin.dashboard'))
     
     return user
@@ -21,7 +34,7 @@ def require_admin():
 
 @bp.route('/products')
 def products():
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return user
     
@@ -44,7 +57,7 @@ def products():
 
 @bp.route('/suppliers')
 def suppliers():
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return user
     
@@ -54,7 +67,7 @@ def suppliers():
 
 @bp.route('/suppliers/<int:supplier_id>')
 def supplier_detail(supplier_id):
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return user
     
@@ -66,7 +79,7 @@ def supplier_detail(supplier_id):
 
 @bp.route('/purchases')
 def purchases():
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return user
     
@@ -78,7 +91,7 @@ def purchases():
 
 @bp.route('/purchases/<int:purchase_id>')
 def purchase_detail(purchase_id):
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return user
     
@@ -88,7 +101,7 @@ def purchase_detail(purchase_id):
 
 @bp.route('/stock-alerts')
 def stock_alerts():
-    user = require_admin()
+    user = require_admin_or_manager()
     if not isinstance(user, models.User):
         return user
     
