@@ -204,7 +204,7 @@ function editSupplier(buttonElement, supplierId) {
     const row = buttonElement.closest('tr');
     
     document.getElementById('supplierModalTitle').textContent = 'Editar Proveedor';
-    document.getElementById('supplierForm').action = '{{ url_for("admin.edit_supplier", supplier_id="PLACEHOLDER") }}'.replace('PLACEHOLDER', supplierId);
+    document.getElementById('supplierForm').action = '{{ url_for("admin.suppliers") }}/' + supplierId + '/edit';
     
     // Fill form with full data from attributes
     document.getElementById('name').value = row.dataset.supplierName;
@@ -220,7 +220,7 @@ function editSupplier(buttonElement, supplierId) {
 
 function deleteSupplier(buttonElement, supplierId) {
     currentSupplierId = supplierId;
-    document.getElementById('deleteForm').action = '{{ url_for("admin.delete_supplier", supplier_id="PLACEHOLDER") }}'.replace('PLACEHOLDER', supplierId);
+    document.getElementById('deleteForm').action = '{{ url_for("admin.suppliers") }}/' + supplierId + '/delete';
     new bootstrap.Modal(document.getElementById('deleteModal')).show();
 }
 </script>
