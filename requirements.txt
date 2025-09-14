@@ -25,3 +25,24 @@ xlsxwriter>=3.1.9
 # External services
 requests>=2.32.5
 python-escpos>=3.1
+email_validator
+flask
+flask-sqlalchemy
+gunicorn
+psycopg2-binary
+werkzeug
+bcrypt
+email-validator
+flask
+flask-limiter
+flask-sqlalchemy
+flask-wtf
+gunicorn
+openpyxl
+psycopg2-binary
+python-escpos
+reportlab
+requests
+sqlalchemy
+wtforms
+xlsxwriter
