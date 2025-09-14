@@ -354,6 +354,35 @@ document.getElementById('ncfForm').addEventListener('submit', function(e) {
     });
 });
 
+// Auto-complete serie based on NCF type selection using official DGII series
+document.getElementById('ncfType').addEventListener('change', function(e) {
+    const ncfType = e.target.value;
+    const serieField = document.getElementById('serie');
+    
+    if (ncfType) {
+        // Use official DGII series according to NCF type
+        let serie = '';
+        switch (ncfType) {
+            case 'consumo':
+                serie = 'B02'; // Facturas de Consumo Final
+                break;
+            case 'credito_fiscal':
+                serie = 'B01'; // Facturas que Generan Crédito Fiscal
+                break;
+            case 'gubernamental':
+                serie = 'B15'; // Comprobantes Gubernamentales
+                break;
+            default:
+                return; // Don't autocomplete for unknown types
+        }
+        
+        serieField.value = serie;
+    } else {
+        // Clear serie field if no type selected
+        serieField.value = '';
+    }
+});
+
 // Auto-format serie input
 document.getElementById('serie').addEventListener('input', function(e) {
     e.target.value = e.target.value.toUpperCase();
