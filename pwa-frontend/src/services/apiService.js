@@ -2,13 +2,14 @@
 import axios from 'axios';
 import offlineStorage from './offlineStorage';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
 
 class ApiService {
   constructor() {
     this.axiosInstance = axios.create({
       baseURL: API_BASE_URL,
       timeout: 10000,
+      withCredentials: true,
       headers: {
         'Content-Type': 'application/json'
       }
@@ -22,10 +23,8 @@ class ApiService {
     // Request interceptor
     this.axiosInstance.interceptors.request.use(
       (config) => {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
+        // No need to add Bearer token, Flask uses session cookies
+        // CSRF token can be added here if needed for POST/PUT/DELETE requests
         return config;
       },
       (error) => Promise.reject(error)
