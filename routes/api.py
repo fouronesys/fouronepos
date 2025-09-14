@@ -2345,3 +2345,28 @@ def close_cash_register():
         db.session.rollback()
         print(f"[ERROR] Failed to close cash register: {str(e)}")
         return jsonify({'error': 'Error cerrando caja registradora'}), 500
+
+
+@bp.route('/customers')
+def get_customers():
+    """Get all active customers for POS customer selection dropdown"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Get all active customers ordered by name
+    customers = models.Customer.query.filter_by(active=True).order_by(models.Customer.name.asc()).all()
+    
+    # Return customer data with id, name, and rnc
+    customers_data = []
+    for customer in customers:
+        customers_data.append({
+            'id': customer.id,
+            'name': customer.name,
+            'rnc': customer.rnc,
+            'phone': customer.phone,
+            'email': customer.email,
+            'address': customer.address
+        })
+    
+    return jsonify(customers_data)

@@ -295,6 +295,16 @@
                     <!-- Client Information -->
                     <div id="client-info-section" class="client-info-section" style="display: none;">
                         <div class="config-item">
+                            <label for="customer-select" class="config-label">
+                                <i class="bi bi-people"></i>
+                                <span>Seleccionar Cliente</span>
+                            </label>
+                            <select class="modern-select" id="customer-select" onchange="fillCustomerInfo()">
+                                <option value="">Seleccione un cliente o ingrese manualmente</option>
+                                <!-- Options will be loaded via JavaScript -->
+                            </select>
+                        </div>
+                        <div class="config-item">
                             <label for="client-name" class="config-label">
                                 <i class="bi bi-person"></i>
                                 <span>Cliente</span>
@@ -2332,6 +2342,9 @@ async function initializePOS() {
     // Load available tables
     loadTables();
     
+    // Load customers for dropdown
+    await loadCustomers();
+    
     // Load pending orders count
     loadPendingOrders();
     
@@ -3164,6 +3177,69 @@ function copyReceiptText() {
         console.error('[Print] Error copying receipt text:', err);
         showNotification('Error copiando texto del recibo', 'error');
     });
+}
+
+// Customer management functions
+let customersData = [];
+
+// Load customers for dropdown
+async function loadCustomers() {
+    try {
+        const response = await apiRequest('/api/customers');
+        customersData = response;
+        
+        const customerSelect = document.getElementById('customer-select');
+        if (customerSelect) {
+            // Clear existing options except the first one
+            customerSelect.innerHTML = '<option value="">Seleccione un cliente o ingrese manualmente</option>';
+            
+            // Add customer options
+            customersData.forEach(customer => {
+                const option = document.createElement('option');
+                option.value = customer.id;
+                option.textContent = `${customer.name}${customer.rnc ? ' - ' + customer.rnc : ''}`;
+                customerSelect.appendChild(option);
+            });
+        }
+        
+        console.log('[POS] Loaded customers for dropdown:', customersData.length);
+        
+    } catch (error) {
+        console.error('[POS] Error loading customers:', error);
+        showNotification('Error cargando clientes', 'warning');
+    }
+}
+
+// Fill customer information when selected from dropdown
+function fillCustomerInfo() {
+    const customerSelect = document.getElementById('customer-select');
+    const clientNameInput = document.getElementById('client-name');
+    const clientRncInput = document.getElementById('client-rnc');
+    
+    if (!customerSelect || !clientNameInput || !clientRncInput) {
+        console.warn('[POS] Customer form elements not found');
+        return;
+    }
+    
+    const selectedCustomerId = customerSelect.value;
+    
+    if (selectedCustomerId && customersData.length > 0) {
+        // Find selected customer data
+        const selectedCustomer = customersData.find(c => c.id === parseInt(selectedCustomerId));
+        
+        if (selectedCustomer) {
+            // Fill form fields
+            clientNameInput.value = selectedCustomer.name || '';
+            clientRncInput.value = selectedCustomer.rnc || '';
+            
+            console.log('[POS] Customer info populated:', selectedCustomer.name);
+            showNotification(`Cliente seleccionado: ${selectedCustomer.name}`, 'success');
+        }
+    } else {
+        // Clear fields if no customer selected
+        clientNameInput.value = '';
+        clientRncInput.value = '';
+    }
 }
 
 // Handle automatic cash opening modal when flag is set
