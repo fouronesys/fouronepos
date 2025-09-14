@@ -799,21 +799,15 @@ def create_ncf_sequence():
         return jsonify({'error': 'Token de seguridad inválido'}), 400
     
     try:
-        # Get form data
-        cash_register_id = request.form.get('cash_register_id')
+        # Get form data - cash register is now optional since sequences are independent
         ncf_type = request.form.get('ncf_type')
         serie = request.form.get('serie', '').strip().upper()
         start_number = request.form.get('start_number')
         end_number = request.form.get('end_number')
         
         # Validate required fields
-        if not all([cash_register_id, ncf_type, serie, start_number, end_number]):
+        if not all([ncf_type, serie, start_number, end_number]):
             return jsonify({'error': 'Todos los campos son obligatorios'}), 400
-        
-        # Validate cash register exists
-        cash_register = models.CashRegister.query.get(cash_register_id)
-        if not cash_register or not cash_register.active:
-            return jsonify({'error': 'Caja registradora inválida'}), 400
         
         # Validate NCF type
         if ncf_type not in ['consumo', 'credito_fiscal', 'gubernamental']:
@@ -839,37 +833,38 @@ def create_ncf_sequence():
         # Convert NCF type to enum
         ncf_type_enum = models.NCFType[ncf_type.upper()]
         
-        # Check for duplicate series in same cash register and NCF type
+        # Check for existing active sequence of same type (only one allowed per type)
         existing_sequence = models.NCFSequence.query.filter_by(
-            cash_register_id=cash_register_id,
             ncf_type=ncf_type_enum,
-            serie=serie,
             active=True
         ).first()
         
         if existing_sequence:
-            return jsonify({'error': f'Ya existe una secuencia activa con serie {serie} para este tipo de NCF y caja'}), 400
+            return jsonify({'error': f'Ya existe una secuencia NCF activa para tipo {ncf_type}. Solo puede haber una secuencia activa por tipo.'}), 400
         
-        # Check for overlapping number ranges in same cash register and NCF type
-        overlapping = models.NCFSequence.query.filter_by(
-            cash_register_id=cash_register_id,
-            ncf_type=ncf_type_enum,
+        # Check for duplicate serie globally (series should be unique)
+        duplicate_serie = models.NCFSequence.query.filter_by(
+            serie=serie,
             active=True
+        ).first()
+        
+        if duplicate_serie:
+            return jsonify({'error': f'Ya existe una secuencia activa con serie {serie}'}), 400
+        
+        # Check for overlapping number ranges in same NCF type
+        overlapping = models.NCFSequence.query.filter_by(
+            ncf_type=ncf_type_enum
         ).filter(
             models.NCFSequence.start_number <= end_num,
             models.NCFSequence.end_number >= start_num
         ).first()
         
         if overlapping:
-            return jsonify({'error': 'El rango de números se solapa con una secuencia existente'}), 400
+            return jsonify({'error': f'El rango de números ({start_num}-{end_num}) se solapa con una secuencia existente de tipo {ncf_type}'}), 400
         
-        # Ensure cash_register_id is valid
-        if not cash_register_id:
-            return jsonify({'error': 'ID de caja registradora requerido'}), 400
-            
-        # Create new NCF sequence
+        # Create new NCF sequence (independent of cash registers)
         new_sequence = models.NCFSequence()
-        new_sequence.cash_register_id = int(cash_register_id)
+        # cash_register_id defaults to None for independent sequences
         new_sequence.ncf_type = ncf_type_enum
         new_sequence.serie = serie
         new_sequence.start_number = start_num
@@ -878,6 +873,22 @@ def create_ncf_sequence():
         new_sequence.active = True
         
         db.session.add(new_sequence)
+        db.session.flush()  # Flush to generate sequence ID before creating audit record
+        
+        # Create audit record using relationship for consistency
+        audit_record = models.NCFSequenceAudit()
+        audit_record.sequence = new_sequence
+        audit_record.user_id = user.id
+        audit_record.action = 'created'
+        audit_record.after_json = {
+            'ncf_type': ncf_type,
+            'serie': serie,
+            'start_number': start_num,
+            'end_number': end_num,
+            'active': True
+        }
+        db.session.add(audit_record)
+        
         db.session.commit()
         
         return jsonify({
@@ -889,6 +900,242 @@ def create_ncf_sequence():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Error creando secuencia: {str(e)}'}), 500
+
+
+@bp.route('/ncf-sequences/<int:sequence_id>/edit', methods=['POST'])
+def edit_ncf_sequence(sequence_id):
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return jsonify({'error': 'Token de seguridad inválido'}), 400
+    
+    try:
+        sequence = models.NCFSequence.query.get_or_404(sequence_id)
+        
+        # Store original values for audit
+        before_json = {
+            'ncf_type': sequence.ncf_type.value,
+            'serie': sequence.serie,
+            'start_number': sequence.start_number,
+            'end_number': sequence.end_number,
+            'active': sequence.active
+        }
+        
+        # Get form data
+        end_number = request.form.get('end_number')
+        active = request.form.get('active') == 'true'
+        
+        # Validate end_number if provided
+        if end_number:
+            try:
+                end_num = int(end_number)
+                if end_num <= sequence.current_number:
+                    return jsonify({'error': f'El número final debe ser mayor al actual ({sequence.current_number})'}), 400
+                if end_num < sequence.start_number:
+                    return jsonify({'error': 'El número final no puede ser menor al inicial'}), 400
+                sequence.end_number = end_num
+            except (ValueError, TypeError):
+                return jsonify({'error': 'El número final debe ser un entero válido'}), 400
+        
+        # Update active status
+        old_active = sequence.active
+        sequence.active = active
+        
+        # If activating, check that no other sequence of same type is active
+        if active and not old_active:
+            existing_active = models.NCFSequence.query.filter_by(
+                ncf_type=sequence.ncf_type,
+                active=True
+            ).filter(models.NCFSequence.id != sequence_id).first()
+            
+            if existing_active:
+                return jsonify({'error': f'Ya existe una secuencia activa para tipo {sequence.ncf_type.value}. Desactive la otra secuencia primero.'}), 400
+            
+            # Check for overlapping number ranges with other sequences of same type
+            overlapping = models.NCFSequence.query.filter_by(
+                ncf_type=sequence.ncf_type
+            ).filter(
+                models.NCFSequence.id != sequence_id,
+                models.NCFSequence.start_number <= sequence.end_number,
+                models.NCFSequence.end_number >= sequence.start_number
+            ).first()
+            
+            if overlapping:
+                return jsonify({'error': f'El rango de números ({sequence.start_number}-{sequence.end_number}) se solapa con una secuencia existente de tipo {sequence.ncf_type.value}'}), 400
+        
+        # Store new values for audit
+        after_json = {
+            'ncf_type': sequence.ncf_type.value,
+            'serie': sequence.serie,
+            'start_number': sequence.start_number,
+            'end_number': sequence.end_number,
+            'active': sequence.active
+        }
+        
+        # Flush changes to ensure sequence is available for audit record
+        db.session.flush()
+        
+        # Create audit record using relationship for better consistency
+        audit_record = models.NCFSequenceAudit()
+        audit_record.sequence = sequence
+        audit_record.user_id = user.id
+        audit_record.action = 'edited'
+        audit_record.before_json = before_json
+        audit_record.after_json = after_json
+        db.session.add(audit_record)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Secuencia NCF actualizada exitosamente'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error actualizando secuencia: {str(e)}'}), 500
+
+
+@bp.route('/ncf-sequences/<int:sequence_id>/activate', methods=['POST'])
+def activate_ncf_sequence(sequence_id):
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return jsonify({'error': 'Token de seguridad inválido'}), 400
+    
+    try:
+        sequence = models.NCFSequence.query.get_or_404(sequence_id)
+        
+        if sequence.active:
+            return jsonify({'error': 'La secuencia ya está activa'}), 400
+        
+        # Check that no other sequence of same type is active
+        existing_active = models.NCFSequence.query.filter_by(
+            ncf_type=sequence.ncf_type,
+            active=True
+        ).first()
+        
+        if existing_active:
+            return jsonify({'error': f'Ya existe una secuencia activa para tipo {sequence.ncf_type.value}. Desactive la otra secuencia primero.'}), 400
+        
+        # Check for overlapping number ranges with other sequences of same type
+        overlapping = models.NCFSequence.query.filter_by(
+            ncf_type=sequence.ncf_type
+        ).filter(
+            models.NCFSequence.id != sequence_id,
+            models.NCFSequence.start_number <= sequence.end_number,
+            models.NCFSequence.end_number >= sequence.start_number
+        ).first()
+        
+        if overlapping:
+            return jsonify({'error': f'El rango de números ({sequence.start_number}-{sequence.end_number}) se solapa con una secuencia existente de tipo {sequence.ncf_type.value}'}), 400
+        
+        # Store values for audit
+        before_json = {
+            'ncf_type': sequence.ncf_type.value,
+            'serie': sequence.serie,
+            'start_number': sequence.start_number,
+            'end_number': sequence.end_number,
+            'active': False
+        }
+        
+        sequence.active = True
+        
+        after_json = {
+            'ncf_type': sequence.ncf_type.value,
+            'serie': sequence.serie,
+            'start_number': sequence.start_number,
+            'end_number': sequence.end_number,
+            'active': True
+        }
+        
+        # Flush changes to ensure sequence is available for audit record
+        db.session.flush()
+        
+        # Create audit record using relationship for better consistency
+        audit_record = models.NCFSequenceAudit()
+        audit_record.sequence = sequence
+        audit_record.user_id = user.id
+        audit_record.action = 'activated'
+        audit_record.before_json = before_json
+        audit_record.after_json = after_json
+        db.session.add(audit_record)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Secuencia NCF {sequence.serie} activada exitosamente'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error activando secuencia: {str(e)}'}), 500
+
+
+@bp.route('/ncf-sequences/<int:sequence_id>/deactivate', methods=['POST'])
+def deactivate_ncf_sequence(sequence_id):
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return jsonify({'error': 'Token de seguridad inválido'}), 400
+    
+    try:
+        sequence = models.NCFSequence.query.get_or_404(sequence_id)
+        
+        if not sequence.active:
+            return jsonify({'error': 'La secuencia ya está inactiva'}), 400
+        
+        # Store values for audit
+        before_json = {
+            'ncf_type': sequence.ncf_type.value,
+            'serie': sequence.serie,
+            'start_number': sequence.start_number,
+            'end_number': sequence.end_number,
+            'active': True
+        }
+        
+        sequence.active = False
+        
+        after_json = {
+            'ncf_type': sequence.ncf_type.value,
+            'serie': sequence.serie,
+            'start_number': sequence.start_number,
+            'end_number': sequence.end_number,
+            'active': False
+        }
+        
+        # Flush changes to ensure sequence is available for audit record
+        db.session.flush()
+        
+        # Create audit record using relationship for better consistency
+        audit_record = models.NCFSequenceAudit()
+        audit_record.sequence = sequence
+        audit_record.user_id = user.id
+        audit_record.action = 'deactivated'
+        audit_record.before_json = before_json
+        audit_record.after_json = after_json
+        db.session.add(audit_record)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Secuencia NCF {sequence.serie} desactivada exitosamente'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error desactivando secuencia: {str(e)}'}), 500
 
 
 # User Management Routes
