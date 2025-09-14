@@ -1192,15 +1192,19 @@ def delete_cash_register(register_id):
             flash('No se puede eliminar una caja con sesiones abiertas', 'error')
             return redirect(url_for('admin.cash_registers'))
         
-        # Check if register has sales (for audit trail)
-        sales_count = models.Sale.query.filter_by(cash_register_id=register.id).count()
+        # Check if register has NCF sequences (for fiscal compliance)
+        ncf_sequences_count = models.NCFSequence.query.filter_by(cash_register_id=register.id).count()
         
-        if sales_count > 0:
-            # Mark as inactive instead of deleting for audit purposes
+        if ncf_sequences_count > 0:
+            # Mark as inactive instead of deleting for fiscal compliance
+            register.active = False
+            flash(f'Caja registradora {register.name} desactivada (tiene secuencias NCF asociadas)', 'warning')
+        elif models.Sale.query.filter_by(cash_register_id=register.id).count() > 0:
+            # Mark as inactive instead of deleting for audit purposes  
             register.active = False
             flash(f'Caja registradora {register.name} desactivada (se mantiene por auditoría)', 'warning')
         else:
-            # Safe to delete if no sales associated
+            # Safe to delete if no sales or NCF sequences associated
             register_name = register.name
             db.session.delete(register)
             flash(f'Caja registradora {register_name} eliminada exitosamente', 'success')
