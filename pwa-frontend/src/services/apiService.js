@@ -226,12 +226,23 @@ class ApiService {
     await offlineStorage.processSyncQueue();
   }
 
+  // CSRF Token management
+  async getCsrfToken() {
+    try {
+      const response = await this.axiosInstance.get('/csrf-token');
+      return response.data.csrf_token;
+    } catch (error) {
+      console.warn('Failed to get CSRF token:', error);
+      return null;
+    }
+  }
+
   // Specific API methods
   async login(credentials) {
     try {
       const response = await this.axiosInstance.post('/auth/login', credentials);
-      if (response.data.token) {
-        localStorage.setItem('auth_token', response.data.token);
+      if (response.data.success && response.data.user) {
+        // Store user data locally (session cookies handle authentication)
         localStorage.setItem('user_data', JSON.stringify(response.data.user));
       }
       return response.data;
@@ -248,6 +259,27 @@ class ApiService {
           };
         }
       }
+      throw error;
+    }
+  }
+
+  async logout() {
+    try {
+      await this.axiosInstance.post('/auth/logout');
+      localStorage.removeItem('user_data');
+      return { success: true };
+    } catch (error) {
+      // Clear local data even if API call fails
+      localStorage.removeItem('user_data');
+      throw error;
+    }
+  }
+
+  async getCurrentUser() {
+    try {
+      const response = await this.axiosInstance.get('/auth/user');
+      return response.data;
+    } catch (error) {
       throw error;
     }
   }
@@ -293,6 +325,13 @@ class ApiService {
 
   async createSale(saleData) {
     try {
+      // Get CSRF token for the sale creation
+      const csrfToken = await this.getCsrfToken();
+      if (csrfToken) {
+        // Add CSRF token to the sale data
+        saleData.csrf_token = csrfToken;
+      }
+      
       const response = await this.axiosInstance.post('/sales', saleData);
       return response.data;
     } catch (error) {
