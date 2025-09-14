@@ -780,12 +780,34 @@ def ncf_sequences():
     # Get all NCF sequences (now independent of cash registers)
     sequences = models.NCFSequence.query.all()
     
-    # Keep backward compatibility for template - will be updated in task 6
-    cash_registers = models.CashRegister.query.filter_by(active=True).all()
-    
     return render_template('admin/ncf_sequences.html', 
-                         sequences=sequences,
-                         cash_registers=cash_registers)
+                         sequences=sequences)
+
+
+@bp.route('/ncf-sequences/<int:sequence_id>/details', methods=['GET'])
+def get_ncf_sequence_details(sequence_id):
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    try:
+        sequence = models.NCFSequence.query.get_or_404(sequence_id)
+        
+        return jsonify({
+            'success': True,
+            'sequence': {
+                'id': sequence.id,
+                'ncf_type': sequence.ncf_type.value,
+                'serie': sequence.serie,
+                'start_number': sequence.start_number,
+                'end_number': sequence.end_number,
+                'current_number': sequence.current_number,
+                'active': sequence.active
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error obteniendo secuencia: {str(e)}'}), 500
 
 
 @bp.route('/ncf-sequences/create', methods=['POST'])

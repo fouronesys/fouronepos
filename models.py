@@ -73,7 +73,6 @@ class CashRegister(db.Model):
     
     # Relationships
     user = relationship("User", back_populates="cash_registers")
-    ncf_sequences = relationship("NCFSequence", back_populates="cash_register")
     sales = relationship("Sale", back_populates="cash_register")
     cash_sessions = relationship("CashSession", back_populates="cash_register")
 
@@ -102,7 +101,6 @@ class NCFSequence(db.Model):
     __tablename__ = 'ncf_sequences'
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    cash_register_id: Mapped[int] = mapped_column(Integer, ForeignKey('cash_registers.id'), nullable=True)  # Now nullable - sequences are independent
     ncf_type: Mapped[NCFType] = mapped_column(Enum(NCFType), nullable=False)
     serie: Mapped[str] = mapped_column(String(3), nullable=False)  # e.g., "B01", "B02"
     start_number: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -112,7 +110,6 @@ class NCFSequence(db.Model):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
     # Relationships
-    cash_register = relationship("CashRegister", back_populates="ncf_sequences")
     sales = relationship("Sale", back_populates="ncf_sequence")
 
 

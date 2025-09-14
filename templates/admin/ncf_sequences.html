@@ -15,7 +15,7 @@
     <div class="alert alert-info" role="alert">
         <i class="bi bi-info-circle"></i>
         <strong>Información:</strong> Las secuencias NCF son obligatorias en República Dominicana para la emisión de comprobantes fiscales válidos.
-        Las secuencias son compartidas entre todas las cajas registradoras para simplificar la gestión fiscal.
+        Solo puede haber una secuencia activa por tipo de NCF.
     </div>
 
     <!-- NCF Sequences Table -->
@@ -25,7 +25,6 @@
                 <table class="table table-striped">
                     <thead>
                         <tr>
-                            <th>Caja</th>
                             <th>Tipo NCF</th>
                             <th>Serie</th>
                             <th>Rango</th>
@@ -38,13 +37,15 @@
                     <tbody>
                         {% for sequence in sequences %}
                         <tr>
-                            <td>{{ sequence.cash_register.name }}</td>
                             <td>
                                 <span class="badge 
-                                    {% if sequence.ncf_type.value == 'consumo' %}bg-primary
-                                    {% elif sequence.ncf_type.value == 'credito_fiscal' %}bg-success
+                                    {% if sequence.ncf_type.value == 'CONSUMO' %}bg-primary
+                                    {% elif sequence.ncf_type.value == 'CREDITO_FISCAL' %}bg-success
                                     {% else %}bg-warning{% endif %}">
-                                    {{ sequence.ncf_type.value.replace('_', ' ').title() }}
+                                    {% if sequence.ncf_type.value == 'CONSUMO' %}Consumo
+                                    {% elif sequence.ncf_type.value == 'CREDITO_FISCAL' %}Crédito Fiscal
+                                    {% elif sequence.ncf_type.value == 'GUBERNAMENTAL' %}Gubernamental
+                                    {% else %}{{ sequence.ncf_type.value }}{% endif %}
                                 </span>
                             </td>
                             <td><strong>{{ sequence.serie }}</strong></td>
@@ -122,8 +123,6 @@
             <form id="ncfForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
-                    <!-- Hidden field for shared cash register -->
-                    <input type="hidden" name="cash_register_id" value="{{ shared_cash_register_id }}">
                     
                     <div class="row">
                         <div class="col-md-12">
@@ -183,14 +182,139 @@ function newNCFSequence() {
 }
 
 function editNCFSequence(sequenceId) {
-    // TODO: Implement edit functionality
-    alert('Función de edición en desarrollo');
+    // Get sequence data for editing
+    fetch(`/admin/ncf-sequences/${sequenceId}/details`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const sequence = data.sequence;
+                
+                // Create edit modal content
+                const modalContent = `
+                    <div class="modal fade" id="editNCFModal" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Editar Secuencia NCF - ${sequence.serie}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <form id="editNCFForm">
+                                    <input type="hidden" name="csrf_token" value="${document.querySelector('input[name="csrf_token"]').value}"/>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Tipo NCF</label>
+                                            <input type="text" class="form-control" value="${sequence.ncf_type}" readonly>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Serie</label>
+                                            <input type="text" class="form-control" value="${sequence.serie}" readonly>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Número Inicial</label>
+                                                    <input type="number" class="form-control" value="${sequence.start_number}" readonly>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="editEndNumber" class="form-label">Número Final</label>
+                                                    <input type="number" class="form-control" name="end_number" id="editEndNumber" 
+                                                           value="${sequence.end_number}" min="${sequence.current_number + 1}" required>
+                                                    <div class="form-text">Actual: ${sequence.current_number}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="active" id="editActive" 
+                                                       value="true" ${sequence.active ? 'checked' : ''}>
+                                                <label class="form-check-label" for="editActive">
+                                                    Secuencia Activa
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Remove existing modal if present
+                const existingModal = document.getElementById('editNCFModal');
+                if (existingModal) {
+                    existingModal.remove();
+                }
+                
+                // Add modal to page
+                document.body.insertAdjacentHTML('beforeend', modalContent);
+                
+                // Show modal
+                const modal = new bootstrap.Modal(document.getElementById('editNCFModal'));
+                modal.show();
+                
+                // Handle form submission
+                document.getElementById('editNCFForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const formData = new FormData(this);
+                    
+                    fetch(`/admin/ncf-sequences/${sequenceId}/edit`, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert(data.message);
+                            modal.hide();
+                            location.reload();
+                        } else {
+                            alert('Error: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error editando secuencia NCF');
+                    });
+                });
+            } else {
+                alert('Error obteniendo datos de la secuencia');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error obteniendo datos de la secuencia');
+        });
 }
 
 function deactivateNCFSequence(sequenceId) {
     if (confirm('¿Estás seguro de que deseas desactivar esta secuencia NCF?')) {
-        // TODO: Implement deactivate functionality
-        alert('Función de desactivación en desarrollo');
+        const formData = new FormData();
+        formData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);
+        
+        fetch(`/admin/ncf-sequences/${sequenceId}/deactivate`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error desactivando secuencia NCF');
+        });
     }
 }
 
