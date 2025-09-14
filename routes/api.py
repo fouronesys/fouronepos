@@ -472,43 +472,40 @@ def finalize_sale(sale_id):
         else:
             print(f"[DEBUG FINALIZE] Sale already has cash register: {sale.cash_register_id}")
         
-        # Get NCF sequence - try shared first, fallback to sale's cash register
-        print(f"[DEBUG FINALIZE] Looking for NCF sequences for type {ncf_type}")
+        # Get NCF sequence - now global and independent of cash registers
+        print(f"[DEBUG FINALIZE] Looking for active global NCF sequences for type {ncf_type}")
         
-        ncf_sequence = None
-        
-        # Use ONLY centralized NCF sequences - no division by cash register
-        shared_cash_register = db.session.query(models.CashRegister).filter_by(
-            is_ncf_centralized=True,
+        # Search for active NCF sequence of the required type (with row-level lock for thread safety)
+        # Order by ID for deterministic selection and validate uniqueness
+        active_sequences = db.session.query(models.NCFSequence).filter_by(
+            ncf_type=models.NCFType(ncf_type.upper()),
             active=True
-        ).first()
+        ).order_by(models.NCFSequence.id).with_for_update().all()
         
-        if shared_cash_register:
-            print(f"[DEBUG FINALIZE] Found centralized NCF register: {shared_cash_register.id}")
-            ncf_sequence = db.session.query(models.NCFSequence).filter_by(
-                cash_register_id=shared_cash_register.id,
-                ncf_type=models.NCFType(ncf_type.upper()),
-                active=True
-            ).with_for_update().first()
-            
-            if ncf_sequence:
-                print(f"[DEBUG FINALIZE] Found centralized NCF sequence: {ncf_sequence.id} (serie: {ncf_sequence.serie})")
-            else:
-                print(f"[DEBUG FINALIZE] No centralized NCF sequence found for type {ncf_type}")
+        if len(active_sequences) > 1:
+            sequence_ids = [str(seq.id) for seq in active_sequences]
+            error_msg = f'Error de configuración: múltiples secuencias NCF activas para tipo {ncf_type} (IDs: {", ".join(sequence_ids)}). Solo debe haber una secuencia activa por tipo. Contacte al administrador.'
+            print(f"[ERROR FINALIZE] {error_msg}")
+            raise ValueError(error_msg)
+        
+        ncf_sequence = active_sequences[0] if active_sequences else None
+        
+        if ncf_sequence:
+            print(f"[DEBUG FINALIZE] Found global NCF sequence: {ncf_sequence.id} (serie: {ncf_sequence.serie})")
         else:
-            print(f"[DEBUG FINALIZE] No centralized NCF register found")
-        
-        if not ncf_sequence:
+            print(f"[DEBUG FINALIZE] No active NCF sequence found for type {ncf_type}")
+            
             # Get all available sequences for debugging
             all_sequences = db.session.query(models.NCFSequence).filter_by(active=True).all()
             print(f"[DEBUG FINALIZE] Available NCF sequences:")
             for seq in all_sequences:
-                print(f"  - ID: {seq.id}, Type: {seq.ncf_type}, Serie: {seq.serie}, Cash Register: {seq.cash_register_id}")
+                print(f"  - ID: {seq.id}, Type: {seq.ncf_type}, Serie: {seq.serie}, Active: {seq.active}")
             
-            if not shared_cash_register:
-                error_msg = 'Sistema de facturación no configurado: no hay caja registradora centralizada para secuencias NCF. Contacte al administrador.'
+            available_types = [str(s.ncf_type.value) for s in all_sequences]
+            if available_types:
+                error_msg = f'No hay secuencia NCF activa para tipo {ncf_type}. Tipos disponibles: {", ".join(set(available_types))}'
             else:
-                error_msg = f'No hay secuencia NCF activa para tipo {ncf_type} en el sistema centralizado. Tipos disponibles: {", ".join([str(s.ncf_type.value) for s in all_sequences if s.cash_register_id == shared_cash_register.id])}'
+                error_msg = 'Sistema de facturación no configurado: no hay secuencias NCF activas. Contacte al administrador para configurar las secuencias fiscales.'
             
             print(f"[ERROR FINALIZE] {error_msg}")
             raise ValueError(error_msg)
