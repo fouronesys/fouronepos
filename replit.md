@@ -11,6 +11,15 @@ Key features include fiscal compliance with NCF sequences, inventory management 
 
 # Recent Changes
 
+**September 14, 2025**: Fixed Template URL Generation Error
+- **TEMPLATE BUG FIX**: Resolved ValueError that prevented access to customer and supplier modules
+  - Fixed "invalid literal for int() with base 10: 'PLACEHOLDER'" error in templates/admin/customers.html and templates/admin/suppliers.html
+  - Replaced problematic url_for calls with "PLACEHOLDER" parameters with dynamic URL construction using base endpoint paths
+  - Changed from `url_for("admin.edit_customer", customer_id="PLACEHOLDER").replace('PLACEHOLDER', id)` to `url_for("admin.customers") + '/' + id + '/edit'`
+  - Applied same fix to both edit and delete functions in customer and supplier templates
+  - Templates now render correctly without server-side errors, allowing proper access to administrative functions
+  - Maintained CSRF protection and security while eliminating template rendering failures
+
 **September 13, 2025**: Enhanced Payment System and Cash Management
 - **COMPREHENSIVE PAYMENT SYSTEM**: Implemented complete payment method handling with cash, card, and transfer options
   - Added cash payment processing with automatic change calculation in POS and table billing interfaces  
