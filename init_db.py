@@ -18,6 +18,7 @@ def create_sample_data():
         
         admin = models.User(
             username='admin',
+            email='admin@empresa.com',
             password_hash=admin_password,
             role=models.UserRole.ADMINISTRADOR,
             name='Administrador Principal'
@@ -25,6 +26,7 @@ def create_sample_data():
         
         cashier = models.User(
             username='cajero1',
+            email='cajero1@empresa.com',
             password_hash=cashier_password,
             role=models.UserRole.CAJERO,
             name='Juan Pérez'
@@ -32,6 +34,7 @@ def create_sample_data():
         
         waiter = models.User(
             username='mesero1',
+            email='mesero1@empresa.com',
             password_hash=waiter_password,
             role=models.UserRole.MESERO,
             name='María González'
@@ -51,7 +54,6 @@ def create_sample_data():
         
         # Create NCF sequences
         ncf_consumo = models.NCFSequence(
-            cash_register_id=cash_register.id,
             ncf_type=models.NCFType.CONSUMO,
             serie='B01',
             start_number=1,
@@ -60,7 +62,6 @@ def create_sample_data():
         )
         
         ncf_credito = models.NCFSequence(
-            cash_register_id=cash_register.id,
             ncf_type=models.NCFType.CREDITO_FISCAL,
             serie='B02',
             start_number=1,
