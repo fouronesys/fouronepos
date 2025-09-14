@@ -40,6 +40,16 @@
                             </a>
                         </div>
                     </form>
+                    
+                    <!-- PWA Install Button -->
+                    <div class="text-center mt-3">
+                        <button id="installButton" class="btn btn-success btn-lg w-100 mb-2" style="display: none;">
+                            <i class="bi bi-download"></i> Instalar Aplicación
+                        </button>
+                        <small class="text-muted d-block">
+                            <i class="bi bi-phone"></i> Instala la app para usar sin conexión
+                        </small>
+                    </div>
                 </div>
                 <div class="card-footer text-center text-muted">
                     <small>Four One Solutions - Sistema POS para Bares y Restaurantes</small>
@@ -48,4 +58,58 @@
         </div>
     </div>
 </div>
+
+<script>
+// PWA Installation Script
+let deferredPrompt;
+const installButton = document.getElementById('installButton');
+
+// Listen for beforeinstallprompt event
+window.addEventListener('beforeinstallprompt', (e) => {
+    console.log('PWA install prompt ready');
+    // Prevent Chrome 67 and earlier from automatically showing the prompt
+    e.preventDefault();
+    // Save the event so it can be triggered later
+    deferredPrompt = e;
+    // Show the install button
+    installButton.style.display = 'block';
+});
+
+// Handle install button click
+installButton.addEventListener('click', async () => {
+    if (!deferredPrompt) {
+        console.log('Install prompt not available');
+        return;
+    }
+    
+    // Show the install prompt
+    deferredPrompt.prompt();
+    // Wait for the user to respond to the prompt
+    const { outcome } = await deferredPrompt.userChoice;
+    
+    if (outcome === 'accepted') {
+        console.log('User accepted the install prompt');
+        // Hide the button
+        installButton.style.display = 'none';
+    } else {
+        console.log('User dismissed the install prompt');
+    }
+    
+    // Reset the deferred prompt variable
+    deferredPrompt = null;
+});
+
+// Check if app is already installed
+window.addEventListener('appinstalled', () => {
+    console.log('PWA was installed');
+    installButton.style.display = 'none';
+    deferredPrompt = null;
+});
+
+// Check if running as PWA
+if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+    console.log('Running as PWA');
+    installButton.style.display = 'none';
+}
+</script>
 {% endblock %}
