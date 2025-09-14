@@ -1,0 +1,56 @@
+{
+  "name": "fourone-pos-pwa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Four One POS - Progressive Web App offline-first",
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build && npm run copy-manifest",
+    "copy-manifest": "cp public/manifest.json build/manifest.json",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "serve": "serve -s build -p 3000",
+    "android:init": "cd android-app && bubblewrap init --manifest=http://localhost:3000/manifest.json",
+    "android:build": "cd android-app && bubblewrap build",
+    "android:install": "cd android-app && bubblewrap install"
+  },
+  "dependencies": {
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^14.5.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.1",
+    "react-scripts": "5.0.1",
+    "idb": "^8.0.0",
+    "workbox-window": "^7.0.0",
+    "axios": "^1.6.2",
+    "date-fns": "^2.30.0",
+    "react-query": "^3.39.3",
+    "jwt-decode": "^4.0.0",
+    "react-hot-toast": "^2.4.1"
+  },
+  "devDependencies": {
+    "@bubblewrap/cli": "^1.19.5",
+    "serve": "^14.2.1"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "homepage": "."
+}

@@ -1,0 +1,304 @@
+/* Theme System - Light/Dark Mode Toggle */
+
+:root {
+    /* Dark Theme (Default) - WCAG AA Compliant */
+    /* Background Colors */
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --bg-tertiary: #374151;
+    --bg-quaternary: #1f2937;
+    --bg-header-start: #2d3748;
+    --bg-header-end: #1a202c;
+    
+    /* Text Colors */
+    --text-primary: #ffffff;
+    --text-secondary: #d1d5db;
+    --text-muted: #9ca3af;
+    --text-accent: #60a5fa;
+    --text-accent-bright: #00d4ff;
+    --price-accent: #10b981;
+    --price-accent-glow: rgba(16, 185, 129, 0.3);
+    
+    /* Border Colors */
+    --border-color: #4b5563;
+    --border-muted: #6b7280;
+    --border-light: #444444;
+    
+    /* Form/Input Colors */
+    --input-bg: #374151;
+    --input-border: #4b5563;
+    --input-focus-bg: #4b5563;
+    --input-focus-border: #60a5fa;
+    --input-text: #ffffff;
+    --input-option-bg: #374151;
+    
+    /* Shadow Colors */
+    --shadow-color: rgba(0, 0, 0, 0.4);
+    --card-hover-shadow: rgba(96, 165, 250, 0.2);
+    
+    /* Alert Colors */
+    --alert-success-bg: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    --alert-success-text: #000000;
+    --alert-danger-bg: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    --alert-danger-text: #ffffff;
+    --alert-warning-bg: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    --alert-warning-text: #000000;
+    
+    /* Status/Connection Colors */
+    --status-online-bg: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    --status-online-border: rgba(16, 185, 129, 0.3);
+    --status-online-shadow: rgba(16, 185, 129, 0.2);
+    --status-offline-bg: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    --status-offline-border: rgba(239, 68, 68, 0.3);
+    --status-offline-shadow: rgba(239, 68, 68, 0.2);
+    --status-sync-bg: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    --status-sync-border: rgba(245, 158, 11, 0.3);
+    --status-sync-shadow: rgba(245, 158, 11, 0.2);
+    
+    /* Button Colors */
+    --success-bg: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    --success-hover: linear-gradient(135deg, #059669 0%, #047857 100%);
+    --danger-bg: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    --danger-hover: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    --danger-border: #ef4444;
+    --warning-bg: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    
+    /* Accent Alpha Colors */
+    --accent-alpha-10: rgba(96, 165, 250, 0.1);
+    --accent-alpha-20: rgba(96, 165, 250, 0.2);
+    --accent-alpha-30: rgba(96, 165, 250, 0.3);
+    --accent-alpha-40: rgba(96, 165, 250, 0.4);
+    --accent-bright-alpha-20: rgba(0, 212, 255, 0.2);
+    --accent-bright-alpha-40: rgba(0, 212, 255, 0.4);
+    
+    /* Scrollbar Colors */
+    --scrollbar-track: #1a1a1a;
+    --scrollbar-thumb: #60a5fa;
+    --scrollbar-thumb-hover: #3b82f6;
+    
+    /* Loading Border Colors */
+    --loading-border: rgba(96, 165, 250, 0.3);
+    --loading-border-active: #60a5fa;
+}
+
+/* Light Theme - WCAG AA Compliant */
+html[data-theme="light"] {
+    /* Background Colors */
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #e9ecef;
+    --bg-quaternary: #f1f3f4;
+    --bg-header-start: #e9ecef;
+    --bg-header-end: #f8f9fa;
+    
+    /* Text Colors */
+    --text-primary: #212529;
+    --text-secondary: #495057;
+    --text-muted: #6c757d;
+    --text-accent: #0056b3;
+    --text-accent-bright: #0066cc;
+    --price-accent: #157347;
+    --price-accent-glow: rgba(21, 115, 71, 0.3);
+    
+    /* Border Colors */
+    --border-color: #ced4da;
+    --border-muted: #adb5bd;
+    --border-light: #dee2e6;
+    
+    /* Form/Input Colors */
+    --input-bg: #ffffff;
+    --input-border: #ced4da;
+    --input-focus-bg: #ffffff;
+    --input-focus-border: #0056b3;
+    --input-text: #212529;
+    --input-option-bg: #ffffff;
+    
+    /* Shadow Colors */
+    --shadow-color: rgba(0, 0, 0, 0.15);
+    --card-hover-shadow: rgba(0, 86, 179, 0.2);
+    
+    /* Alert Colors */
+    --alert-success-bg: linear-gradient(135deg, #198754 0%, #157347 100%);
+    --alert-success-text: #ffffff;
+    --alert-danger-bg: linear-gradient(135deg, #dc3545 0%, #b02a37 100%);
+    --alert-danger-text: #ffffff;
+    --alert-warning-bg: linear-gradient(135deg, #fd7e14 0%, #dc6502 100%);
+    --alert-warning-text: #000000;
+    
+    /* Status/Connection Colors */
+    --status-online-bg: linear-gradient(135deg, #198754 0%, #157347 100%);
+    --status-online-border: rgba(25, 135, 84, 0.3);
+    --status-online-shadow: rgba(25, 135, 84, 0.2);
+    --status-offline-bg: linear-gradient(135deg, #dc3545 0%, #b02a37 100%);
+    --status-offline-border: rgba(220, 53, 69, 0.3);
+    --status-offline-shadow: rgba(220, 53, 69, 0.2);
+    --status-sync-bg: linear-gradient(135deg, #fd7e14 0%, #dc6502 100%);
+    --status-sync-border: rgba(253, 126, 20, 0.3);
+    --status-sync-shadow: rgba(253, 126, 20, 0.2);
+    
+    /* Button Colors */
+    --success-bg: linear-gradient(135deg, #198754 0%, #157347 100%);
+    --success-hover: linear-gradient(135deg, #157347 0%, #0f5132 100%);
+    --danger-bg: linear-gradient(135deg, #dc3545 0%, #b02a37 100%);
+    --danger-hover: linear-gradient(135deg, #b02a37 0%, #8b1a1a 100%);
+    --danger-border: #dc3545;
+    --warning-bg: linear-gradient(135deg, #fd7e14 0%, #dc6502 100%);
+    
+    /* Accent Alpha Colors */
+    --accent-alpha-10: rgba(0, 86, 179, 0.1);
+    --accent-alpha-20: rgba(0, 86, 179, 0.2);
+    --accent-alpha-30: rgba(0, 86, 179, 0.3);
+    --accent-alpha-40: rgba(0, 86, 179, 0.4);
+    --accent-bright-alpha-20: rgba(0, 102, 204, 0.2);
+    --accent-bright-alpha-40: rgba(0, 102, 204, 0.4);
+    
+    /* Scrollbar Colors */
+    --scrollbar-track: #f8f9fa;
+    --scrollbar-thumb: #0056b3;
+    --scrollbar-thumb-hover: #004085;
+    
+    /* Loading Border Colors */
+    --loading-border: rgba(0, 86, 179, 0.3);
+    --loading-border-active: #0056b3;
+}
+
+/* Apply CSS Variables to Existing Styles */
+body {
+    background-color: var(--bg-primary) !important;
+    color: var(--text-primary) !important;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Scope container-fluid to main content only, avoid breaking navbar */
+main .container-fluid {
+    background-color: var(--bg-primary) !important;
+}
+
+.pos-header {
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+.pos-header h2 {
+    color: var(--text-accent) !important;
+}
+
+.pos-header p {
+    color: var(--text-secondary) !important;
+}
+
+.card {
+    background-color: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+    box-shadow: 0 8px 32px var(--shadow-color) !important;
+}
+
+.card:hover {
+    box-shadow: 0 12px 40px var(--card-hover-shadow) !important;
+}
+
+.card-header {
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%) !important;
+    color: var(--text-accent) !important;
+}
+
+.card-body {
+    background-color: var(--bg-secondary) !important;
+}
+
+/* Theme Toggle Button - Mejor disposición y contraste */
+.theme-toggle {
+    position: fixed;
+    top: 80px;
+    right: 15px;
+    z-index: 1050;
+    background: var(--text-accent);
+    border: 2px solid var(--border-color);
+    border-radius: 10px;
+    padding: 8px 16px;
+    color: var(--bg-primary);
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px var(--shadow-color);
+    min-width: 140px;
+    text-align: center;
+}
+
+.theme-toggle:hover {
+    background: var(--text-primary);
+    color: var(--bg-primary);
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 8px 25px var(--shadow-color);
+    border-color: var(--text-accent);
+}
+
+.theme-toggle:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.theme-toggle i {
+    margin-right: 6px;
+    font-size: 14px;
+}
+
+/* Navbar integration with theme system */
+.navbar {
+    background-color: var(--bg-secondary) !important;
+    border-bottom: 2px solid var(--border-color);
+    backdrop-filter: blur(10px);
+}
+
+.navbar-brand {
+    color: var(--text-primary) !important;
+    font-weight: 700;
+}
+
+.navbar-brand:hover {
+    color: var(--text-accent) !important;
+}
+
+.navbar-text {
+    color: var(--text-secondary) !important;
+}
+
+.btn-outline-light {
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+    background-color: transparent;
+}
+
+.btn-outline-light:hover {
+    background-color: var(--text-accent) !important;
+    border-color: var(--text-accent) !important;
+    color: var(--bg-primary) !important;
+}
+
+/* Better contrast for success buttons */
+.btn-success-custom {
+    background: var(--success-bg) !important;
+    color: var(--bg-primary) !important;
+    border: 2px solid transparent !important;
+    font-weight: 800 !important;
+}
+
+.btn-success-custom:hover {
+    background: var(--success-hover) !important;
+    color: var(--bg-primary) !important;
+    border-color: var(--text-accent) !important;
+}
+
+.btn-success-custom:active,
+.btn-success-custom:focus {
+    background: var(--success-hover) !important;
+    color: var(--bg-primary) !important;
+    border-color: var(--text-accent) !important;
+    box-shadow: 0 0 0 0.2rem rgba(0, 212, 255, 0.25) !important;
+}
+
+/* Smooth transitions for theme switching */
+* {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
