@@ -17,6 +17,8 @@
     "path": "./android.keystore",
     "alias": "android"
   },
+  "keystorePassword": "fouronepos123",
+  "keyPassword": "fouronepos123",
   "appVersionName": "1.0.0",
   "appVersionCode": 1,
   "shortcuts": [
