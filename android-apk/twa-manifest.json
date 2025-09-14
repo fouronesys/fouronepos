@@ -1,0 +1,56 @@
+{
+  "packageId": "com.fourone.pos",
+  "host": "508de479-eb1b-4f4b-b469-31d5bf6c6cdf-00-3he4m38sexo2o.picard.replit.dev",
+  "name": "Four One POS",
+  "launcherName": "FourOnePOS",
+  "display": "standalone",
+  "themeColor": "#667eea",
+  "navigationColor": "#0a0a0a",
+  "navigationColorDark": "#0a0a0a",
+  "backgroundColor": "#0a0a0a",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://508de479-eb1b-4f4b-b469-31d5bf6c6cdf-00-3he4m38sexo2o.picard.replit.dev/pwa-frontend/public/icons/icon-512x512.png",
+  "maskableIconUrl": "https://508de479-eb1b-4f4b-b469-31d5bf6c6cdf-00-3he4m38sexo2o.picard.replit.dev/pwa-frontend/public/icons/icon-512x512-maskable.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "android"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "POS Ventas",
+      "short_name": "POS",
+      "url": "/pos",
+      "chosenIconUrl": "https://508de479-eb1b-4f4b-b469-31d5bf6c6cdf-00-3he4m38sexo2o.picard.replit.dev/pwa-frontend/public/icons/icon-192x192.png"
+    },
+    {
+      "name": "Mesas",
+      "short_name": "Mesas",
+      "url": "/tables",
+      "chosenIconUrl": "https://508de479-eb1b-4f4b-b469-31d5bf6c6cdf-00-3he4m38sexo2o.picard.replit.dev/pwa-frontend/public/icons/icon-192x192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://508de479-eb1b-4f4b-b469-31d5bf6c6cdf-00-3he4m38sexo2o.picard.replit.dev/pwa-frontend/public/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": false
+    },
+    "googlePlayBilling": {
+      "enabled": false
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "orientation": "portrait",
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "minSdkVersion": 23,
+  "targetSdkVersion": 34
+}
