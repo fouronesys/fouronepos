@@ -11,7 +11,14 @@ Key features include fiscal compliance with NCF sequences, inventory management 
 
 # Recent Changes
 
-**September 14, 2025**: Fixed Template URL Generation Error
+**September 14, 2025**: Enhanced POS Customer Selection and Fixed Template Errors
+- **CUSTOMER DROPDOWN ENHANCEMENT**: Added comprehensive customer selection functionality to POS system
+  - Created `/api/customers` endpoint to provide customer data with proper authentication and filtering for active customers
+  - Added customer dropdown selector in POS client information section with "Seleccione un cliente o ingrese manualmente" option
+  - Implemented JavaScript auto-population functionality that fills name and RNC/Cédula fields when customer is selected from dropdown
+  - Integrated customer loading during POS initialization alongside tables and other system components
+  - Enhanced user experience by allowing both dropdown selection and manual entry for customer information
+  - Maintained all existing customer data capture and fiscal compliance functionality
 - **TEMPLATE BUG FIX**: Resolved ValueError that prevented access to customer and supplier modules
   - Fixed "invalid literal for int() with base 10: 'PLACEHOLDER'" error in templates/admin/customers.html and templates/admin/suppliers.html
   - Replaced problematic url_for calls with "PLACEHOLDER" parameters with dynamic URL construction using base endpoint paths
