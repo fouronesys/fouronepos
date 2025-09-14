@@ -8,7 +8,7 @@ class Base(DeclarativeBase):
 
 db = SQLAlchemy(model_class=Base)
 from datetime import datetime
-from sqlalchemy import String, Integer, Float, DateTime, Boolean, Text, ForeignKey, Enum
+from sqlalchemy import String, Integer, Float, DateTime, Boolean, Text, ForeignKey, Enum, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 
@@ -69,7 +69,6 @@ class CashRegister(db.Model):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    is_ncf_centralized: Mapped[bool] = mapped_column(Boolean, default=False)  # Flag for centralized NCF register
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
     # Relationships
@@ -103,7 +102,7 @@ class NCFSequence(db.Model):
     __tablename__ = 'ncf_sequences'
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    cash_register_id: Mapped[int] = mapped_column(Integer, ForeignKey('cash_registers.id'))
+    cash_register_id: Mapped[int] = mapped_column(Integer, ForeignKey('cash_registers.id'), nullable=True)  # Now nullable - sequences are independent
     ncf_type: Mapped[NCFType] = mapped_column(Enum(NCFType), nullable=False)
     serie: Mapped[str] = mapped_column(String(3), nullable=False)  # e.g., "B01", "B02"
     start_number: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -409,3 +408,65 @@ class SystemConfiguration(db.Model):
     description: Mapped[str] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+# Audit Models for NCF Management
+class NCFSequenceAudit(db.Model):
+    """Audit trail for NCF sequence changes"""
+    __tablename__ = 'ncf_sequence_audit'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sequence_id: Mapped[int] = mapped_column(Integer, ForeignKey('ncf_sequences.id'), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    action: Mapped[str] = mapped_column(String(50), nullable=False)  # 'created', 'edited', 'activated', 'deactivated'
+    before_json: Mapped[dict] = mapped_column(JSON(none_as_null=True), nullable=True)  # JSON snapshot before change
+    after_json: Mapped[dict] = mapped_column(JSON(none_as_null=True), nullable=True)   # JSON snapshot after change
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    sequence = relationship("NCFSequence")
+    user = relationship("User")
+
+
+class NCFLedger(db.Model):
+    """Immutable ledger of all NCF issuances for fiscal compliance"""
+    __tablename__ = 'ncf_ledger'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sequence_id: Mapped[int] = mapped_column(Integer, ForeignKey('ncf_sequences.id'), nullable=False)
+    sale_id: Mapped[int] = mapped_column(Integer, ForeignKey('sales.id'), nullable=True)
+    serie: Mapped[str] = mapped_column(String(3), nullable=False)
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    ncf: Mapped[str] = mapped_column(String(20), nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    cash_register_id: Mapped[int] = mapped_column(Integer, ForeignKey('cash_registers.id'), nullable=True)  # Snapshot at time of issuance
+    
+    # Relationships
+    sequence = relationship("NCFSequence")
+    sale = relationship("Sale")
+    user = relationship("User")
+    cash_register = relationship("CashRegister")
+    
+    # Unique constraint on serie+number to prevent duplicates
+    __table_args__ = (
+        db.UniqueConstraint('serie', 'number', name='unique_serie_number'),
+    )
+
+
+class RegisterReassignmentLog(db.Model):
+    """Log of cash register deletions and data reassignments"""
+    __tablename__ = 'register_reassignment_log'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    from_register_id: Mapped[int] = mapped_column(Integer, nullable=False)  # No FK since register was deleted
+    to_register_id: Mapped[int] = mapped_column(Integer, ForeignKey('cash_registers.id'), nullable=False)
+    sales_count: Mapped[int] = mapped_column(Integer, default=0)
+    sessions_count: Mapped[int] = mapped_column(Integer, default=0)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    notes: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    to_register = relationship("CashRegister")
+    user = relationship("User")

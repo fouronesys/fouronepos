@@ -35,7 +35,7 @@ def migrate_ncf_independence_phase1():
             try:
                 print("🔄 Phase 1: Making NCF sequences independent from cash registers...")
                 
-                # Step 1: Ensure ncf_sequences.cash_register_id is nullable (if not already)
+                # Step 1: Ensure ncf_sequences.cash_register_id is nullable and ON DELETE SET NULL
                 print("🔍 Checking NCF sequences table constraints...")
                 
                 constraint_check = conn.execute(text("""
@@ -56,7 +56,26 @@ def migrate_ncf_independence_phase1():
                 else:
                     print("✅ cash_register_id is already nullable")
                 
-                # Step 2: Create NCFSequenceAudit table
+                # Update FK constraint to ON DELETE SET NULL
+                print("🔧 Updating FK constraint to ON DELETE SET NULL...")
+                try:
+                    # Drop existing FK constraint
+                    conn.execute(text("""
+                        ALTER TABLE ncf_sequences 
+                        DROP CONSTRAINT IF EXISTS ncf_sequences_cash_register_id_fkey
+                    """))
+                    # Recreate with ON DELETE SET NULL
+                    conn.execute(text("""
+                        ALTER TABLE ncf_sequences 
+                        ADD CONSTRAINT ncf_sequences_cash_register_id_fkey 
+                        FOREIGN KEY (cash_register_id) 
+                        REFERENCES cash_registers(id) ON DELETE SET NULL
+                    """))
+                    print("✅ Updated FK constraint to SET NULL on delete")
+                except Exception as e:
+                    print(f"⚠️  FK constraint update failed (may already be correct): {e}")
+                
+                # Step 2: Create NCFSequenceAudit table with proper JSONB
                 print("🔧 Creating NCFSequenceAudit table...")
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS ncf_sequence_audit (
@@ -123,6 +142,22 @@ def migrate_ncf_independence_phase1():
                 conn.execute(text("""
                     CREATE INDEX IF NOT EXISTS idx_ncf_ledger_sale_id 
                     ON ncf_ledger(sale_id) WHERE sale_id IS NOT NULL
+                """))
+                
+                # Additional indexes for NCFLedger compliance queries
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_ncf_ledger_ncf 
+                    ON ncf_ledger(ncf)
+                """))
+                
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_ncf_ledger_issued_at 
+                    ON ncf_ledger(issued_at DESC)
+                """))
+                
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_ncf_sequences_active_type 
+                    ON ncf_sequences(active, ncf_type) WHERE active = true
                 """))
                 
                 # Index for reassignment log

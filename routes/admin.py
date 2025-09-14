@@ -777,29 +777,15 @@ def ncf_sequences():
         flash('Solo los administradores pueden gestionar secuencias NCF', 'error')
         return redirect(url_for('admin.dashboard'))
     
-    sequences = models.NCFSequence.query.filter_by(active=True).all()
+    # Get all NCF sequences (now independent of cash registers)
+    sequences = models.NCFSequence.query.all()
+    
+    # Keep backward compatibility for template - will be updated in task 6
     cash_registers = models.CashRegister.query.filter_by(active=True).all()
     
-    # Get or create centralized cash register for NCF sequences
-    shared_cash_register = models.CashRegister.query.filter_by(
-        is_ncf_centralized=True,
-        active=True
-    ).first()
-    
-    # Create centralized cash register if it doesn't exist
-    if not shared_cash_register:
-        shared_cash_register = models.CashRegister()
-        shared_cash_register.name = "Secuencias NCF Centralizadas"
-        shared_cash_register.user_id = user.id  # Assign to current admin user
-        shared_cash_register.active = True
-        shared_cash_register.is_ncf_centralized = True
-        db.session.add(shared_cash_register)
-        db.session.commit()
-    
     return render_template('admin/ncf_sequences.html', 
-                         sequences=sequences, 
-                         cash_registers=cash_registers,
-                         shared_cash_register_id=shared_cash_register.id)
+                         sequences=sequences,
+                         cash_registers=cash_registers)
 
 
 @bp.route('/ncf-sequences/create', methods=['POST'])
@@ -1103,10 +1089,7 @@ def assign_cash_register(register_id):
         register = models.CashRegister.query.get_or_404(register_id)
         user_id = request.form.get('user_id')
         
-        # Prevent assignment changes for centralized NCF register
-        if register.is_ncf_centralized:
-            flash('No se puede reasignar la caja de secuencias NCF centralizadas', 'error')
-            return redirect(url_for('admin.cash_registers'))
+        # No special restrictions needed - all registers can be reassigned
         
         if user_id:
             # Unassign the register from any previous user
@@ -1146,10 +1129,7 @@ def edit_cash_register(register_id):
     try:
         register = models.CashRegister.query.get_or_404(register_id)
         
-        # Prevent editing of centralized NCF register
-        if register.is_ncf_centralized:
-            flash('No se puede editar la caja de secuencias NCF centralizadas', 'error')
-            return redirect(url_for('admin.cash_registers'))
+        # No special restrictions needed - all registers can be edited
         
         register.name = request.form['name'].strip()
         register.active = request.form.get('active') == 'true'
@@ -1177,10 +1157,7 @@ def delete_cash_register(register_id):
     try:
         register = models.CashRegister.query.get_or_404(register_id)
         
-        # Prevent deletion of centralized NCF register
-        if register.is_ncf_centralized:
-            flash('No se puede eliminar la caja de secuencias NCF centralizadas', 'error')
-            return redirect(url_for('admin.cash_registers'))
+        # No special restrictions needed - NCF sequences are now independent
         
         # Check if register has open sessions
         open_sessions = models.CashSession.query.filter_by(
