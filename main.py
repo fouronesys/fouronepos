@@ -75,6 +75,9 @@ app.register_blueprint(api.bp)
 app.register_blueprint(inventory.bp)
 app.register_blueprint(dgii.bp)
 
+# Exempt API login endpoint from CSRF protection for PWA authentication
+csrf.exempt(api.api_login)
+
 
 @app.route('/sw.js')
 def service_worker():
