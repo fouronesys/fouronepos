@@ -324,6 +324,19 @@ class ApiService {
     }
   }
 
+  async getCustomers() {
+    try {
+      const response = await this.axiosInstance.get('/customers');
+      return response.data;
+    } catch (error) {
+      if (!navigator.onLine) {
+        const cachedCustomers = await offlineStorage.getCustomers();
+        return cachedCustomers;
+      }
+      throw error;
+    }
+  }
+
   // Utility methods
   isOnline() {
     return navigator.onLine;

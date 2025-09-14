@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import toast from 'react-hot-toast';
 import apiService from '../services/apiService';
@@ -13,8 +13,12 @@ const POSPage = ({ user, onLogout }) => {
   const [cashReceived, setCashReceived] = useState('');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [customerData, setCustomerData] = useState({ name: '', rnc: '' });
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
 
   const queryClient = useQueryClient();
+  const dropdownRef = useRef(null);
 
   // Fetch data with offline fallback
   const { data: products = [], isLoading: loadingProducts } = useQuery(
@@ -35,6 +39,15 @@ const POSPage = ({ user, onLogout }) => {
     }
   );
 
+  const { data: customers = [], isLoading: loadingCustomers } = useQuery(
+    'customers',
+    apiService.getCustomers,
+    {
+      staleTime: 5 * 60 * 1000,
+      refetchOnWindowFocus: false,
+    }
+  );
+
   // Sale mutation
   const createSaleMutation = useMutation(apiService.createSale, {
     onSuccess: (data) => {
@@ -46,6 +59,9 @@ const POSPage = ({ user, onLogout }) => {
       setShowPaymentModal(false);
       setCashReceived('');
       setCustomerData({ name: '', rnc: '' });
+      setSelectedCustomer(null);
+      setCustomerSearchTerm('');
+      setShowCustomerDropdown(false);
       queryClient.invalidateQueries('sales');
     },
     onError: (error) => {
@@ -61,6 +77,12 @@ const POSPage = ({ user, onLogout }) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
   });
+
+  // Filter customers
+  const filteredCustomers = customers.filter(customer => 
+    customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+    customer.rnc?.toLowerCase().includes(customerSearchTerm.toLowerCase())
+  );
 
   // Cart operations
   const addToCart = (product) => {
@@ -103,6 +125,50 @@ const POSPage = ({ user, onLogout }) => {
     toast.success('Carrito vaciado');
   };
 
+  // Customer selection operations
+  const selectCustomer = (customer) => {
+    setSelectedCustomer(customer);
+    setCustomerData({ 
+      name: customer.name, 
+      rnc: customer.rnc || '' 
+    });
+    setCustomerSearchTerm(customer.name);
+    setShowCustomerDropdown(false);
+  };
+
+  const clearCustomerSelection = () => {
+    setSelectedCustomer(null);
+    setCustomerData({ name: '', rnc: '' });
+    setCustomerSearchTerm('');
+  };
+
+  const handleCustomerSearchChange = (value) => {
+    setCustomerSearchTerm(value);
+    setShowCustomerDropdown(true);
+    
+    // If manually typing, clear the selection
+    if (selectedCustomer && value !== selectedCustomer.name) {
+      setSelectedCustomer(null);
+      setCustomerData({ name: value, rnc: customerData.rnc });
+    } else if (!selectedCustomer) {
+      setCustomerData({ name: value, rnc: customerData.rnc });
+    }
+  };
+
+  // Close customer dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowCustomerDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   // Calculate totals
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const tax = subtotal * 0.18; // 18% ITBIS
@@ -137,6 +203,7 @@ const POSPage = ({ user, onLogout }) => {
       payment_method: paymentMethod,
       cash_received: paymentMethod === 'cash' ? parseFloat(cashReceived) : total,
       change_amount: paymentMethod === 'cash' ? change : 0,
+      customer_id: selectedCustomer ? selectedCustomer.id : null,
       customer_name: customerData.name || null,
       customer_rnc: customerData.rnc || null,
       user_id: user.id,
@@ -146,7 +213,7 @@ const POSPage = ({ user, onLogout }) => {
     createSaleMutation.mutate(saleData);
   };
 
-  const isLoading = loadingProducts || loadingCategories;
+  const isLoading = loadingProducts || loadingCategories || loadingCustomers;
 
   if (isLoading) {
     return (
@@ -418,19 +485,54 @@ const POSPage = ({ user, onLogout }) => {
 
               <div className="customer-info">
                 <h5>Información del cliente (opcional):</h5>
-                <input
-                  type="text"
-                  placeholder="Nombre del cliente"
-                  value={customerData.name}
-                  onChange={(e) => setCustomerData(prev => ({ ...prev, name: e.target.value }))}
-                  className="form-control mb-2"
-                />
+                
+                <div className="customer-selector" ref={dropdownRef}>
+                  <div className="customer-search-container">
+                    <input
+                      type="text"
+                      placeholder="Buscar cliente o escribir nombre"
+                      value={customerSearchTerm}
+                      onChange={(e) => handleCustomerSearchChange(e.target.value)}
+                      onFocus={() => setShowCustomerDropdown(true)}
+                      className="form-control customer-search-input"
+                    />
+                    
+                    {selectedCustomer && (
+                      <button
+                        type="button"
+                        className="clear-customer-btn"
+                        onClick={clearCustomerSelection}
+                        title="Limpiar selección"
+                      >
+                        <i className="bi bi-x"></i>
+                      </button>
+                    )}
+                  </div>
+                  
+                  {showCustomerDropdown && filteredCustomers.length > 0 && (
+                    <div className="customer-dropdown">
+                      {filteredCustomers.slice(0, 8).map(customer => (
+                        <div
+                          key={customer.id}
+                          className="customer-dropdown-item"
+                          onClick={() => selectCustomer(customer)}
+                        >
+                          <div className="customer-name">{customer.name}</div>
+                          {customer.rnc && (
+                            <div className="customer-rnc">RNC: {customer.rnc}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
                 <input
                   type="text"
                   placeholder="RNC/Cédula"
                   value={customerData.rnc}
                   onChange={(e) => setCustomerData(prev => ({ ...prev, rnc: e.target.value }))}
-                  className="form-control"
+                  className="form-control mt-2"
                 />
               </div>
             </div>
@@ -942,6 +1044,92 @@ const POSPage = ({ user, onLogout }) => {
           border: 1px solid var(--glass-border);
           border-radius: var(--radius-lg);
           color: var(--text-primary);
+        }
+
+        .customer-selector {
+          position: relative;
+          margin-bottom: var(--space-md);
+        }
+
+        .customer-search-container {
+          position: relative;
+        }
+
+        .customer-search-input {
+          width: 100%;
+          padding: var(--space-md);
+          padding-right: 40px;
+          background: var(--bg-tertiary);
+          border: 1px solid var(--glass-border);
+          border-radius: var(--radius-lg);
+          color: var(--text-primary);
+          font-size: 1rem;
+        }
+
+        .customer-search-input:focus {
+          outline: none;
+          border-color: var(--text-accent);
+          box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+        }
+
+        .clear-customer-btn {
+          position: absolute;
+          right: var(--space-sm);
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          color: var(--text-muted);
+          cursor: pointer;
+          padding: var(--space-xs);
+          border-radius: 50%;
+          transition: all var(--transition-fast);
+        }
+
+        .clear-customer-btn:hover {
+          background: rgba(239, 68, 68, 0.1);
+          color: #f87171;
+        }
+
+        .customer-dropdown {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          z-index: 1000;
+          background: var(--bg-card);
+          border: 1px solid var(--glass-border);
+          border-radius: var(--radius-lg);
+          box-shadow: var(--shadow-lg);
+          max-height: 200px;
+          overflow-y: auto;
+          margin-top: var(--space-xs);
+        }
+
+        .customer-dropdown-item {
+          padding: var(--space-md);
+          cursor: pointer;
+          border-bottom: 1px solid var(--glass-border);
+          transition: background var(--transition-fast);
+        }
+
+        .customer-dropdown-item:last-child {
+          border-bottom: none;
+        }
+
+        .customer-dropdown-item:hover {
+          background: var(--bg-tertiary);
+        }
+
+        .customer-name {
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: var(--space-xs);
+        }
+
+        .customer-rnc {
+          font-size: 0.875rem;
+          color: var(--text-muted);
         }
 
         .modal-footer {
