@@ -9,6 +9,17 @@
   "display_override": ["window-controls-overlay", "standalone"],
   "orientation": "portrait-primary",
   "scope": "/",
+  "scope_extensions": [
+    {
+      "origin": "https://*.stripe.com"
+    },
+    {
+      "origin": "https://*.paypal.com"
+    },
+    {
+      "origin": "https://api.dgii.gov.do"
+    }
+  ],
   "id": "com.fourone.pos",
   "launch_handler": {
     "client_mode": "focus-existing"
