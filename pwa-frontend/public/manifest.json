@@ -6,9 +6,48 @@
   "display": "standalone",
   "background_color": "#0a0a0a",
   "theme_color": "#667eea",
+  "display_override": ["window-controls-overlay", "standalone"],
   "orientation": "portrait-primary",
   "scope": "/",
+  "id": "com.fourone.pos",
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
+  "protocol_handlers": [],
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
   "icons": [
+    {
+      "src": "icons/icon-36x36.png",
+      "sizes": "36x36",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-48x48.png",
+      "sizes": "48x48",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "icons/icon-192x192.png",
       "sizes": "192x192",
@@ -37,22 +76,6 @@
   "categories": ["business", "productivity", "finance"],
   "lang": "es-DO",
   "dir": "ltr",
-  "screenshots": [
-    {
-      "src": "screenshots/pos-wide.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "POS Interface"
-    },
-    {
-      "src": "screenshots/dashboard-narrow.png", 
-      "sizes": "540x720",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Dashboard Mobile"
-    }
-  ],
   "shortcuts": [
     {
       "name": "POS Ventas",
@@ -72,8 +95,20 @@
   "related_applications": [
     {
       "platform": "play",
-      "url": "https://play.google.com/store/apps/details?id=com.fourone.pos"
+      "url": "https://play.google.com/store/apps/details?id=com.fourone.pos",
+      "id": "com.fourone.pos"
     }
   ],
-  "prefer_related_applications": false
+  "prefer_related_applications": false,
+  "file_handlers": [],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "handle_links": "preferred"
 }
