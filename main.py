@@ -5,9 +5,13 @@ from datetime import datetime
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # create the app
 app = Flask(__name__)
+
+# Add ProxyFix middleware for proper reverse proxy handling (needed for HTTPS url_for)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # setup a secret key, required by sessions - MUST be set in production
 app.secret_key = os.environ.get("SESSION_SECRET")
 if not app.secret_key:
@@ -86,10 +90,14 @@ def favicon():
 
 @app.after_request
 def add_cache_headers(response):
-    """Add cache control headers for better development experience"""
+    """Add proper cache control headers for static vs dynamic content"""
     if request.endpoint == 'static':
-        # Force reload of CSS files for development
-        if request.path.endswith('.css'):
+        # Allow caching for static assets in production, but force reload in development
+        if os.environ.get("ENVIRONMENT") == "production":
+            # Cache static assets for 1 hour in production
+            response.headers['Cache-Control'] = 'public, max-age=3600'
+        else:
+            # Force reload of static files in development
             response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
             response.headers['Pragma'] = 'no-cache'
             response.headers['Expires'] = '0'
@@ -126,10 +134,11 @@ def after_request(response):
         response.headers['X-XSS-Protection'] = '1; mode=block'
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     
-    # Always disable caching for dynamic content
-    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Expires'] = '0'
+    # Only disable caching for dynamic content (not static files)
+    if request.endpoint != 'static':
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
     return response
 
 

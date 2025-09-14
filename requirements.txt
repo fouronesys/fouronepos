@@ -1,34 +1,27 @@
-Flask==3.0.0
-Flask-SQLAlchemy==3.1.1
-Flask-WTF==1.2.1
-psycopg2-binary==2.9.9
-bcrypt==4.1.2
-gunicorn==21.2.0
-requests==2.31.0
-python-escpos==3.0a9
-reportlab==4.0.7
-WTForms==3.1.1
-SQLAlchemy==2.0.23
-openpyxl==3.1.2
-xlsxwriter==3.1.9
-flask-limiter==3.5.0
-email_validator
-flask
-flask-sqlalchemy
-gunicorn
-psycopg2-binary
-bcrypt
-email-validator
-flask
-flask-limiter
-flask-sqlalchemy
-flask-wtf
-gunicorn
-openpyxl
-psycopg2-binary
-python-escpos
-reportlab
-requests
-sqlalchemy
-wtforms
-xlsxwriter
+# Production-ready Flask POS Application Dependencies
+# Core Flask framework and extensions
+Flask>=3.1.2
+Flask-SQLAlchemy>=3.1.1
+Flask-WTF>=1.2.2
+Flask-Limiter>=3.5.0
+
+# Database
+SQLAlchemy>=2.0.43
+psycopg2-binary>=2.9.10
+
+# Security and validation
+bcrypt>=4.3.0
+WTForms>=3.1.1
+email-validator>=2.0.0
+
+# Web server
+gunicorn>=23.0.0
+
+# PDF and Excel generation
+reportlab>=4.4.3
+openpyxl>=3.1.2
+xlsxwriter>=3.1.9
+
+# External services
+requests>=2.32.5
+python-escpos>=3.1
