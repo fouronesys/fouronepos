@@ -185,6 +185,22 @@ class Product(db.Model):
     product_taxes = relationship("ProductTax", back_populates="product")
 
 
+class Customer(db.Model):
+    __tablename__ = 'customers'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    rnc: Mapped[str] = mapped_column(String(20), nullable=True)  # RNC/Cédula
+    phone: Mapped[str] = mapped_column(String(20), nullable=True)
+    email: Mapped[str] = mapped_column(String(100), nullable=True)
+    address: Mapped[str] = mapped_column(Text, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    sales = relationship("Sale", foreign_keys="Sale.customer_id", back_populates="customer")
+
+
 class Supplier(db.Model):
     __tablename__ = 'suppliers'
     
@@ -253,6 +269,7 @@ class Sale(db.Model):
     cash_register_id: Mapped[int] = mapped_column(Integer, ForeignKey('cash_registers.id'), nullable=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'))
     table_id: Mapped[int] = mapped_column(Integer, ForeignKey('tables.id'), nullable=True)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey('customers.id'), nullable=True)
     ncf_sequence_id: Mapped[int] = mapped_column(Integer, ForeignKey('ncf_sequences.id'), nullable=True)
     ncf: Mapped[str] = mapped_column(String(20), nullable=True, unique=True)
     subtotal: Mapped[float] = mapped_column(Float, nullable=False)
@@ -280,6 +297,7 @@ class Sale(db.Model):
     user = relationship("User", foreign_keys=[user_id], back_populates="sales")
     cancelled_by_user = relationship("User", foreign_keys=[cancelled_by])
     table = relationship("Table", back_populates="sales")
+    customer = relationship("Customer", back_populates="sales")
     ncf_sequence = relationship("NCFSequence", back_populates="sales")
     sale_items = relationship("SaleItem", back_populates="sale")
 

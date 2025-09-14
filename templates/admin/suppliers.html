@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Proveedores - Four One POS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-truck"></i> Gestión de Proveedores</h2>
+        <div>
+            <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Volver
+            </a>
+            <button class="btn btn-primary btn-touch" data-bs-toggle="modal" data-bs-target="#supplierModal" onclick="newSupplier()">
+                <i class="bi bi-plus-circle"></i> Nuevo Proveedor
+            </button>
+        </div>
+    </div>
+
+    <!-- Suppliers Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>RNC</th>
+                            <th>Persona de Contacto</th>
+                            <th>Teléfono</th>
+                            <th>Email</th>
+                            <th>Dirección</th>
+                            <th>Fecha Registro</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for supplier in suppliers %}
+                        <tr data-supplier-id="{{ supplier.id }}"
+                            data-supplier-name="{{ supplier.name }}"
+                            data-supplier-rnc="{{ supplier.rnc or '' }}"
+                            data-supplier-contact-person="{{ supplier.contact_person or '' }}"
+                            data-supplier-phone="{{ supplier.phone or '' }}"
+                            data-supplier-email="{{ supplier.email or '' }}"
+                            data-supplier-address="{{ supplier.address or '' }}">
+                            <td>{{ supplier.id }}</td>
+                            <td><strong>{{ supplier.name }}</strong></td>
+                            <td>
+                                {% if supplier.rnc %}
+                                    {{ supplier.rnc }}
+                                {% else %}
+                                    <span class="text-muted">No especificado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if supplier.contact_person %}
+                                    {{ supplier.contact_person }}
+                                {% else %}
+                                    <span class="text-muted">No especificado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if supplier.phone %}
+                                    {{ supplier.phone }}
+                                {% else %}
+                                    <span class="text-muted">No especificado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if supplier.email %}
+                                    {{ supplier.email }}
+                                {% else %}
+                                    <span class="text-muted">No especificado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if supplier.address %}
+                                    {{ supplier.address[:50] }}{% if supplier.address|length > 50 %}...{% endif %}
+                                {% else %}
+                                    <span class="text-muted">No especificada</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ supplier.created_at.strftime('%d/%m/%Y') }}</td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="editSupplier(this, {{ supplier.id }})" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteSupplier(this, {{ supplier.id }})" title="Eliminar">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if not suppliers %}
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">
+                                <i class="bi bi-truck fs-1 mb-2 d-block"></i>
+                                No hay proveedores registrados
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Supplier Modal -->
+<div class="modal fade" id="supplierModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="supplierModalTitle">Nuevo Proveedor</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="supplierForm" method="POST" action="{{ url_for('admin.create_supplier') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Nombre de la Empresa <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="rnc" class="form-label">RNC</label>
+                        <input type="text" class="form-control" id="rnc" name="rnc" placeholder="Ej: 101-12345-6">
+                        <div class="form-text">Opcional - Registro Nacional del Contribuyente</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="contact_person" class="form-label">Persona de Contacto</label>
+                        <input type="text" class="form-control" id="contact_person" name="contact_person" placeholder="Nombre del contacto principal">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="phone" class="form-label">Teléfono</label>
+                        <input type="tel" class="form-control" id="phone" name="phone" placeholder="Ej: 809-123-4567">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" placeholder="contacto@proveedor.com">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="address" class="form-label">Dirección</label>
+                        <textarea class="form-control" id="address" name="address" rows="3" placeholder="Dirección completa del proveedor"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Está seguro que desea eliminar este proveedor?</p>
+                <p class="text-muted">Si el proveedor tiene compras asociadas, se desactivará en lugar de eliminarse.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-danger">Eliminar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentSupplierId = null;
+let isEditing = false;
+
+function newSupplier() {
+    isEditing = false;
+    currentSupplierId = null;
+    document.getElementById('supplierModalTitle').textContent = 'Nuevo Proveedor';
+    document.getElementById('supplierForm').action = '{{ url_for("admin.create_supplier") }}';
+    document.getElementById('supplierForm').reset();
+}
+
+function editSupplier(buttonElement, supplierId) {
+    isEditing = true;
+    currentSupplierId = supplierId;
+    
+    // Get supplier data from data attributes (prevents data loss)
+    const row = buttonElement.closest('tr');
+    
+    document.getElementById('supplierModalTitle').textContent = 'Editar Proveedor';
+    document.getElementById('supplierForm').action = '{{ url_for("admin.edit_supplier", supplier_id="PLACEHOLDER") }}'.replace('PLACEHOLDER', supplierId);
+    
+    // Fill form with full data from attributes
+    document.getElementById('name').value = row.dataset.supplierName;
+    document.getElementById('rnc').value = row.dataset.supplierRnc;
+    document.getElementById('contact_person').value = row.dataset.supplierContactPerson;
+    document.getElementById('phone').value = row.dataset.supplierPhone;
+    document.getElementById('email').value = row.dataset.supplierEmail;
+    document.getElementById('address').value = row.dataset.supplierAddress;
+    
+    // Show modal
+    new bootstrap.Modal(document.getElementById('supplierModal')).show();
+}
+
+function deleteSupplier(buttonElement, supplierId) {
+    currentSupplierId = supplierId;
+    document.getElementById('deleteForm').action = '{{ url_for("admin.delete_supplier", supplier_id="PLACEHOLDER") }}'.replace('PLACEHOLDER', supplierId);
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+</script>
+{% endblock %}

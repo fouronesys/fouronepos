@@ -1929,3 +1929,321 @@ def api_delete_tax_type(tax_type_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Error eliminando tipo de impuesto: {str(e)}'}), 500
+
+
+# CUSTOMER MANAGEMENT ROUTES
+@bp.route('/customers')
+def customers():
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return user
+    
+    customers = models.Customer.query.filter_by(active=True).order_by(models.Customer.name.asc()).all()
+    return render_template('admin/customers.html', customers=customers)
+
+
+@bp.route('/customers/create', methods=['POST'])
+def create_customer():
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.customers'))
+    
+    try:
+        name = request.form['name'].strip()
+        rnc = request.form.get('rnc', '').strip()
+        phone = request.form.get('phone', '').strip()
+        email = request.form.get('email', '').strip()
+        address = request.form.get('address', '').strip()
+        
+        if not name:
+            flash('El nombre del cliente es obligatorio', 'error')
+            return redirect(url_for('admin.customers'))
+        
+        # Check if name already exists
+        existing_customer = models.Customer.query.filter_by(name=name, active=True).first()
+        if existing_customer:
+            flash('Ya existe un cliente con ese nombre', 'error')
+            return redirect(url_for('admin.customers'))
+        
+        # Check if RNC already exists (if provided)
+        if rnc:
+            existing_rnc = models.Customer.query.filter_by(rnc=rnc, active=True).first()
+            if existing_rnc:
+                flash('Ya existe un cliente con ese RNC/Cédula', 'error')
+                return redirect(url_for('admin.customers'))
+        
+        new_customer = models.Customer()
+        new_customer.name = name
+        new_customer.rnc = rnc if rnc else None
+        new_customer.phone = phone if phone else None
+        new_customer.email = email if email else None
+        new_customer.address = address if address else None
+        new_customer.active = True
+        
+        db.session.add(new_customer)
+        db.session.commit()
+        
+        flash(f'Cliente {name} creado exitosamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al crear cliente: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.customers'))
+
+
+@bp.route('/customers/<int:customer_id>/edit', methods=['POST'])
+def edit_customer(customer_id):
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.customers'))
+    
+    try:
+        customer = models.Customer.query.get_or_404(customer_id)
+        
+        name = request.form['name'].strip()
+        rnc = request.form.get('rnc', '').strip()
+        phone = request.form.get('phone', '').strip()
+        email = request.form.get('email', '').strip()
+        address = request.form.get('address', '').strip()
+        
+        if not name:
+            flash('El nombre del cliente es obligatorio', 'error')
+            return redirect(url_for('admin.customers'))
+        
+        # Check if name already exists (excluding current customer)
+        existing_customer = models.Customer.query.filter(
+            models.Customer.name == name,
+            models.Customer.id != customer_id,
+            models.Customer.active == True
+        ).first()
+        if existing_customer:
+            flash('Ya existe un cliente con ese nombre', 'error')
+            return redirect(url_for('admin.customers'))
+        
+        # Check if RNC already exists (excluding current customer)
+        if rnc:
+            existing_rnc = models.Customer.query.filter(
+                models.Customer.rnc == rnc,
+                models.Customer.id != customer_id,
+                models.Customer.active == True
+            ).first()
+            if existing_rnc:
+                flash('Ya existe un cliente con ese RNC/Cédula', 'error')
+                return redirect(url_for('admin.customers'))
+        
+        customer.name = name
+        customer.rnc = rnc if rnc else None
+        customer.phone = phone if phone else None
+        customer.email = email if email else None
+        customer.address = address if address else None
+        
+        db.session.commit()
+        
+        flash(f'Cliente {name} actualizado exitosamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al actualizar cliente: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.customers'))
+
+
+@bp.route('/customers/<int:customer_id>/delete', methods=['POST'])
+def delete_customer(customer_id):
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.customers'))
+    
+    try:
+        customer = models.Customer.query.get_or_404(customer_id)
+        
+        # Check if customer has sales
+        sales_count = models.Sale.query.filter_by(customer_id=customer_id).count()
+        if sales_count > 0:
+            flash(f'No se puede eliminar el cliente {customer.name} porque tiene {sales_count} ventas asociadas. Se desactivó en su lugar.', 'warning')
+            customer.active = False
+        else:
+            customer.active = False
+            flash(f'Cliente {customer.name} desactivado exitosamente', 'success')
+        
+        db.session.commit()
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar cliente: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.customers'))
+
+
+# SUPPLIER MANAGEMENT ROUTES
+@bp.route('/suppliers')
+def suppliers():
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return user
+    
+    suppliers = models.Supplier.query.filter_by(active=True).order_by(models.Supplier.name.asc()).all()
+    return render_template('admin/suppliers.html', suppliers=suppliers)
+
+
+@bp.route('/suppliers/create', methods=['POST'])
+def create_supplier():
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.suppliers'))
+    
+    try:
+        name = request.form['name'].strip()
+        rnc = request.form.get('rnc', '').strip()
+        contact_person = request.form.get('contact_person', '').strip()
+        phone = request.form.get('phone', '').strip()
+        email = request.form.get('email', '').strip()
+        address = request.form.get('address', '').strip()
+        
+        if not name:
+            flash('El nombre del proveedor es obligatorio', 'error')
+            return redirect(url_for('admin.suppliers'))
+        
+        # Check if name already exists
+        existing_supplier = models.Supplier.query.filter_by(name=name, active=True).first()
+        if existing_supplier:
+            flash('Ya existe un proveedor con ese nombre', 'error')
+            return redirect(url_for('admin.suppliers'))
+        
+        # Check if RNC already exists (if provided)
+        if rnc:
+            existing_rnc = models.Supplier.query.filter_by(rnc=rnc, active=True).first()
+            if existing_rnc:
+                flash('Ya existe un proveedor con ese RNC', 'error')
+                return redirect(url_for('admin.suppliers'))
+        
+        new_supplier = models.Supplier()
+        new_supplier.name = name
+        new_supplier.rnc = rnc if rnc else None
+        new_supplier.contact_person = contact_person if contact_person else None
+        new_supplier.phone = phone if phone else None
+        new_supplier.email = email if email else None
+        new_supplier.address = address if address else None
+        new_supplier.active = True
+        
+        db.session.add(new_supplier)
+        db.session.commit()
+        
+        flash(f'Proveedor {name} creado exitosamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al crear proveedor: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.suppliers'))
+
+
+@bp.route('/suppliers/<int:supplier_id>/edit', methods=['POST'])
+def edit_supplier(supplier_id):
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.suppliers'))
+    
+    try:
+        supplier = models.Supplier.query.get_or_404(supplier_id)
+        
+        name = request.form['name'].strip()
+        rnc = request.form.get('rnc', '').strip()
+        contact_person = request.form.get('contact_person', '').strip()
+        phone = request.form.get('phone', '').strip()
+        email = request.form.get('email', '').strip()
+        address = request.form.get('address', '').strip()
+        
+        if not name:
+            flash('El nombre del proveedor es obligatorio', 'error')
+            return redirect(url_for('admin.suppliers'))
+        
+        # Check if name already exists (excluding current supplier)
+        existing_supplier = models.Supplier.query.filter(
+            models.Supplier.name == name,
+            models.Supplier.id != supplier_id,
+            models.Supplier.active == True
+        ).first()
+        if existing_supplier:
+            flash('Ya existe un proveedor con ese nombre', 'error')
+            return redirect(url_for('admin.suppliers'))
+        
+        # Check if RNC already exists (excluding current supplier)
+        if rnc:
+            existing_rnc = models.Supplier.query.filter(
+                models.Supplier.rnc == rnc,
+                models.Supplier.id != supplier_id,
+                models.Supplier.active == True
+            ).first()
+            if existing_rnc:
+                flash('Ya existe un proveedor con ese RNC', 'error')
+                return redirect(url_for('admin.suppliers'))
+        
+        supplier.name = name
+        supplier.rnc = rnc if rnc else None
+        supplier.contact_person = contact_person if contact_person else None
+        supplier.phone = phone if phone else None
+        supplier.email = email if email else None
+        supplier.address = address if address else None
+        
+        db.session.commit()
+        
+        flash(f'Proveedor {name} actualizado exitosamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al actualizar proveedor: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.suppliers'))
+
+
+@bp.route('/suppliers/<int:supplier_id>/delete', methods=['POST'])
+def delete_supplier(supplier_id):
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Validate CSRF token
+    if not validate_csrf_token():
+        return redirect(url_for('admin.suppliers'))
+    
+    try:
+        supplier = models.Supplier.query.get_or_404(supplier_id)
+        
+        # Check if supplier has purchases
+        purchases_count = models.Purchase.query.filter_by(supplier_id=supplier_id).count()
+        if purchases_count > 0:
+            flash(f'No se puede eliminar el proveedor {supplier.name} porque tiene {purchases_count} compras asociadas. Se desactivó en su lugar.', 'warning')
+            supplier.active = False
+        else:
+            supplier.active = False
+            flash(f'Proveedor {supplier.name} desactivado exitosamente', 'success')
+        
+        db.session.commit()
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar proveedor: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.suppliers'))

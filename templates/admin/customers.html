@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Clientes - Four One POS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-person-vcard"></i> Gestión de Clientes</h2>
+        <div>
+            <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Volver
+            </a>
+            <button class="btn btn-primary btn-touch" data-bs-toggle="modal" data-bs-target="#customerModal" onclick="newCustomer()">
+                <i class="bi bi-person-plus"></i> Nuevo Cliente
+            </button>
+        </div>
+    </div>
+
+    <!-- Customers Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>RNC/Cédula</th>
+                            <th>Teléfono</th>
+                            <th>Email</th>
+                            <th>Dirección</th>
+                            <th>Fecha Registro</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for customer in customers %}
+                        <tr data-customer-id="{{ customer.id }}"
+                            data-customer-name="{{ customer.name }}"
+                            data-customer-rnc="{{ customer.rnc or '' }}"
+                            data-customer-phone="{{ customer.phone or '' }}"
+                            data-customer-email="{{ customer.email or '' }}"
+                            data-customer-address="{{ customer.address or '' }}">
+                            <td>{{ customer.id }}</td>
+                            <td><strong>{{ customer.name }}</strong></td>
+                            <td>
+                                {% if customer.rnc %}
+                                    {{ customer.rnc }}
+                                {% else %}
+                                    <span class="text-muted">No especificado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if customer.phone %}
+                                    {{ customer.phone }}
+                                {% else %}
+                                    <span class="text-muted">No especificado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if customer.email %}
+                                    {{ customer.email }}
+                                {% else %}
+                                    <span class="text-muted">No especificado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if customer.address %}
+                                    {{ customer.address[:50] }}{% if customer.address|length > 50 %}...{% endif %}
+                                {% else %}
+                                    <span class="text-muted">No especificada</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ customer.created_at.strftime('%d/%m/%Y') }}</td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="editCustomer(this, {{ customer.id }})" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteCustomer(this, {{ customer.id }})" title="Eliminar">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if not customers %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                <i class="bi bi-person-x fs-1 mb-2 d-block"></i>
+                                No hay clientes registrados
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Customer Modal -->
+<div class="modal fade" id="customerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="customerModalTitle">Nuevo Cliente</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="customerForm" method="POST" action="{{ url_for('admin.create_customer') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Nombre <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="rnc" class="form-label">RNC/Cédula</label>
+                        <input type="text" class="form-control" id="rnc" name="rnc" placeholder="Ej: 101-12345-6 o 001-1234567-8">
+                        <div class="form-text">Opcional - Para emitir facturas con crédito fiscal</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="phone" class="form-label">Teléfono</label>
+                        <input type="tel" class="form-control" id="phone" name="phone" placeholder="Ej: 809-123-4567">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" placeholder="cliente@ejemplo.com">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="address" class="form-label">Dirección</label>
+                        <textarea class="form-control" id="address" name="address" rows="3" placeholder="Dirección completa del cliente"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Está seguro que desea eliminar este cliente?</p>
+                <p class="text-muted">Si el cliente tiene ventas asociadas, se desactivará en lugar de eliminarse.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-danger">Eliminar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentCustomerId = null;
+let isEditing = false;
+
+function newCustomer() {
+    isEditing = false;
+    currentCustomerId = null;
+    document.getElementById('customerModalTitle').textContent = 'Nuevo Cliente';
+    document.getElementById('customerForm').action = '{{ url_for("admin.create_customer") }}';
+    document.getElementById('customerForm').reset();
+}
+
+function editCustomer(buttonElement, customerId) {
+    isEditing = true;
+    currentCustomerId = customerId;
+    
+    // Get customer data from data attributes (prevents data loss)
+    const row = buttonElement.closest('tr');
+    
+    document.getElementById('customerModalTitle').textContent = 'Editar Cliente';
+    document.getElementById('customerForm').action = '{{ url_for("admin.edit_customer", customer_id="PLACEHOLDER") }}'.replace('PLACEHOLDER', customerId);
+    
+    // Fill form with full data from attributes
+    document.getElementById('name').value = row.dataset.customerName;
+    document.getElementById('rnc').value = row.dataset.customerRnc;
+    document.getElementById('phone').value = row.dataset.customerPhone;
+    document.getElementById('email').value = row.dataset.customerEmail;
+    document.getElementById('address').value = row.dataset.customerAddress;
+    
+    // Show modal
+    new bootstrap.Modal(document.getElementById('customerModal')).show();
+}
+
+function deleteCustomer(buttonElement, customerId) {
+    currentCustomerId = customerId;
+    document.getElementById('deleteForm').action = '{{ url_for("admin.delete_customer", customer_id="PLACEHOLDER") }}'.replace('PLACEHOLDER', customerId);
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+</script>
+{% endblock %}

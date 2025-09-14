@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 import bcrypt
+from werkzeug.security import check_password_hash, generate_password_hash
 import models
 from models import db
 import secrets
@@ -18,7 +19,20 @@ def login():
         
         user = models.User.query.filter_by(username=username, active=True).first()
         
-        if user and bcrypt.checkpw(password.encode('utf-8'), user.password_hash.encode('utf-8')):
+        # Check password using appropriate method based on hash format
+        password_valid = False
+        if user:
+            if user.password_hash.startswith('$2b$') or user.password_hash.startswith('$2a$'):
+                # bcrypt hash
+                try:
+                    password_valid = bcrypt.checkpw(password.encode('utf-8'), user.password_hash.encode('utf-8'))
+                except ValueError:
+                    password_valid = False
+            else:
+                # werkzeug/scrypt hash
+                password_valid = check_password_hash(user.password_hash, password)
+        
+        if user and password_valid:
             # Update last_login timestamp
             user.last_login = datetime.utcnow()
             db.session.commit()
@@ -168,8 +182,19 @@ def change_password():
         new_password = request.form['new_password']
         confirm_password = request.form['confirm_password']
         
-        # Validate current password
-        if not bcrypt.checkpw(current_password.encode('utf-8'), user.password_hash.encode('utf-8')):
+        # Validate current password using appropriate method
+        password_valid = False
+        if user.password_hash.startswith('$2b$') or user.password_hash.startswith('$2a$'):
+            # bcrypt hash
+            try:
+                password_valid = bcrypt.checkpw(current_password.encode('utf-8'), user.password_hash.encode('utf-8'))
+            except ValueError:
+                password_valid = False
+        else:
+            # werkzeug/scrypt hash
+            password_valid = check_password_hash(user.password_hash, current_password)
+        
+        if not password_valid:
             flash('La contraseña actual es incorrecta', 'error')
             return render_template('auth/change_password.html')
         
