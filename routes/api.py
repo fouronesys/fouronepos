@@ -93,6 +93,26 @@ def get_categories():
     } for c in categories])
 
 
+@bp.route('/tax-types')
+def get_tax_types():
+    """Get all active tax types for frontend loading"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    tax_types = models.TaxType.query.filter_by(active=True).order_by(models.TaxType.display_order, models.TaxType.name).all()
+    
+    return jsonify([{
+        'id': t.id,
+        'name': t.name,
+        'description': t.description,
+        'rate': t.rate,
+        'is_inclusive': t.is_inclusive,
+        'is_percentage': t.is_percentage,
+        'display_order': t.display_order
+    } for t in tax_types])
+
+
 @bp.route('/tables/<int:table_id>/status', methods=['PUT'])
 def update_table_status(table_id):
     user = require_login()
@@ -139,7 +159,7 @@ def create_sale():
         # Create new sale (waiters don't need cash registers initially)
         sale = models.Sale()
         sale.user_id = user.id
-        sale.table_id = int(table_id) if table_id else None
+        sale.table_id = int(table_id) if table_id and table_id.strip() else None
         sale.description = data.get('description', '')
         sale.subtotal = 0
         sale.tax_amount = 0
@@ -233,26 +253,54 @@ def add_sale_item(sale_id):
         # Check if product already exists in this sale - merge quantities instead of creating duplicate lines
         existing_item = models.SaleItem.query.filter_by(sale_id=sale_id, product_id=product.id).first()
         
-        # Get product's tax types for NEW TAX SYSTEM
-        product_tax_types = []
-        for product_tax in product.product_taxes:
-            if product_tax.tax_type.active:
-                product_tax_types.append({
-                    'name': product_tax.tax_type.name,
-                    'rate': product_tax.tax_type.rate,
-                    'is_inclusive': product_tax.tax_type.is_inclusive
-                })
+        # ENHANCED TAX CALCULATION LOGIC with proper fallback hierarchy
+        # 1. Use tax_type_id and is_inclusive from frontend payload (if provided)
+        # 2. Fallback to product.product_taxes (if configured)
+        # 3. Final fallback to default ITBIS 18% included for fiscal compliance
         
-        # Calculate aggregated tax rate and inclusiveness for backward compatibility
-        total_tax_rate = sum(tax['rate'] for tax in product_tax_types)
-        has_inclusive_tax = any(tax['is_inclusive'] for tax in product_tax_types)
+        # Check if frontend provided specific tax information
+        frontend_tax_type_id = data.get('tax_type_id')
+        frontend_is_inclusive = data.get('is_inclusive')
+        
+        if frontend_tax_type_id:
+            # Use tax information explicitly provided by frontend
+            tax_type = models.TaxType.query.filter_by(id=frontend_tax_type_id, active=True).first()
+            if tax_type:
+                total_tax_rate = tax_type.rate
+                has_inclusive_tax = frontend_is_inclusive if frontend_is_inclusive is not None else tax_type.is_inclusive
+            else:
+                # Invalid tax_type_id provided, use default fallback
+                total_tax_rate = 0.18  # Default ITBIS 18%
+                has_inclusive_tax = True
+        else:
+            # Get product's tax types for NEW TAX SYSTEM (fallback level 2)
+            product_tax_types = []
+            for product_tax in product.product_taxes:
+                if product_tax.tax_type.active:
+                    product_tax_types.append({
+                        'name': product_tax.tax_type.name,
+                        'rate': product_tax.tax_type.rate,
+                        'is_inclusive': product_tax.tax_type.is_inclusive
+                    })
+            
+            if product_tax_types:
+                # Use product-specific tax configuration
+                total_tax_rate = sum(tax['rate'] for tax in product_tax_types)
+                has_inclusive_tax = any(tax['is_inclusive'] for tax in product_tax_types)
+            else:
+                # CRITICAL FIX: Default fallback for fiscal compliance (level 3)
+                # If no product_taxes configured, use default ITBIS 18% included
+                # This ensures products aren't saved with 0% tax rate
+                total_tax_rate = 0.18  # Default ITBIS 18%
+                has_inclusive_tax = True  # ITBIS is typically included in Dominican Republic
         
         if existing_item:
             # Update existing item quantity
             existing_item.quantity = total_quantity
             existing_item.total_price = product.price * total_quantity
-            existing_item.tax_rate = total_tax_rate  # Aggregated tax rate from new system
-            existing_item.is_tax_included = has_inclusive_tax  # True if any tax is inclusive
+            # Use None instead of 0 to allow proper fallback during calculation
+            existing_item.tax_rate = float(total_tax_rate) if total_tax_rate and total_tax_rate > 0 else None
+            existing_item.is_tax_included = has_inclusive_tax
             sale_item = existing_item
         else:
             # Create new sale item
@@ -262,8 +310,9 @@ def add_sale_item(sale_id):
             sale_item.quantity = quantity
             sale_item.unit_price = product.price
             sale_item.total_price = product.price * quantity
-            sale_item.tax_rate = total_tax_rate  # Aggregated tax rate from new system
-            sale_item.is_tax_included = has_inclusive_tax  # True if any tax is inclusive
+            # Use None instead of 0 to allow proper fallback during calculation
+            sale_item.tax_rate = float(total_tax_rate) if total_tax_rate and total_tax_rate > 0 else None
+            sale_item.is_tax_included = has_inclusive_tax
             
             db.session.add(sale_item)
         
@@ -315,7 +364,7 @@ def add_sale_item(sale_id):
             'total_price': sale_item.total_price,
             'tax_rate': sale_item.tax_rate,
             'is_tax_included': sale_item.is_tax_included,
-            'tax_types': product_tax_types  # NEW: Include detailed tax types for receipt generation
+            'tax_types': product_tax_types if 'product_tax_types' in locals() else []  # NEW: Include detailed tax types for receipt generation
         })
         
     except Exception as e:
@@ -2001,6 +2050,7 @@ def finalize_table_sale(sale_id):
             sale_items = models.SaleItem.query.filter_by(sale_id=sale.id).all()
             sale_data = _prepare_sale_data_for_receipt(sale, sale_items)
             
+            from utils import generate_thermal_receipt_text
             receipt_text = generate_thermal_receipt_text(sale_data, receipt_format)
             
             # Add receipt data to response for automatic display

@@ -893,8 +893,9 @@ async function loadTaxTypes() {
         console.log('[Tax] Loading tax types from API...');
         const response = await apiRequest('/api/tax-types');
         
-        if (response.tax_types) {
-            loadedTaxTypes = response.tax_types;
+        // FIXED: API returns array directly, not wrapped in tax_types property
+        if (Array.isArray(response) && response.length > 0) {
+            loadedTaxTypes = response;
             populateTaxTypeDropdown();
         } else {
             console.error('[Tax] No tax types found in response');
@@ -998,6 +999,17 @@ function getCurrentTaxType() {
         rate: parseFloat(selectedOption.getAttribute('data-rate')) || 0.18,
         is_inclusive: selectedOption.getAttribute('data-inclusive') === 'true'
     };
+}
+
+// Helper functions for API calls
+function getCurrentTaxTypeId() {
+    const taxType = getCurrentTaxType();
+    return taxType.id;
+}
+
+function getCurrentTaxIsInclusive() {
+    const taxType = getCurrentTaxType();
+    return taxType.is_inclusive;
 }
 
 // Update tax calculation when type changes
@@ -1239,7 +1251,10 @@ function processSale() {
                 credentials: 'same-origin',
                 body: JSON.stringify({
                     product_id: item.id,
-                    quantity: item.quantity
+                    quantity: item.quantity,
+                    // Include tax information if available from current selection
+                    tax_type_id: getCurrentTaxTypeId(),
+                    is_inclusive: getCurrentTaxIsInclusive()
                 })
             })
         );
@@ -1386,7 +1401,10 @@ function assignToTable() {
                 credentials: 'same-origin',
                 body: JSON.stringify({
                     product_id: item.id,
-                    quantity: item.quantity
+                    quantity: item.quantity,
+                    // Include tax information if available from current selection
+                    tax_type_id: getCurrentTaxTypeId(),
+                    is_inclusive: getCurrentTaxIsInclusive()
                 })
             })
         );
