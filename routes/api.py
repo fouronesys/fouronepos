@@ -2370,3 +2370,106 @@ def get_customers():
         })
     
     return jsonify(customers_data)
+
+
+# PWA Authentication Endpoints
+
+@bp.route('/auth/login', methods=['POST'])
+def api_login():
+    """JSON login endpoint for PWA authentication"""
+    try:
+        if not request.is_json:
+            return jsonify({'error': 'Content-Type must be application/json'}), 400
+        
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            return jsonify({'error': 'Usuario y contraseña son requeridos'}), 400
+        
+        user = models.User.query.filter_by(username=username, active=True).first()
+        
+        # Check password using appropriate method based on hash format
+        password_valid = False
+        if user:
+            if user.password_hash.startswith('$2b$') or user.password_hash.startswith('$2a$'):
+                # bcrypt hash
+                try:
+                    import bcrypt
+                    password_valid = bcrypt.checkpw(password.encode('utf-8'), user.password_hash.encode('utf-8'))
+                except ValueError:
+                    password_valid = False
+            else:
+                # werkzeug/scrypt hash
+                from werkzeug.security import check_password_hash
+                password_valid = check_password_hash(user.password_hash, password)
+        
+        if user and password_valid:
+            # Update last_login timestamp
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+            
+            # Set session for the user
+            session['user_id'] = user.id
+            session['username'] = user.username
+            session['role'] = user.role.value
+            
+            # Return user data JSON response
+            return jsonify({
+                'success': True,
+                'message': 'Inicio de sesión exitoso',
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'name': user.name,
+                    'role': user.role.value,
+                    'must_change_password': user.must_change_password
+                }
+            })
+        else:
+            return jsonify({'error': 'Usuario o contraseña incorrectos'}), 401
+    
+    except Exception as e:
+        print(f"[ERROR] API login failed: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@bp.route('/auth/user')
+def api_get_current_user():
+    """Get current logged in user info"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    return jsonify({
+        'id': user.id,
+        'username': user.username,
+        'name': user.name,
+        'role': user.role.value,
+        'must_change_password': user.must_change_password
+    })
+
+
+@bp.route('/auth/logout', methods=['POST'])
+def api_logout():
+    """JSON logout endpoint for PWA"""
+    session.clear()
+    return jsonify({
+        'success': True,
+        'message': 'Sesión cerrada exitosamente'
+    })
+
+
+@bp.route('/csrf-token')
+def get_csrf_token():
+    """Get CSRF token for API requests"""
+    from flask_wtf.csrf import generate_csrf
+    try:
+        csrf_token = generate_csrf()
+        return jsonify({
+            'csrf_token': csrf_token
+        })
+    except Exception as e:
+        print(f"[ERROR] Failed to generate CSRF token: {str(e)}")
+        return jsonify({'error': 'Error generando token CSRF'}), 500
