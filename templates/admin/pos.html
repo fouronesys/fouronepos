@@ -352,8 +352,7 @@
                             <span>Tipo de Impuesto</span>
                         </label>
                         <select class="modern-input" id="tax-type-select" onchange="updateTaxCalculation()">
-                            <option value="0.18">ITBIS (18%)</option>
-                            <option value="0.00">Sin impuestos</option>
+                            <option value="">Cargando tipos de impuesto...</option>
                         </select>
                     </div>
                 </div>
@@ -885,14 +884,140 @@ function switchCategory(categoryId) {
     loadProducts(categoryId);
 }
 
-// Get current tax rate from selector
+// Store loaded tax types globally
+let loadedTaxTypes = [];
+
+// Load tax types from API
+async function loadTaxTypes() {
+    try {
+        console.log('[Tax] Loading tax types from API...');
+        const response = await apiRequest('/api/tax-types');
+        
+        if (response.tax_types) {
+            loadedTaxTypes = response.tax_types;
+            populateTaxTypeDropdown();
+        } else {
+            console.error('[Tax] No tax types found in response');
+            fallbackToDefaultTaxOptions();
+        }
+    } catch (error) {
+        console.error('[Tax] Error loading tax types:', error);
+        fallbackToDefaultTaxOptions();
+    }
+}
+
+// Populate tax type dropdown with loaded data
+function populateTaxTypeDropdown() {
+    const taxSelect = document.getElementById('tax-type-select');
+    if (!taxSelect) return;
+    
+    // Clear existing options
+    taxSelect.innerHTML = '';
+    
+    // Find ITBIS Incluido (18%) as the default option
+    let defaultTaxType = null;
+    
+    loadedTaxTypes.forEach(taxType => {
+        const option = document.createElement('option');
+        option.value = taxType.id;
+        option.textContent = `${taxType.name} (${(taxType.rate * 100).toFixed(0)}%)${taxType.is_inclusive ? ' - Incluído' : ''}`;
+        option.setAttribute('data-rate', taxType.rate);
+        option.setAttribute('data-inclusive', taxType.is_inclusive);
+        
+        // Set ITBIS Incluido as default
+        if (taxType.name.toLowerCase().includes('itbis') && taxType.is_inclusive && taxType.rate === 0.18) {
+            defaultTaxType = taxType;
+            option.selected = true;
+        }
+        
+        taxSelect.appendChild(option);
+    });
+    
+    // If no ITBIS Incluido found, select the first ITBIS option
+    if (!defaultTaxType) {
+        const itbisOption = loadedTaxTypes.find(t => 
+            t.name.toLowerCase().includes('itbis') && t.rate === 0.18
+        );
+        if (itbisOption) {
+            taxSelect.value = itbisOption.id;
+        }
+    }
+    
+    console.log('[Tax] Tax types loaded successfully:', loadedTaxTypes.length, 'types');
+    updateTaxCalculation();
+}
+
+// Fallback to default tax options if API fails
+function fallbackToDefaultTaxOptions() {
+    const taxSelect = document.getElementById('tax-type-select');
+    if (!taxSelect) return;
+    
+    taxSelect.innerHTML = `
+        <option value="default-18-inclusive" data-rate="0.18" data-inclusive="true" selected>ITBIS (18%) - Incluído</option>
+        <option value="default-18-exclusive" data-rate="0.18" data-inclusive="false">ITBIS (18%) - Exclusivo</option>
+        <option value="default-0" data-rate="0.00" data-inclusive="false">Sin impuestos</option>
+    `;
+    
+    // Simulate loaded tax types for consistency
+    loadedTaxTypes = [
+        { id: 'default-18-inclusive', name: 'ITBIS Incluído', rate: 0.18, is_inclusive: true },
+        { id: 'default-18-exclusive', name: 'ITBIS Exclusivo', rate: 0.18, is_inclusive: false },
+        { id: 'default-0', name: 'Sin impuestos', rate: 0.00, is_inclusive: false }
+    ];
+    
+    console.log('[Tax] Using fallback tax options');
+    updateTaxCalculation();
+}
+
+// Get current tax rate and type from selector
 function getCurrentTaxRate() {
     const taxSelect = document.getElementById('tax-type-select');
-    return taxSelect ? parseFloat(taxSelect.value) : 0.18;
+    if (!taxSelect || !taxSelect.value) return 0.18;
+    
+    // Get rate from data attribute for better accuracy
+    const selectedOption = taxSelect.options[taxSelect.selectedIndex];
+    const rate = selectedOption ? parseFloat(selectedOption.getAttribute('data-rate')) : 0.18;
+    
+    return rate || 0.18;
+}
+
+// Get current tax type data
+function getCurrentTaxType() {
+    const taxSelect = document.getElementById('tax-type-select');
+    if (!taxSelect || !taxSelect.value) {
+        return { id: null, rate: 0.18, is_inclusive: true };
+    }
+    
+    const selectedOption = taxSelect.options[taxSelect.selectedIndex];
+    if (!selectedOption) {
+        return { id: null, rate: 0.18, is_inclusive: true };
+    }
+    
+    return {
+        id: taxSelect.value,
+        rate: parseFloat(selectedOption.getAttribute('data-rate')) || 0.18,
+        is_inclusive: selectedOption.getAttribute('data-inclusive') === 'true'
+    };
 }
 
 // Update tax calculation when type changes
 function updateTaxCalculation() {
+    const taxType = getCurrentTaxType();
+    
+    // Update tax label in the totals section
+    const taxLabel = document.getElementById('tax-label');
+    if (taxLabel) {
+        if (taxType.rate === 0) {
+            taxLabel.textContent = 'Sin impuestos';
+            document.getElementById('tax-row').style.display = 'none';
+        } else {
+            const inclusiveText = taxType.is_inclusive ? ' (Incluído)' : '';
+            taxLabel.textContent = `ITBIS (${(taxType.rate * 100).toFixed(0)}%)${inclusiveText}`;
+            document.getElementById('tax-row').style.display = 'flex';
+        }
+    }
+    
+    // Update cart display with new calculations
     updateCartDisplay();
 }
 
@@ -1124,10 +1249,13 @@ function processSale() {
     .then(sale => {
         // Finalize sale
         const paymentMethod = document.getElementById('payment-method-select').value;
+        const taxType = getCurrentTaxType();
         const finalizationData = {
             payment_method: paymentMethod,
             ncf_type: ncfType,
-            tax_rate: getCurrentTaxRate()
+            tax_rate: taxType.rate,
+            tax_type_id: taxType.id,
+            tax_is_inclusive: taxType.is_inclusive
         };
         
         // Add cash payment details if paying with cash
@@ -2188,6 +2316,9 @@ async function initializePOS() {
     
     // Load pending orders count
     loadPendingOrders();
+    
+    // Load tax types from API
+    await loadTaxTypes();
     
     // Check cash register status and show opening modal if needed
     await checkCashRegisterStatus();
