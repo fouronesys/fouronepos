@@ -17,26 +17,10 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "POS Application"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Flask App"
+args = "POS Flask App"
 
 [[workflows.workflow]]
-name = "POS Application"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "webview"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python main.py"
-waitForPort = 5000
-
-[[workflows.workflow]]
-name = "Flask App"
+name = "POS Flask App"
 author = "agent"
 
 [[workflows.workflow.tasks]]
@@ -52,7 +36,7 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 37569
+localPort = 37403
 externalPort = 5173
 
 [[ports]]
