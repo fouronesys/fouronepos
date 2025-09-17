@@ -351,10 +351,12 @@ class Sale(db.Model):
         tax_rate = self.tax_type.rate
         
         if self.tax_type.is_inclusive:
-            # Impuesto incluido en el precio - el precio ya incluye el impuesto
+            # Impuesto incluido en el precio
+            base_amount = items_total / (1 + tax_rate)
+            tax_amount = items_total - base_amount
             return {
-                'subtotal': round(items_total, 2),
-                'tax_amount': 0.0,
+                'subtotal': round(base_amount, 2),
+                'tax_amount': round(tax_amount, 2),
                 'total': round(items_total, 2)
             }
         else:

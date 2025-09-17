@@ -705,7 +705,7 @@ def finalize_sale(sale_id):
         sale.subtotal = round(total_subtotal, 2)
         sale.tax_amount = round(total_tax_included + total_tax_added, 2)  # Only taxes, not service charge
         sale.service_charge_amount = service_charge_amount  # Store service charge separately
-        sale.total = round(total_subtotal + total_tax_added + service_charge_amount, 2)  # Add service charge to final total
+        sale.total = round(total_subtotal + total_tax_included + total_tax_added + service_charge_amount, 2)  # Include both included and added taxes
         
         # Add client info for fiscal/government invoices (NCF compliance)
         if customer_name and customer_rnc and ncf_type in ['credito_fiscal', 'gubernamental']:
