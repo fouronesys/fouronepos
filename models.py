@@ -282,7 +282,15 @@ class Sale(db.Model):
     tax_amount: Mapped[float] = mapped_column(Float, default=0.0)
     service_charge_amount: Mapped[float] = mapped_column(Float, default=0.0)  # Propina/service charge
     # Campos para alineación con módulo de compras
-    tax_mode: Mapped[TaxMode] = mapped_column(Enum(TaxMode), default=TaxMode.PRODUCT_BASED, server_default='product_based')
+    tax_mode: Mapped[TaxMode] = mapped_column(
+        Enum(
+            TaxMode,
+            native_enum=False,
+            values_callable=lambda e: [m.value for m in e],
+            validate_strings=True,
+        ),
+        server_default='product_based',
+    )
     tax_type_id: Mapped[int] = mapped_column(Integer, ForeignKey('tax_types.id', ondelete='SET NULL'), nullable=True)
     total: Mapped[float] = mapped_column(Float, nullable=False)
     payment_method: Mapped[str] = mapped_column(String(50), default="cash")

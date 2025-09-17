@@ -192,6 +192,7 @@ def create_sale():
         sale.tax_amount = 0
         sale.total = 0
         sale.status = 'pending'
+        sale.tax_mode = models.TaxMode.PRODUCT_BASED
         
         # Only assign cash register if user has one (cashiers/admins)
         cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
