@@ -74,8 +74,20 @@
                             <button type="button" class="btn btn-outline-info" onclick="preview606()">
                                 <i class="bi bi-eye"></i> Vista Previa
                             </button>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-download"></i> Exportar 606 (CSV)
+                            <div class="row">
+                                <div class="col-6">
+                                    <button type="submit" class="btn btn-primary w-100">
+                                        <i class="bi bi-filetype-csv"></i> CSV
+                                    </button>
+                                </div>
+                                <div class="col-6">
+                                    <button type="button" class="btn btn-outline-primary w-100" onclick="export606TXT()">
+                                        <i class="bi bi-filetype-txt"></i> TXT
+                                    </button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-outline-danger" onclick="export606PDF()">
+                                <i class="bi bi-filetype-pdf"></i> Exportar 606 (PDF)
                             </button>
                         </div>
                     </form>
@@ -105,8 +117,20 @@
                             <button type="button" class="btn btn-outline-info" onclick="preview607()">
                                 <i class="bi bi-eye"></i> Vista Previa
                             </button>
-                            <button type="submit" class="btn btn-success">
-                                <i class="bi bi-download"></i> Exportar 607 (CSV)
+                            <div class="row">
+                                <div class="col-6">
+                                    <button type="submit" class="btn btn-success w-100">
+                                        <i class="bi bi-filetype-csv"></i> CSV
+                                    </button>
+                                </div>
+                                <div class="col-6">
+                                    <button type="button" class="btn btn-outline-success w-100" onclick="export607TXT()">
+                                        <i class="bi bi-filetype-txt"></i> TXT
+                                    </button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-outline-danger" onclick="export607PDF()">
+                                <i class="bi bi-filetype-pdf"></i> Exportar 607 (PDF)
                             </button>
                         </div>
                     </form>
@@ -149,22 +173,31 @@ document.getElementById('report606Form').addEventListener('submit', function(e) 
     })
     .then(response => {
         if (response.ok) {
-            return response.blob();
+            return response.json();
         }
         return response.json().then(err => Promise.reject(err));
     })
-    .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `606_${year}_${month.padStart(2, '0')}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+    .then(data => {
+        if (data.success && data.csv_data) {
+            // Create blob from CSV data
+            const blob = new Blob([data.csv_data], { type: 'text/csv;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = data.filename || `606_${year}_${month.padStart(2, '0')}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            alert(data.message || 'Reporte generado exitosamente');
+        } else {
+            throw new Error(data.error || 'Error desconocido');
+        }
     })
     .catch(error => {
-        alert('Error: ' + (error.error || 'No se pudo generar el reporte'));
+        console.error('Error exporting 606:', error);
+        alert('Error: ' + (error.message || error.error || 'No se pudo generar el reporte'));
     });
 });
 
@@ -186,22 +219,31 @@ document.getElementById('report607Form').addEventListener('submit', function(e) 
     })
     .then(response => {
         if (response.ok) {
-            return response.blob();
+            return response.json();
         }
         return response.json().then(err => Promise.reject(err));
     })
-    .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `607_${year}_${month.padStart(2, '0')}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+    .then(data => {
+        if (data.success && data.csv_data) {
+            // Create blob from CSV data
+            const blob = new Blob([data.csv_data], { type: 'text/csv;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = data.filename || `607_${year}_${month.padStart(2, '0')}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            alert(data.message || 'Reporte generado exitosamente');
+        } else {
+            throw new Error(data.error || 'Error desconocido');
+        }
     })
     .catch(error => {
-        alert('Error: ' + (error.error || 'No se pudo generar el reporte'));
+        console.error('Error exporting 607:', error);
+        alert('Error: ' + (error.message || error.error || 'No se pudo generar el reporte'));
     });
 });
 
@@ -215,6 +257,166 @@ function preview607() {
     const period = document.getElementById('period607').value;
     const [year, month] = period.split('-');
     window.open(`/dgii/preview/607/${year}/${month}`, '_blank');
+}
+
+function export607PDF() {
+    const period = document.getElementById('period607').value;
+    const [year, month] = period.split('-');
+    
+    fetch('/dgii/export/607/pdf', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            year: parseInt(year),
+            month: parseInt(month)
+        })
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.blob();
+        }
+        return response.json().then(err => Promise.reject(err));
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `607_${year}_${month.padStart(2, '0')}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    })
+    .catch(error => {
+        console.error('Error exporting 607 PDF:', error);
+        alert('Error: ' + (error.message || error.error || 'No se pudo generar el reporte PDF'));
+    });
+}
+
+function export607TXT() {
+    const period = document.getElementById('period607').value;
+    const [year, month] = period.split('-');
+    
+    fetch('/dgii/export/607/txt', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            year: parseInt(year),
+            month: parseInt(month)
+        })
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.json();
+        }
+        return response.json().then(err => Promise.reject(err));
+    })
+    .then(data => {
+        if (data.success && data.txt_data) {
+            // Create blob from TXT data
+            const blob = new Blob([data.txt_data], { type: 'text/plain;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = data.filename || `607_${year}_${month.padStart(2, '0')}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            alert(data.message || 'Reporte TXT generado exitosamente');
+        } else {
+            throw new Error(data.error || 'Error desconocido');
+        }
+    })
+    .catch(error => {
+        console.error('Error exporting 607 TXT:', error);
+        alert('Error: ' + (error.message || error.error || 'No se pudo generar el reporte TXT'));
+    });
+}
+
+function export606PDF() {
+    const period = document.getElementById('period606').value;
+    const [year, month] = period.split('-');
+    
+    fetch('/dgii/export/606/excel', {  // Using existing Excel endpoint as PDF base
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            year: parseInt(year),
+            month: parseInt(month)
+        })
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.blob();
+        }
+        return response.json().then(err => Promise.reject(err));
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `606_${year}_${month.padStart(2, '0')}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    })
+    .catch(error => {
+        console.error('Error exporting 606 Excel:', error);
+        alert('Error: ' + (error.message || error.error || 'No se pudo generar el reporte Excel'));
+    });
+}
+
+function export606TXT() {
+    const period = document.getElementById('period606').value;
+    const [year, month] = period.split('-');
+    
+    fetch('/dgii/export/606', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            year: parseInt(year),
+            month: parseInt(month)
+        })
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.json();
+        }
+        return response.json().then(err => Promise.reject(err));
+    })
+    .then(data => {
+        if (data.success && data.csv_data) {
+            // Convert CSV to TXT format (just changing extension and mimetype)
+            const blob = new Blob([data.csv_data], { type: 'text/plain;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `606_${year}_${month.padStart(2, '0')}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            alert('Reporte 606 TXT generado exitosamente');
+        } else {
+            throw new Error(data.error || 'Error desconocido');
+        }
+    })
+    .catch(error => {
+        console.error('Error exporting 606 TXT:', error);
+        alert('Error: ' + (error.message || error.error || 'No se pudo generar el reporte TXT'));
+    });
 }
 </script>
 {% endblock %}

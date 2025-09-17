@@ -233,23 +233,35 @@ def export_606():
 @bp.route('/export/607', methods=['POST'])
 def export_607():
     """Export DGII 607 (Sales) CSV"""
+    print("[DEBUG DGII 607] Export 607 called")
+    
     user = require_admin()
     if not isinstance(user, User):
+        print("[DEBUG DGII 607] User authorization failed")
         return jsonify({'error': 'No autorizado'}), 401
     
+    print(f"[DEBUG DGII 607] User authorized: {user.username}")
+    
     data = request.get_json()
+    print(f"[DEBUG DGII 607] Request data: {data}")
+    
     if not data:
+        print("[DEBUG DGII 607] No data provided")
         return jsonify({'error': 'Datos no proporcionados'}), 400
     
     year = data.get('year')
     month = data.get('month')
     
+    print(f"[DEBUG DGII 607] Year: {year}, Month: {month}")
+    
     if not year or not month:
+        print("[DEBUG DGII 607] Missing year or month")
         return jsonify({'error': 'Año y mes son requeridos'}), 400
     
     try:
         year = int(year)
         month = int(month)
+        print(f"[DEBUG DGII 607] Converted Year: {year}, Month: {month}")
         
         # Date range for the month
         start_date = datetime(year, month, 1)
@@ -259,11 +271,14 @@ def export_607():
             end_date = datetime(year, month + 1, 1)
         
         # Get sales for the period (only completed sales)
+        print(f"[DEBUG DGII 607] Querying sales from {start_date} to {end_date}")
         sales = Sale.query.filter(
             Sale.created_at >= start_date,
             Sale.created_at < end_date,
             Sale.status == 'completed'
         ).all()
+        
+        print(f"[DEBUG DGII 607] Found {len(sales)} sales")
         
         # Generate CSV
         output = io.StringIO()
@@ -271,9 +286,11 @@ def export_607():
         
         # Write header
         writer.writerow(DGII_607_HEADERS)
+        print("[DEBUG DGII 607] CSV header written")
         
         # Write sales records
         for sale in sales:
+            print(f"[DEBUG DGII 607] Processing sale {sale.id}")
             # Determine identification type based on customer RNC/Cédula
             if sale.customer_rnc and len(sale.customer_rnc) == 9:
                 tipo_id = '1'  # RNC
@@ -319,16 +336,23 @@ def export_607():
         # Generate filename
         filename = f"607_{year}_{month:02d}.csv"
         
+        print("[DEBUG DGII 607] CSV processing completed successfully")
+        
         # Return file data
-        return jsonify({
+        response_data = {
             'success': True,
             'filename': filename,
             'records': len(sales),
             'csv_data': csv_content,
             'message': f'Reporte 607 generado: {len(sales)} ventas para {calendar.month_name[month]} {year}'
-        })
+        }
+        print(f"[DEBUG DGII 607] Response data prepared: {response_data['message']}")
+        return jsonify(response_data)
         
     except Exception as e:
+        print(f"[DEBUG DGII 607] Exception occurred: {str(e)}")
+        import traceback
+        print(f"[DEBUG DGII 607] Traceback: {traceback.format_exc()}")
         return jsonify({'error': f'Error generando reporte 607: {str(e)}'}), 400
 
 
@@ -570,3 +594,182 @@ def export_607_excel():
         
     except Exception as e:
         return jsonify({'error': f'Error generando Excel 607: {str(e)}'}), 400
+
+
+@bp.route('/export/607/pdf', methods=['POST'])
+def export_607_pdf():
+    """Export DGII 607 (Sales) to PDF format"""
+    user = require_admin()
+    if not isinstance(user, User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Datos no proporcionados'}), 400
+    
+    year = data.get('year')
+    month = data.get('month')
+    
+    if not year or not month:
+        return jsonify({'error': 'Año y mes son requeridos'}), 400
+    
+    try:
+        year = int(year)
+        month = int(month)
+        
+        # Date range for the month
+        start_date = datetime(year, month, 1)
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1)
+        else:
+            end_date = datetime(year, month + 1, 1)
+        
+        # Get sales for the period
+        sales = Sale.query.filter(
+            Sale.created_at >= start_date,
+            Sale.created_at < end_date,
+            Sale.status == 'completed'
+        ).all()
+        
+        # Create PDF document
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        doc = SimpleDocTemplate(temp_file.name, pagesize=A4, leftMargin=0.5*inch, rightMargin=0.5*inch)
+        
+        # Build content
+        story = []
+        styles = getSampleStyleSheet()
+        
+        # Title
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            spaceAfter=30,
+            alignment=1  # Center
+        )
+        story.append(Paragraph(f'Reporte DGII 607 - Ventas - {calendar.month_name[month]} {year}', title_style))
+        
+        # Table data
+        table_data = [DGII_607_HEADERS]
+        
+        for sale in sales:
+            # Determine identification type
+            if sale.customer_rnc and len(sale.customer_rnc) == 9:
+                tipo_id = '1'  # RNC
+                rnc_cedula = sale.customer_rnc
+            elif sale.customer_rnc and len(sale.customer_rnc) == 11:
+                tipo_id = '2'  # Cédula
+                rnc_cedula = sale.customer_rnc
+            else:
+                tipo_id = '2'  # Default to Cédula for general public
+                rnc_cedula = '00000000000'
+                
+            fecha_comprobante = sale.created_at.strftime('%Y%m%d')
+            monto_facturado = f"{sale.total:.2f}"
+            itbis_facturado = f"{sale.tax_amount or 0:.2f}"
+            
+            row = [
+                rnc_cedula, tipo_id, sale.ncf or '', '',
+                fecha_comprobante, monto_facturado, itbis_facturado,
+                '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', ''
+            ]
+            table_data.append(row)
+        
+        # Create table
+        table = Table(table_data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('FONTSIZE', (0, 1), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(table)
+        doc.build(story)
+        temp_file.close()
+        
+        return send_file(temp_file.name, as_attachment=True, 
+                        download_name=f"607_{year}_{month:02d}.pdf",
+                        mimetype='application/pdf')
+    
+    except Exception as e:
+        return jsonify({'error': f'Error generando PDF 607: {str(e)}'}), 400
+
+
+@bp.route('/export/607/txt', methods=['POST'])
+def export_607_txt():
+    """Export DGII 607 (Sales) to TXT format (DGII compliant)"""
+    user = require_admin()
+    if not isinstance(user, User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Datos no proporcionados'}), 400
+    
+    year = data.get('year')
+    month = data.get('month')
+    
+    if not year or not month:
+        return jsonify({'error': 'Año y mes son requeridos'}), 400
+    
+    try:
+        year = int(year)
+        month = int(month)
+        
+        # Date range for the month
+        start_date = datetime(year, month, 1)
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1)
+        else:
+            end_date = datetime(year, month + 1, 1)
+        
+        # Get sales for the period
+        sales = Sale.query.filter(
+            Sale.created_at >= start_date,
+            Sale.created_at < end_date,
+            Sale.status == 'completed'
+        ).all()
+        
+        # Generate TXT content with DGII format (pipe-delimited)
+        lines = []
+        
+        for sale in sales:
+            # Determine identification type
+            if sale.customer_rnc and len(sale.customer_rnc) == 9:
+                tipo_id = '1'  # RNC
+                rnc_cedula = sale.customer_rnc
+            elif sale.customer_rnc and len(sale.customer_rnc) == 11:
+                tipo_id = '2'  # Cédula
+                rnc_cedula = sale.customer_rnc
+            else:
+                tipo_id = '2'  # Default to Cédula for general public
+                rnc_cedula = '00000000000'
+                
+            fecha_comprobante = sale.created_at.strftime('%Y%m%d')
+            monto_facturado = f"{sale.total:.2f}"
+            itbis_facturado = f"{sale.tax_amount or 0:.2f}"
+            
+            # Format: All fields separated by pipe (|) as per DGII specification
+            line = f"{rnc_cedula}|{tipo_id}|{sale.ncf or ''}||{fecha_comprobante}|{monto_facturado}|{itbis_facturado}|0.00|0.00|0.00|0.00|0.00|0.00|"
+            lines.append(line)
+        
+        txt_content = '\n'.join(lines)
+        filename = f"607_{year}_{month:02d}.txt"
+        
+        # Return as JSON (like CSV export)
+        return jsonify({
+            'success': True,
+            'filename': filename,
+            'records': len(sales),
+            'txt_data': txt_content,
+            'message': f'Reporte 607 TXT generado: {len(sales)} ventas para {calendar.month_name[month]} {year}'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error generando TXT 607: {str(e)}'}), 400

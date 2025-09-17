@@ -199,10 +199,9 @@ def create_sale():
                 print(f"[DEBUG CREATE_SALE] Set table_id to: {sale.table_id}")
             except (ValueError, TypeError) as e:
                 print(f"[DEBUG CREATE_SALE] Error converting table_id: {e}")
-                sale.table_id = None
+                # Leave table_id unassigned (None) for optional field
         else:
-            sale.table_id = None
-            print(f"[DEBUG CREATE_SALE] No table_id provided, set to None")
+            print(f"[DEBUG CREATE_SALE] No table_id provided")
             
         sale.description = data.get('description', '')
         sale.subtotal = 0
@@ -304,6 +303,16 @@ def add_sale_item(sale_id):
         # 2. Fallback to product.product_taxes (if configured)
         # 3. Final fallback to default ITBIS 18% included for fiscal compliance
         
+        # Get product's tax types for NEW TAX SYSTEM (always initialize)
+        product_tax_types = []
+        for product_tax in product.product_taxes:
+            if product_tax.tax_type.active:
+                product_tax_types.append({
+                    'name': product_tax.tax_type.name,
+                    'rate': product_tax.tax_type.rate,
+                    'is_inclusive': product_tax.tax_type.is_inclusive
+                })
+        
         # Check if frontend provided specific tax information
         frontend_tax_type_id = data.get('tax_type_id')
         frontend_is_inclusive = data.get('is_inclusive')
@@ -319,16 +328,6 @@ def add_sale_item(sale_id):
                 total_tax_rate = 0.18  # Default ITBIS 18%
                 has_inclusive_tax = True
         else:
-            # Get product's tax types for NEW TAX SYSTEM (fallback level 2)
-            product_tax_types = []
-            for product_tax in product.product_taxes:
-                if product_tax.tax_type.active:
-                    product_tax_types.append({
-                        'name': product_tax.tax_type.name,
-                        'rate': product_tax.tax_type.rate,
-                        'is_inclusive': product_tax.tax_type.is_inclusive
-                    })
-            
             if product_tax_types:
                 # Use product-specific tax configuration
                 total_tax_rate = sum(tax['rate'] for tax in product_tax_types)
