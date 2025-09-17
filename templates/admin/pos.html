@@ -900,8 +900,9 @@ let loadedTaxTypes = [];
 // Load tax types from API
 async function loadTaxTypes() {
     try {
-        console.log('[Tax] Loading tax types from API...');
+        console.log('[POS] Loading tax types from API...');
         const response = await apiRequest('/api/tax-types');
+        console.log('[POS] Tax types API response:', response);
         
         // FIXED: API returns array directly, not wrapped in tax_types property
         if (Array.isArray(response) && response.length > 0) {
@@ -1480,11 +1481,13 @@ function toggleClientInfo() {
 
 // Load available tables
 function loadTables() {
+    console.log('[POS] Loading tables from API...');
     fetch('/api/tables?status=available', {
         credentials: 'same-origin'
     })
         .then(response => response.json())
         .then(tables => {
+            console.log('[POS] Tables loaded successfully:', tables.length);
             const tableSelect = document.getElementById('table-select');
             tableSelect.innerHTML = '<option value="">Seleccione una mesa</option>';
             
@@ -3185,8 +3188,10 @@ let customersData = [];
 // Load customers for dropdown
 async function loadCustomers() {
     try {
+        console.log('[POS] Loading customers from API...');
         const response = await apiRequest('/api/customers');
         customersData = response;
+        console.log('[POS] Customers loaded successfully:', customersData.length);
         
         const customerSelect = document.getElementById('customer-select');
         if (customerSelect) {
