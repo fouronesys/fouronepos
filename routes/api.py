@@ -142,6 +142,16 @@ GLOBAL_TAX_TYPES = [
     }
 ]
 
+def get_tax_type_by_id(tax_type_id):
+    """Helper function to get tax type from global variable by ID"""
+    if not tax_type_id:
+        return None
+    
+    for tax_type in GLOBAL_TAX_TYPES:
+        if tax_type['id'] == int(tax_type_id):
+            return tax_type
+    return None
+
 @bp.route('/tax-types')
 def get_tax_types():
     """Get all active tax types from global variable"""
@@ -298,11 +308,11 @@ def add_sale_item(sale_id):
         frontend_is_inclusive = data.get('is_inclusive')
         
         if frontend_tax_type_id:
-            # Use tax information explicitly provided by frontend
-            tax_type = models.TaxType.query.filter_by(id=frontend_tax_type_id, active=True).first()
+            # Use tax information explicitly provided by frontend from global variable
+            tax_type = get_tax_type_by_id(frontend_tax_type_id)
             if tax_type:
-                total_tax_rate = tax_type.rate
-                has_inclusive_tax = frontend_is_inclusive if frontend_is_inclusive is not None else tax_type.is_inclusive
+                total_tax_rate = tax_type['rate']
+                has_inclusive_tax = frontend_is_inclusive if frontend_is_inclusive is not None else tax_type['is_inclusive']
             else:
                 # Invalid tax_type_id provided, use default fallback
                 total_tax_rate = 0.18  # Default ITBIS 18%
