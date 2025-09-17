@@ -2343,18 +2343,23 @@ async function initializePOS() {
     }
     
     // Load available tables
+    console.log('[POS] About to load tables...');
     loadTables();
     
     // Load customers for dropdown
+    console.log('[POS] About to load customers...');
     await loadCustomers();
     
     // Load pending orders count
+    console.log('[POS] About to load pending orders...');
     loadPendingOrders();
     
     // Load tax types from API
+    console.log('[POS] About to load tax types...');
     await loadTaxTypes();
     
     // Check cash register status and show opening modal if needed
+    console.log('[POS] About to check cash register status...');
     await checkCashRegisterStatus();
     
     console.log('[POS] POS system initialized successfully');
