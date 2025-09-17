@@ -551,6 +551,86 @@ function showNotification(message, type = 'info') {
     }, 5000);
 }
 
+// Global tax types storage
+let globalTaxTypes = [];
+
+// Load tax types from server
+async function loadTaxTypes() {
+    try {
+        const response = await fetch('/api/tax-types', {
+            credentials: 'same-origin'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const taxTypes = await response.json();
+        console.log('[POS] Tax types loaded:', taxTypes);
+        
+        // Store globally for access by tax functions
+        globalTaxTypes = taxTypes;
+        
+        return taxTypes;
+    } catch (error) {
+        console.error('[POS] Error loading tax types:', error);
+        // Fallback to default ITBIS if cannot load
+        globalTaxTypes = [{
+            id: 1,
+            name: 'ITBIS',
+            rate: 0.18,
+            is_inclusive: true,
+            description: 'Impuesto sobre Transferencias de Bienes Industrializados y Servicios'
+        }];
+        return globalTaxTypes;
+    }
+}
+
+// Get current tax type ID (default to first available tax type or ITBIS)
+function getCurrentTaxTypeId() {
+    if (globalTaxTypes.length === 0) {
+        console.warn('[POS] No tax types available, returning null');
+        return null;
+    }
+    
+    // Return first tax type ID (usually ITBIS)
+    const taxTypeId = globalTaxTypes[0].id;
+    console.log('[POS] getCurrentTaxTypeId returning:', taxTypeId);
+    return taxTypeId;
+}
+
+// Get current tax type inclusivity (default to first available tax type)
+function getCurrentTaxIsInclusive() {
+    if (globalTaxTypes.length === 0) {
+        console.warn('[POS] No tax types available, defaulting to inclusive');
+        return true; // Default to inclusive
+    }
+    
+    // Return first tax type inclusivity (usually ITBIS)
+    const isInclusive = globalTaxTypes[0].is_inclusive;
+    console.log('[POS] getCurrentTaxIsInclusive returning:', isInclusive);
+    return isInclusive;
+}
+
+// Get current tax type object (default to first available tax type)
+function getCurrentTaxType() {
+    if (globalTaxTypes.length === 0) {
+        console.warn('[POS] No tax types available, returning default ITBIS');
+        return {
+            id: 1,
+            name: 'ITBIS',
+            rate: 0.18,
+            is_inclusive: true,
+            description: 'Impuesto sobre Transferencias de Bienes Industrializados y Servicios'
+        };
+    }
+    
+    // Return first tax type (usually ITBIS)
+    const taxType = globalTaxTypes[0];
+    console.log('[POS] getCurrentTaxType returning:', taxType);
+    return taxType;
+}
+
 // Cart Management with localStorage
 class CartManager {
     constructor() {
@@ -1587,30 +1667,6 @@ function toggleClientInfo() {
         document.getElementById('client-name').value = '';
         document.getElementById('client-rnc').value = '';
     }
-}
-
-// Load available tables
-function loadTables() {
-    console.log('[POS] Loading tables from API...');
-    fetch('/api/tables?status=available', {
-        credentials: 'same-origin'
-    })
-        .then(response => response.json())
-        .then(tables => {
-            console.log('[POS] Tables loaded successfully:', tables.length);
-            const tableSelect = document.getElementById('table-select');
-            tableSelect.innerHTML = '<option value="">Seleccione una mesa</option>';
-            
-            tables.forEach(table => {
-                const option = document.createElement('option');
-                option.value = table.id;
-                option.textContent = `Mesa ${table.number}${table.name ? ' - ' + table.name : ''}`;
-                tableSelect.appendChild(option);
-            });
-        })
-        .catch(error => {
-            console.error('Error loading tables:', error);
-        });
 }
 
 // Load available tables with offline support

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify, make_response
 import models
 from models import db
 from datetime import datetime, date
@@ -252,10 +252,17 @@ def pos():
     # Get products by category
     categories = models.Category.query.filter_by(active=True).all()
     
-    return render_template('admin/pos.html', 
+    response = make_response(render_template('admin/pos.html', 
                          cash_register=cash_register,
                          categories=categories,
-                         edit_sale_data=edit_sale_data)
+                         edit_sale_data=edit_sale_data))
+    
+    # Force browser to reload this page - prevents caching issues during development
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
+    return response
 
 
 @bp.route('/products')
