@@ -599,21 +599,26 @@ def export_607_excel():
 @bp.route('/export/607/pdf', methods=['POST'])
 def export_607_pdf():
     """Export DGII 607 (Sales) to PDF format"""
-    user = require_admin()
-    if not isinstance(user, User):
-        return jsonify({'error': 'No autorizado'}), 401
-    
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'Datos no proporcionados'}), 400
-    
-    year = data.get('year')
-    month = data.get('month')
-    
-    if not year or not month:
-        return jsonify({'error': 'Año y mes son requeridos'}), 400
-    
     try:
+        current_app.logger.info("Starting PDF export request")
+        
+        user = require_admin()
+        current_app.logger.info(f"User check result: {type(user)} - {user}")
+        
+        if not isinstance(user, User):
+            current_app.logger.error(f"User auth failed: {type(user)}")
+            return jsonify({'error': 'No autorizado'}), 401
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Datos no proporcionados'}), 400
+        
+        year = data.get('year')
+        month = data.get('month')
+        
+        if not year or not month:
+            return jsonify({'error': 'Año y mes son requeridos'}), 400
+        
         year = int(year)
         month = int(month)
         
@@ -631,66 +636,34 @@ def export_607_pdf():
             Sale.status == 'completed'
         ).all()
         
-        # Create PDF document
+        # Create simple text response for testing
+        from reportlab.pdfgen import canvas
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-        doc = SimpleDocTemplate(temp_file.name, pagesize=A4, leftMargin=0.5*inch, rightMargin=0.5*inch)
         
-        # Build content
-        story = []
-        styles = getSampleStyleSheet()
+        # Create simple PDF using canvas (simpler approach)
+        pdf = canvas.Canvas(temp_file.name)
+        pdf.setTitle(f"Reporte DGII 607 - {calendar.month_name[month]} {year}")
         
-        # Title
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=16,
-            spaceAfter=30,
-            alignment=1  # Center
-        )
-        story.append(Paragraph(f'Reporte DGII 607 - Ventas - {calendar.month_name[month]} {year}', title_style))
+        # Add title
+        pdf.setFont("Helvetica-Bold", 16)
+        pdf.drawString(100, 750, f"Reporte DGII 607 - Ventas - {calendar.month_name[month]} {year}")
         
-        # Table data
-        table_data = [DGII_607_HEADERS]
+        # Add basic info
+        pdf.setFont("Helvetica", 12)
+        pdf.drawString(100, 720, f"Total de ventas: {len(sales)}")
         
-        for sale in sales:
-            # Determine identification type
-            if sale.customer_rnc and len(sale.customer_rnc) == 9:
-                tipo_id = '1'  # RNC
-                rnc_cedula = sale.customer_rnc
-            elif sale.customer_rnc and len(sale.customer_rnc) == 11:
-                tipo_id = '2'  # Cédula
-                rnc_cedula = sale.customer_rnc
-            else:
-                tipo_id = '2'  # Default to Cédula for general public
-                rnc_cedula = '00000000000'
-                
-            fecha_comprobante = sale.created_at.strftime('%Y%m%d')
-            monto_facturado = f"{sale.total:.2f}"
-            itbis_facturado = f"{sale.tax_amount or 0:.2f}"
+        # Add each sale
+        y_position = 680
+        for i, sale in enumerate(sales[:20]):  # Limit to first 20 for testing
+            if y_position < 100:  # Start new page if needed
+                pdf.showPage()
+                y_position = 750
             
-            row = [
-                rnc_cedula, tipo_id, sale.ncf or '', '',
-                fecha_comprobante, monto_facturado, itbis_facturado,
-                '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', ''
-            ]
-            table_data.append(row)
+            # Basic sale info
+            pdf.drawString(100, y_position, f"Venta #{sale.id} - Total: {sale.total} - Fecha: {sale.created_at.strftime('%Y-%m-%d')}")
+            y_position -= 20
         
-        # Create table
-        table = Table(table_data)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('FONTSIZE', (0, 1), (-1, -1), 6),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        
-        story.append(table)
-        doc.build(story)
+        pdf.save()
         temp_file.close()
         
         return send_file(temp_file.name, as_attachment=True, 
@@ -698,27 +671,33 @@ def export_607_pdf():
                         mimetype='application/pdf')
     
     except Exception as e:
+        current_app.logger.error(f"Error generando PDF 607: {str(e)}")
         return jsonify({'error': f'Error generando PDF 607: {str(e)}'}), 400
 
 
 @bp.route('/export/607/txt', methods=['POST'])
 def export_607_txt():
     """Export DGII 607 (Sales) to TXT format (DGII compliant)"""
-    user = require_admin()
-    if not isinstance(user, User):
-        return jsonify({'error': 'No autorizado'}), 401
-    
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'Datos no proporcionados'}), 400
-    
-    year = data.get('year')
-    month = data.get('month')
-    
-    if not year or not month:
-        return jsonify({'error': 'Año y mes son requeridos'}), 400
-    
     try:
+        current_app.logger.info("Starting TXT export request")
+        
+        user = require_admin()
+        current_app.logger.info(f"User check result: {type(user)} - {user}")
+        
+        if not isinstance(user, User):
+            current_app.logger.error(f"User auth failed: {type(user)}")
+            return jsonify({'error': 'No autorizado'}), 401
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Datos no proporcionados'}), 400
+        
+        year = data.get('year')
+        month = data.get('month')
+        
+        if not year or not month:
+            return jsonify({'error': 'Año y mes son requeridos'}), 400
+        
         year = int(year)
         month = int(month)
         
@@ -772,4 +751,5 @@ def export_607_txt():
         })
         
     except Exception as e:
+        current_app.logger.error(f"Error generando TXT 607: {str(e)}")
         return jsonify({'error': f'Error generando TXT 607: {str(e)}'}), 400
