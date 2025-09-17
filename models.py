@@ -311,6 +311,84 @@ class Sale(db.Model):
     sale_items = relationship("SaleItem", back_populates="sale")
     tax_type = relationship("TaxType", foreign_keys=[tax_type_id])
 
+    def calculate_totals(self):
+        """Calcula totales basado en tax_mode para alineación con módulo de compras"""
+        if self.tax_mode == TaxMode.TAX_EXEMPT:
+            return self._calculate_tax_exempt()
+        elif self.tax_mode == TaxMode.UNIFORM_TAX:
+            return self._calculate_uniform_tax()
+        else:  # PRODUCT_BASED - comportamiento actual
+            return self._calculate_product_based()
+
+    def _calculate_tax_exempt(self):
+        """Modo exento de impuestos - similar a módulo de compras"""
+        total_subtotal = sum(item.total_price for item in self.sale_items)
+        return {
+            'subtotal': round(total_subtotal, 2),
+            'tax_amount': 0.0,
+            'total': round(total_subtotal, 2)
+        }
+
+    def _calculate_uniform_tax(self):
+        """Modo impuesto uniforme - aplica el tax_type seleccionado a toda la venta"""
+        if not self.tax_type:
+            return self._calculate_tax_exempt()
+        
+        # Solo soportar impuestos porcentuales en modo uniforme
+        if not self.tax_type.is_percentage:
+            # Para impuestos de monto fijo, usar modo exento por seguridad
+            return self._calculate_tax_exempt()
+        
+        items_total = sum(item.total_price for item in self.sale_items)
+        tax_rate = self.tax_type.rate
+        
+        if self.tax_type.is_inclusive:
+            # Impuesto incluido en el precio
+            base_amount = items_total / (1 + tax_rate)
+            tax_amount = items_total - base_amount
+            return {
+                'subtotal': round(base_amount, 2),
+                'tax_amount': round(tax_amount, 2),
+                'total': round(items_total, 2)
+            }
+        else:
+            # Impuesto se agrega al precio
+            tax_amount = items_total * tax_rate
+            return {
+                'subtotal': round(items_total, 2),
+                'tax_amount': round(tax_amount, 2),
+                'total': round(items_total + tax_amount, 2)
+            }
+
+    def _calculate_product_based(self):
+        """Modo basado en producto - comportamiento actual (mantiene compatibilidad)"""
+        total_subtotal = 0
+        total_tax_included = 0
+        total_tax_added = 0
+        
+        for item in self.sale_items:
+            rate = item.tax_rate if item.tax_rate is not None else 0
+            is_included = item.is_tax_included if hasattr(item, 'is_tax_included') else False
+            
+            if is_included and rate > 0:
+                # Impuesto incluido - calcular monto base e impuesto incluido
+                base_amount = item.total_price / (1 + rate)
+                tax_amount = item.total_price - base_amount
+                total_subtotal += base_amount
+                total_tax_included += tax_amount
+            else:
+                # Impuesto agregado o sin impuesto
+                total_subtotal += item.total_price
+                if rate > 0:
+                    tax_amount = item.total_price * rate
+                    total_tax_added += tax_amount
+        
+        return {
+            'subtotal': round(total_subtotal, 2),
+            'tax_amount': round(total_tax_included + total_tax_added, 2),
+            'total': round(total_subtotal + total_tax_included + total_tax_added, 2)
+        }
+
 
 class SaleItem(db.Model):
     __tablename__ = 'sale_items'
