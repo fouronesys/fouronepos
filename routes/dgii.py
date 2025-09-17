@@ -16,6 +16,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 
 from models import db, User, Sale, Purchase, Product, Supplier, NCFSequence
+from utils import get_company_info_for_receipt
 
 bp = Blueprint('dgii', __name__, url_prefix='/dgii')
 
@@ -187,6 +188,10 @@ def export_606():
         # Write header
         writer.writerow(DGII_606_HEADERS)
         
+        # Get company information for default RNC
+        company_info = get_company_info_for_receipt()
+        company_rnc = company_info.get('rnc', '').replace('-', '')  # Remove dashes for DGII format
+        
         # Write purchase records
         for purchase in purchases:
             supplier = purchase.supplier
@@ -199,8 +204,12 @@ def export_606():
                 tipo_id = '2'  # Cédula  
                 rnc_cedula = supplier.rnc
             else:
+                # Use company RNC if available, otherwise default
                 tipo_id = '1'  # Default to RNC
-                rnc_cedula = supplier.rnc or '000000000'
+                if company_rnc and len(company_rnc) >= 9:
+                    rnc_cedula = company_rnc[:9] if len(company_rnc) > 9 else company_rnc.ljust(9, '0')
+                else:
+                    rnc_cedula = '000000000'
             
             # Format dates as YYYYMMDD
             fecha_comprobante = purchase.created_at.strftime('%Y%m%d')
@@ -310,6 +319,10 @@ def export_607():
         
         current_app.logger.info(f"[DEBUG DGII 607] Found {len(sales)} sales")
         
+        # Get company information for default RNC
+        company_info = get_company_info_for_receipt()
+        company_rnc = company_info.get('rnc', '').replace('-', '')  # Remove dashes for DGII format
+        
         # Generate CSV
         output = io.StringIO()
         writer = csv.writer(output, delimiter='|')
@@ -329,9 +342,14 @@ def export_607():
                 tipo_id = '2'  # Cédula
                 rnc_cedula = sale.customer_rnc
             else:
-                # Most sales are to general public (no specific customer)
-                tipo_id = '2'  # Default to Cédula for general public
-                rnc_cedula = '00000000000'  # Default for general public
+                # Use company RNC if available for general public sales
+                if company_rnc and len(company_rnc) >= 9:
+                    tipo_id = '1'  # Use RNC
+                    rnc_cedula = company_rnc[:9] if len(company_rnc) > 9 else company_rnc.ljust(9, '0')
+                else:
+                    # Fallback to cédula format for general public
+                    tipo_id = '2'  # Default to Cédula for general public
+                    rnc_cedula = '00000000000'  # Default for general public
             
             # Format date as YYYYMMDD
             fecha_comprobante = sale.created_at.strftime('%Y%m%d')
@@ -634,6 +652,10 @@ def export_607_excel():
             cell.font = Font(bold=True)
             cell.fill = PatternFill(start_color='D9E2F3', end_color='D9E2F3', fill_type='solid')
         
+        # Get company information for default RNC
+        company_info = get_company_info_for_receipt()
+        company_rnc = company_info.get('rnc', '').replace('-', '')  # Remove dashes for DGII format
+        
         # Add data
         for row_num, sale in enumerate(sales, 4):
             if sale.customer_rnc and len(sale.customer_rnc) == 9:
@@ -641,7 +663,13 @@ def export_607_excel():
             elif sale.customer_rnc and len(sale.customer_rnc) == 11:
                 tipo_id, rnc_cedula = '2', sale.customer_rnc
             else:
-                tipo_id, rnc_cedula = '2', '00000000000'
+                # Use company RNC if available for general public sales
+                if company_rnc and len(company_rnc) >= 9:
+                    tipo_id = '1'  # Use RNC
+                    rnc_cedula = company_rnc[:9] if len(company_rnc) > 9 else company_rnc.ljust(9, '0')
+                else:
+                    # Fallback to cédula format for general public
+                    tipo_id, rnc_cedula = '2', '00000000000'
             
             row_data = [
                 rnc_cedula, tipo_id, sale.ncf, '',
@@ -714,34 +742,176 @@ def export_607_pdf():
             Sale.status == 'completed'
         ).all()
         
-        # Create simple text response for testing
-        from reportlab.pdfgen import canvas
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        # Get company information
+        company_info = get_company_info_for_receipt()
+        company_rnc = company_info.get('rnc', '').replace('-', '')  # Remove dashes for DGII format
         
-        # Create simple PDF using canvas (simpler approach)
-        pdf = canvas.Canvas(temp_file.name)
-        pdf.setTitle(f"Reporte DGII 607 - {calendar.month_name[month]} {year}")
+        # Create professional PDF using SimpleDocTemplate
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        doc = SimpleDocTemplate(temp_file.name, pagesize=A4)
+        story = []
+        
+        # Get styles
+        styles = getSampleStyleSheet()
+        
+        # Create custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=colors.darkblue,
+            alignment=1,  # Center
+            spaceAfter=20
+        )
+        
+        company_style = ParagraphStyle(
+            'CompanyInfo',
+            parent=styles['Normal'],
+            fontSize=10,
+            alignment=1,  # Center
+            spaceAfter=15
+        )
+        
+        subtitle_style = ParagraphStyle(
+            'Subtitle',
+            parent=styles['Heading2'],
+            fontSize=14,
+            textColor=colors.darkblue,
+            alignment=1,  # Center
+            spaceAfter=15
+        )
         
         # Add title
-        pdf.setFont("Helvetica-Bold", 16)
-        pdf.drawString(100, 750, f"Reporte DGII 607 - Ventas - {calendar.month_name[month]} {year}")
+        title = Paragraph(f"REPORTE DGII 607 - VENTAS", title_style)
+        story.append(title)
         
-        # Add basic info
-        pdf.setFont("Helvetica", 12)
-        pdf.drawString(100, 720, f"Total de ventas: {len(sales)}")
+        # Add company information
+        if company_info.get('name'):
+            company_name = Paragraph(f"<b>{company_info['name']}</b>", company_style)
+            story.append(company_name)
         
-        # Add each sale
-        y_position = 680
-        for i, sale in enumerate(sales[:20]):  # Limit to first 20 for testing
-            if y_position < 100:  # Start new page if needed
-                pdf.showPage()
-                y_position = 750
+        if company_info.get('rnc'):
+            company_rnc_display = Paragraph(f"RNC: {company_info['rnc']}", company_style)
+            story.append(company_rnc_display)
+        
+        if company_info.get('address'):
+            company_address = Paragraph(f"Dirección: {company_info['address']}", company_style)
+            story.append(company_address)
+        
+        # Add period and summary
+        period_info = Paragraph(f"<b>Período: {calendar.month_name[month]} {year}</b>", subtitle_style)
+        story.append(period_info)
+        
+        summary_info = Paragraph(f"<b>Total de transacciones: {len(sales)}</b><br/>Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}", company_style)
+        story.append(summary_info)
+        
+        if sales:
+            # Calculate totals
+            total_monto = sum(sale.total for sale in sales)
+            total_itbis = sum(sale.tax_amount or 0 for sale in sales)
             
-            # Basic sale info
-            pdf.drawString(100, y_position, f"Venta #{sale.id} - Total: {sale.total} - Fecha: {sale.created_at.strftime('%Y-%m-%d')}")
-            y_position -= 20
+            # Create data table
+            table_data = [
+                ['RNC/Cédula', 'Tipo ID', 'NCF', 'Fecha', 'Monto Facturado', 'ITBIS', 'Cliente', 'Observaciones']
+            ]
+            
+            for sale in sales:
+                # Determine identification type
+                if sale.customer_rnc and len(sale.customer_rnc) == 9:
+                    tipo_id = '1'  # RNC
+                    rnc_cedula = sale.customer_rnc
+                elif sale.customer_rnc and len(sale.customer_rnc) == 11:
+                    tipo_id = '2'  # Cédula
+                    rnc_cedula = sale.customer_rnc
+                else:
+                    # Use company RNC if available for general public sales
+                    if company_rnc and len(company_rnc) >= 9:
+                        tipo_id = '1'  # Use RNC
+                        rnc_cedula = company_rnc[:9] if len(company_rnc) > 9 else company_rnc.ljust(9, '0')
+                        customer_display = 'Público General'
+                    else:
+                        tipo_id = '2'  # Default to Cédula for general public
+                        rnc_cedula = '00000000000'
+                        customer_display = 'Público General'
+                
+                # Format customer display
+                if sale.customer_name:
+                    customer_display = sale.customer_name[:20] + ('...' if len(sale.customer_name) > 20 else '')
+                elif hasattr(sale, 'customer_rnc') and sale.customer_rnc:
+                    customer_display = 'Cliente con RNC'
+                else:
+                    customer_display = 'Público General'
+                
+                table_data.append([
+                    rnc_cedula,
+                    tipo_id,
+                    sale.ncf or 'N/A',
+                    sale.created_at.strftime('%d/%m/%Y'),
+                    f"${sale.total:,.2f}",
+                    f"${sale.tax_amount or 0:,.2f}",
+                    customer_display,
+                    'Venta completada'
+                ])
+            
+            # Add totals row
+            table_data.append([
+                '', '', '', '<b>TOTALES:</b>', f"<b>${total_monto:,.2f}</b>", f"<b>${total_itbis:,.2f}</b>", '', ''
+            ])
+            
+            # Create table
+            table = Table(table_data, colWidths=[80, 40, 80, 60, 80, 60, 80, 80])
+            table.setStyle(TableStyle([
+                # Header row
+                ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                
+                # Data rows
+                ('BACKGROUND', (0, 1), (-1, -2), colors.beige),
+                ('TEXTCOLOR', (0, 1), (-1, -2), colors.black),
+                ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -2), 7),
+                ('GRID', (0, 0), (-1, -2), 1, colors.black),
+                
+                # Totals row
+                ('BACKGROUND', (0, -1), (-1, -1), colors.grey),
+                ('TEXTCOLOR', (0, -1), (-1, -1), colors.black),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, -1), (-1, -1), 8),
+                ('GRID', (0, -1), (-1, -1), 1, colors.black),
+            ]))
+            
+            story.append(table)
+            
+            # Add summary paragraph
+            summary_text = f"""
+            <b>RESUMEN DEL REPORTE:</b><br/>
+            • Total de transacciones procesadas: {len(sales)}<br/>
+            • Monto total facturado: ${total_monto:,.2f}<br/>
+            • ITBIS total facturado: ${total_itbis:,.2f}<br/>
+            • Período: {calendar.month_name[month]} {year}<br/>
+            • Generado el: {datetime.now().strftime('%d de %B de %Y a las %H:%M')}
+            """
+            summary_para = Paragraph(summary_text, styles['Normal'])
+            story.append(summary_para)
+        else:
+            no_data = Paragraph("No se encontraron ventas para el período seleccionado.", styles['Normal'])
+            story.append(no_data)
         
-        pdf.save()
+        # Add footer
+        footer_text = f"""
+        <br/><br/>
+        <i>Este reporte ha sido generado automáticamente por el sistema de gestión fiscal.<br/>
+        Para consultas o aclaraciones, contacte al departamento de contabilidad.</i>
+        """
+        footer = Paragraph(footer_text, styles['Normal'])
+        story.append(footer)
+        
+        # Build PDF
+        doc.build(story)
         temp_file.close()
         
         return send_file(temp_file.name, as_attachment=True, 
@@ -807,6 +977,10 @@ def export_607_txt():
             Sale.status == 'completed'
         ).all()
         
+        # Get company information for default RNC
+        company_info = get_company_info_for_receipt()
+        company_rnc = company_info.get('rnc', '').replace('-', '')  # Remove dashes for DGII format
+        
         # Generate TXT content with DGII format (pipe-delimited)
         lines = []
         
@@ -819,8 +993,14 @@ def export_607_txt():
                 tipo_id = '2'  # Cédula
                 rnc_cedula = sale.customer_rnc
             else:
-                tipo_id = '2'  # Default to Cédula for general public
-                rnc_cedula = '00000000000'
+                # Use company RNC if available for general public sales
+                if company_rnc and len(company_rnc) >= 9:
+                    tipo_id = '1'  # Use RNC
+                    rnc_cedula = company_rnc[:9] if len(company_rnc) > 9 else company_rnc.ljust(9, '0')
+                else:
+                    # Fallback to cédula format for general public
+                    tipo_id = '2'  # Default to Cédula for general public
+                    rnc_cedula = '00000000000'
                 
             fecha_comprobante = sale.created_at.strftime('%Y%m%d')
             monto_facturado = f"{sale.total:.2f}"
