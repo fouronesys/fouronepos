@@ -7,6 +7,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 
 const POSPage = ({ user, onLogout }) => {
   const [cart, setCart] = useState([]);
+  const [cartLoaded, setCartLoaded] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
@@ -57,6 +58,15 @@ const POSPage = ({ user, onLogout }) => {
       refetchOnWindowFocus: false,
     }
   );
+
+  // Set default tax type when tax types are loaded
+  useEffect(() => {
+    if (taxTypes.length > 0 && !selectedTaxType) {
+      // Set the first tax type as default (usually ITBIS 18%)
+      setSelectedTaxType(taxTypes[0]);
+      console.log('[POS] Default tax type set:', taxTypes[0]);
+    }
+  }, [taxTypes, selectedTaxType]);
 
   // Sale mutation
   const createSaleMutation = useMutation(apiService.createSale, {
@@ -194,13 +204,16 @@ const POSPage = ({ user, onLogout }) => {
         localStorage.removeItem('pos_cart');
       }
     }
+    setCartLoaded(true);
   }, []);
 
-  // Save cart to localStorage whenever cart changes
+  // Save cart to localStorage whenever cart changes (but only after initial load)
   useEffect(() => {
-    localStorage.setItem('pos_cart', JSON.stringify(cart));
-    console.log('[Cart] Saved cart to storage:', cart);
-  }, [cart]);
+    if (cartLoaded) {
+      localStorage.setItem('pos_cart', JSON.stringify(cart));
+      console.log('[Cart] Saved cart to storage:', cart);
+    }
+  }, [cart, cartLoaded]);
 
   // Calculate totals
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -240,6 +253,8 @@ const POSPage = ({ user, onLogout }) => {
       customer_id: selectedCustomer ? selectedCustomer.id : null,
       customer_name: customerData.name || null,
       customer_rnc: customerData.rnc || null,
+      tax_type_id: selectedTaxType?.id || null,
+      tax_rate: taxRate,
       user_id: user.id,
       created_at: new Date().toISOString()
     };
@@ -247,7 +262,7 @@ const POSPage = ({ user, onLogout }) => {
     createSaleMutation.mutate(saleData);
   };
 
-  const isLoading = loadingProducts || loadingCategories || loadingCustomers;
+  const isLoading = loadingProducts || loadingCategories || loadingCustomers || loadingTaxTypes;
 
   if (isLoading) {
     return (
@@ -418,7 +433,7 @@ const POSPage = ({ user, onLogout }) => {
                 <span>${subtotal.toFixed(2)}</span>
               </div>
               <div className="summary-line">
-                <span>ITBIS (18%):</span>
+                <span>{selectedTaxType?.name || 'Impuesto'} ({(taxRate * 100).toFixed(0)}%):</span>
                 <span>${tax.toFixed(2)}</span>
               </div>
               <div className="summary-line total-line">
