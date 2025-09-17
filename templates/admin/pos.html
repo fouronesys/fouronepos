@@ -1451,7 +1451,11 @@ function processSale() {
         loadTables(); // Refresh table list
     })
     .catch(error => {
-        console.error('Error processing sale:', error);
+        console.error('[DEBUG PROCESS] Full error object:', error);
+        console.error('[DEBUG PROCESS] Error message:', error.message);
+        console.error('[DEBUG PROCESS] Error stack:', error.stack);
+        console.error('[DEBUG PROCESS] Error type:', typeof error);
+        console.error('[DEBUG PROCESS] Error string:', String(error));
         showNotification('Error al procesar la venta', 'error');
     })
     .finally(() => {
@@ -1548,7 +1552,11 @@ function assignToTable() {
         loadTables(); // Refresh table list
     })
     .catch(error => {
-        console.error('Error assigning to table:', error);
+        console.error('[DEBUG ASSIGN] Full error object:', error);
+        console.error('[DEBUG ASSIGN] Error message:', error.message);
+        console.error('[DEBUG ASSIGN] Error stack:', error.stack);
+        console.error('[DEBUG ASSIGN] Error type:', typeof error);
+        console.error('[DEBUG ASSIGN] Error string:', String(error));
         showNotification('Error al asignar orden a la mesa', 'error');
     })
     .finally(() => {

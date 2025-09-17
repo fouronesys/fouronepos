@@ -186,13 +186,27 @@ def create_sale():
         # Create new sale (waiters don't need cash registers initially)
         sale = models.Sale()
         sale.user_id = user.id
-        sale.table_id = int(table_id) if table_id and table_id.strip() else None
+        
+        # DEBUG: Detailed table_id handling
+        print(f"[DEBUG CREATE_SALE] Raw table_id: {table_id}, type: {type(table_id)}")
+        if table_id and str(table_id).strip():
+            try:
+                sale.table_id = int(table_id)
+                print(f"[DEBUG CREATE_SALE] Set table_id to: {sale.table_id}")
+            except (ValueError, TypeError) as e:
+                print(f"[DEBUG CREATE_SALE] Error converting table_id: {e}")
+                sale.table_id = None
+        else:
+            sale.table_id = None
+            print(f"[DEBUG CREATE_SALE] No table_id provided, set to None")
+            
         sale.description = data.get('description', '')
         sale.subtotal = 0
         sale.tax_amount = 0
         sale.total = 0
         sale.status = 'pending'
         sale.tax_mode = models.TaxMode.PRODUCT_BASED
+        print(f"[DEBUG CREATE_SALE] tax_mode set to: {sale.tax_mode}, value: {sale.tax_mode.value}")
         
         # Only assign cash register if user has one (cashiers/admins)
         cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
@@ -326,8 +340,8 @@ def add_sale_item(sale_id):
             # Update existing item quantity
             existing_item.quantity = total_quantity
             existing_item.total_price = product.price * total_quantity
-            # Use None instead of 0 to allow proper fallback during calculation
-            existing_item.tax_rate = float(total_tax_rate) if total_tax_rate and total_tax_rate > 0 else None
+            # Use 0.0 instead of None for tax_rate field  
+            existing_item.tax_rate = float(total_tax_rate) if total_tax_rate and total_tax_rate > 0 else 0.0
             existing_item.is_tax_included = has_inclusive_tax
             sale_item = existing_item
         else:
@@ -338,8 +352,8 @@ def add_sale_item(sale_id):
             sale_item.quantity = quantity
             sale_item.unit_price = product.price
             sale_item.total_price = product.price * quantity
-            # Use None instead of 0 to allow proper fallback during calculation
-            sale_item.tax_rate = float(total_tax_rate) if total_tax_rate and total_tax_rate > 0 else None
+            # Use 0.0 instead of None for tax_rate field
+            sale_item.tax_rate = float(total_tax_rate) if total_tax_rate and total_tax_rate > 0 else 0.0
             sale_item.is_tax_included = has_inclusive_tax
             
             db.session.add(sale_item)
