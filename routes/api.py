@@ -96,21 +96,22 @@ def get_categories():
 @bp.route('/tax-types')
 def get_tax_types():
     """Get all active tax types for frontend loading"""
-    user = require_login()
-    if not isinstance(user, models.User):
-        return user
-    
-    tax_types = models.TaxType.query.filter_by(active=True).order_by(models.TaxType.display_order, models.TaxType.name).all()
-    
-    return jsonify([{
-        'id': t.id,
-        'name': t.name,
-        'description': t.description,
-        'rate': t.rate,
-        'is_inclusive': t.is_inclusive,
-        'is_percentage': t.is_percentage,
-        'display_order': t.display_order
-    } for t in tax_types])
+    # Allow access to tax types without strict authentication since it's configuration data
+    # This enables dropdowns to work properly in the PWA frontend
+    try:
+        tax_types = models.TaxType.query.filter_by(active=True).order_by(models.TaxType.display_order, models.TaxType.name).all()
+        
+        return jsonify([{
+            'id': t.id,
+            'name': t.name,
+            'description': t.description,
+            'rate': t.rate,
+            'is_inclusive': t.is_inclusive,
+            'is_percentage': t.is_percentage,
+            'display_order': t.display_order
+        } for t in tax_types])
+    except Exception as e:
+        return jsonify({'error': 'Error al cargar tipos de impuesto', 'message': str(e)}), 500
 
 
 @bp.route('/tables/<int:table_id>/status', methods=['PUT'])
