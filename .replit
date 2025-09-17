@@ -1,11 +1,11 @@
-modules = ["web", "python-3.11", "nodejs-20", "postgresql-16", "java-graalvm22.3"]
+modules = ["web", "python-3.11", "nodejs-20"]
 [agent]
 expertMode = true
 integrations = ["python_database:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "freetype", "glibcLocales", "libiconv", "openssl", "postgresql", "rustc", "imagemagick", "openjdk17", "unzip"]
+packages = ["cargo", "freetype", "glibcLocales", "imagemagick", "libiconv", "openjdk17", "openssl", "postgresql", "rustc", "unzip"]
 
 [workflows]
 runButton = "Project"
@@ -89,4 +89,4 @@ externalPort = 3001
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["gunicorn", "--bind", "0.0.0.0:5000", "--worker-class", "sync", "--workers", "2", "main:app"]
+run = ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
