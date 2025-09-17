@@ -2528,6 +2528,61 @@ async function openCashRegister() {
 // Document ready event
 document.addEventListener('DOMContentLoaded', initializePOS);
 
+// SIMPLE DATA LOADING - Independent of POS initialization
+document.addEventListener('DOMContentLoaded', function() {
+    // Load customers immediately
+    setTimeout(() => {
+        fetch('/api/customers', {credentials: 'same-origin'})
+            .then(response => response.json())
+            .then(data => {
+                customersData = data;
+                const customerSelect = document.getElementById('customer-select');
+                if (customerSelect) {
+                    customerSelect.innerHTML = '<option value="">Seleccione un cliente o ingrese manualmente</option>';
+                    data.forEach(customer => {
+                        const option = document.createElement('option');
+                        option.value = customer.id;
+                        option.textContent = `${customer.name}${customer.rnc ? ' - ' + customer.rnc : ''}`;
+                        customerSelect.appendChild(option);
+                    });
+                }
+                console.log('[POS] ✅ Customers loaded:', data.length);
+            })
+            .catch(error => console.log('[POS] ❌ Customers failed:', error.message));
+    }, 1000);
+    
+    // Load tax types immediately
+    setTimeout(() => {
+        fetch('/api/tax-types', {credentials: 'same-origin'})
+            .then(response => response.json())
+            .then(data => {
+                loadedTaxTypes = data;
+                console.log('[POS] ✅ Tax types loaded:', data.length);
+            })
+            .catch(error => console.log('[POS] ❌ Tax types failed:', error.message));
+    }, 1200);
+    
+    // Load tables immediately  
+    setTimeout(() => {
+        fetch('/api/tables', {credentials: 'same-origin'})
+            .then(response => response.json())
+            .then(data => {
+                const tableSelect = document.getElementById('table-select');
+                if (tableSelect) {
+                    tableSelect.innerHTML = '<option value="">Seleccione una mesa</option>';
+                    data.forEach(table => {
+                        const option = document.createElement('option');
+                        option.value = table.id;
+                        option.textContent = `Mesa ${table.number} (${table.capacity} personas)`;
+                        tableSelect.appendChild(option);
+                    });
+                }
+                console.log('[POS] ✅ Tables loaded:', data.length);
+            })
+            .catch(error => console.log('[POS] ❌ Tables failed:', error.message));
+    }, 1400);
+});
+
 // Handle category tab changes
 document.addEventListener('shown.bs.tab', function(e) {
     if (e.target.getAttribute('data-bs-toggle') === 'pill') {
