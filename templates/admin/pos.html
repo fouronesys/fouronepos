@@ -354,19 +354,6 @@
                     </div>
                 </div>
                 
-                <!-- Tax Configuration Section -->
-                <div class="cart-config">
-                    <div class="config-item">
-                        <i class="bi bi-percent"></i>
-                        {% from 'macros/tax_type_select.html' import tax_type_select %}
-                        {{ tax_type_select(
-                            field_id='tax-type-select',
-                            label='Tipo de Impuesto',
-                            include_modes=true,
-                            onchange='updateTaxCalculation()'
-                        ) }}
-                    </div>
-                </div>
                 
                 <!-- Cart Items -->
                 <div class="cart-items-container">
@@ -957,93 +944,9 @@ function populateTaxTypeDropdown() {
     }
     
     console.log('[Tax] Tax types loaded successfully:', loadedTaxTypes.length, 'types');
-    updateTaxCalculation();
 }
 
-// Fallback to default tax options if API fails
-function fallbackToDefaultTaxOptions() {
-    const taxSelect = document.getElementById('tax-type-select');
-    if (!taxSelect) return;
-    
-    taxSelect.innerHTML = `
-        <option value="default-18-inclusive" data-rate="0.18" data-inclusive="true" selected>ITBIS (18%) - Incluído</option>
-        <option value="default-18-exclusive" data-rate="0.18" data-inclusive="false">ITBIS (18%) - Exclusivo</option>
-        <option value="default-0" data-rate="0.00" data-inclusive="false">Sin impuestos</option>
-    `;
-    
-    // Simulate loaded tax types for consistency
-    loadedTaxTypes = [
-        { id: 'default-18-inclusive', name: 'ITBIS Incluído', rate: 0.18, is_inclusive: true },
-        { id: 'default-18-exclusive', name: 'ITBIS Exclusivo', rate: 0.18, is_inclusive: false },
-        { id: 'default-0', name: 'Sin impuestos', rate: 0.00, is_inclusive: false }
-    ];
-    
-    console.log('[Tax] Using fallback tax options');
-    updateTaxCalculation();
-}
 
-// Get current tax rate and type from selector
-function getCurrentTaxRate() {
-    const taxSelect = document.getElementById('tax-type-select');
-    if (!taxSelect || !taxSelect.value) return 0.18;
-    
-    // Get rate from data attribute for better accuracy
-    const selectedOption = taxSelect.options[taxSelect.selectedIndex];
-    const rate = selectedOption ? parseFloat(selectedOption.getAttribute('data-rate')) : 0.18;
-    
-    return rate || 0.18;
-}
-
-// Get current tax type data
-function getCurrentTaxType() {
-    const taxSelect = document.getElementById('tax-type-select');
-    if (!taxSelect || !taxSelect.value) {
-        return { id: null, rate: 0.18, is_inclusive: true };
-    }
-    
-    const selectedOption = taxSelect.options[taxSelect.selectedIndex];
-    if (!selectedOption) {
-        return { id: null, rate: 0.18, is_inclusive: true };
-    }
-    
-    return {
-        id: taxSelect.value,
-        rate: parseFloat(selectedOption.getAttribute('data-rate')) || 0.18,
-        is_inclusive: selectedOption.getAttribute('data-inclusive') === 'true'
-    };
-}
-
-// Helper functions for API calls
-function getCurrentTaxTypeId() {
-    const taxType = getCurrentTaxType();
-    return taxType.id;
-}
-
-function getCurrentTaxIsInclusive() {
-    const taxType = getCurrentTaxType();
-    return taxType.is_inclusive;
-}
-
-// Update tax calculation when type changes
-function updateTaxCalculation() {
-    const taxType = getCurrentTaxType();
-    
-    // Update tax label in the totals section
-    const taxLabel = document.getElementById('tax-label');
-    if (taxLabel) {
-        if (taxType.rate === 0) {
-            taxLabel.textContent = 'Sin impuestos';
-            document.getElementById('tax-row').style.display = 'none';
-        } else {
-            const inclusiveText = taxType.is_inclusive ? ' (Incluído)' : '';
-            taxLabel.textContent = `ITBIS (${(taxType.rate * 100).toFixed(0)}%)${inclusiveText}`;
-            document.getElementById('tax-row').style.display = 'flex';
-        }
-    }
-    
-    // Update cart display with new calculations
-    updateCartDisplay();
-}
 
 // Add product to cart (using CartManager)
 function addToCart(productId, productName, price) {

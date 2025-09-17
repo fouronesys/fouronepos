@@ -17,7 +17,7 @@ const POSPage = ({ user, onLogout }) => {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
-  const [selectedTaxType, setSelectedTaxType] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
@@ -61,41 +61,8 @@ const POSPage = ({ user, onLogout }) => {
     }
   );
 
-  // Helper function to get normalized tax rate
-  const getRate = (taxType) => taxType?.rate ?? taxType?.tax_rate;
 
-  // Set default tax type when tax types are loaded
-  useEffect(() => {
-    if (taxTypes.length > 0 && !selectedTaxType) {
-      // Choose first tax type with a defined rate (including 0%)
-      const defaultTaxType = taxTypes.find(t => getRate(t) !== undefined) || taxTypes[0];
-      setSelectedTaxType(defaultTaxType);
-      console.log('[POS] Default tax type set:', defaultTaxType);
-    }
-  }, [taxTypes, selectedTaxType]);
 
-  // Sale mutation
-  const createSaleMutation = useMutation(apiService.createSale, {
-    onSuccess: (data) => {
-      toast.success(data.offline ? 
-        'Venta guardada offline' : 
-        'Venta procesada exitosamente'
-      );
-      setCart([]);
-      setShowPaymentModal(false);
-      setCashReceived('');
-      setCustomerData({ name: '', rnc: '' });
-      setSelectedCustomer(null);
-      setCustomerSearchTerm('');
-      setShowCustomerDropdown(false);
-      setSelectedTaxType(null);
-      queryClient.invalidateQueries('sales');
-    },
-    onError: (error) => {
-      toast.error('Error al procesar la venta');
-      console.error('Sale error:', error);
-    }
-  });
 
   // Filter products
   const filteredProducts = products.filter(product => {
@@ -227,12 +194,11 @@ const POSPage = ({ user, onLogout }) => {
     }
   }, [cart, cartLoaded]);
 
-  // Calculate totals
+  // Calculate totals (preview only - server does actual calculation)
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const taxRate = getRate(selectedTaxType) ?? 0.18; // Use selected tax rate or default 18% ITBIS
-  const tax = subtotal * taxRate;
-  const total = subtotal + tax;
-  const change = cashReceived ? Math.max(0, parseFloat(cashReceived) - total) : 0;
+  const previewTax = subtotal * 0.18; // 18% ITBIS preview
+  const previewTotal = subtotal + previewTax;
+  const change = cashReceived ? Math.max(0, parseFloat(cashReceived) - previewTotal) : 0;
 
   const handleProcessSale = () => {
     if (cart.length === 0) {
@@ -242,36 +208,72 @@ const POSPage = ({ user, onLogout }) => {
     setShowPaymentModal(true);
   };
 
-  const handleCompleteSale = () => {
-    if (paymentMethod === 'cash' && (!cashReceived || parseFloat(cashReceived) < total)) {
+  const handleCompleteSale = async () => {
+    if (paymentMethod === 'cash' && (!cashReceived || parseFloat(cashReceived) < previewTotal)) {
       toast.error('El monto recibido debe ser mayor o igual al total');
       return;
     }
 
-    const saleData = {
-      items: cart.map(item => ({
-        product_id: item.id,
-        product_name: item.name,
-        quantity: item.quantity,
-        unit_price: item.price,
-        total_price: item.price * item.quantity
-      })),
-      subtotal,
-      tax,
-      total,
-      payment_method: paymentMethod,
-      cash_received: paymentMethod === 'cash' ? parseFloat(cashReceived) : total,
-      change_amount: paymentMethod === 'cash' ? change : 0,
-      customer_id: selectedCustomer ? selectedCustomer.id : null,
-      customer_name: customerData.name || null,
-      customer_rnc: customerData.rnc || null,
-      tax_type_id: selectedTaxType?.id || null,
-      tax_rate: taxRate,
-      user_id: user.id,
-      created_at: new Date().toISOString()
-    };
-
-    createSaleMutation.mutate(saleData);
+    setIsSubmitting(true);
+    try {
+      // Step 1: Create empty sale
+      const csrfToken = await apiService.getCsrfToken();
+      const saleResponse = await apiService.axiosInstance.post('/sales', {
+        description: 'Venta POS',
+        csrf_token: csrfToken
+      });
+      
+      const saleId = saleResponse.data.id;
+      
+      // Step 2: Add items individually (server calculates taxes per product)
+      for (const item of cart) {
+        await apiService.axiosInstance.post(`/sales/${saleId}/items`, {
+          product_id: item.id,
+          quantity: item.quantity,
+          csrf_token: csrfToken
+        });
+      }
+      
+      // Step 3: Finalize sale with payment info (no tax data - server calculated)
+      const finalizeData = {
+        payment_method: paymentMethod,
+        ncf_type: 'consumo', // Default NCF type
+        csrf_token: csrfToken
+      };
+      
+      // Add cash payment details if needed
+      if (paymentMethod === 'cash') {
+        finalizeData.cash_received = parseFloat(cashReceived);
+        finalizeData.change_amount = change;
+      }
+      
+      // Add customer info if provided
+      if (customerData.name) {
+        finalizeData.client_name = customerData.name;
+      }
+      if (customerData.rnc) {
+        finalizeData.client_rnc = customerData.rnc;
+      }
+      
+      const finalizeResponse = await apiService.axiosInstance.post(`/sales/${saleId}/finalize`, finalizeData);
+      
+      // Success - clear cart and close modal
+      toast.success('Venta procesada exitosamente');
+      setCart([]);
+      setShowPaymentModal(false);
+      setCashReceived('');
+      setCustomerData({ name: '', rnc: '' });
+      setSelectedCustomer(null);
+      setCustomerSearchTerm('');
+      setShowCustomerDropdown(false);
+      queryClient.invalidateQueries('sales');
+      
+    } catch (error) {
+      console.error('Error creating sale:', error);
+      toast.error('Error al procesar la venta: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Removed global loading gate to allow cart to render immediately
@@ -430,6 +432,7 @@ const POSPage = ({ user, onLogout }) => {
             )}
           </div>
 
+
           {/* Cart Summary */}
           {cart.length > 0 && (
             <div className="cart-summary">
@@ -438,12 +441,12 @@ const POSPage = ({ user, onLogout }) => {
                 <span>${subtotal.toFixed(2)}</span>
               </div>
               <div className="summary-line">
-                <span>{selectedTaxType?.name || 'Impuesto'} ({(taxRate * 100).toFixed(0)}%):</span>
-                <span>${tax.toFixed(2)}</span>
+                <span>ITBIS (18%):</span>
+                <span>${previewTax.toFixed(2)}</span>
               </div>
               <div className="summary-line total-line">
                 <span>Total:</span>
-                <span>${total.toFixed(2)}</span>
+                <span>${previewTotal.toFixed(2)}</span>
               </div>
               
               <button
@@ -474,7 +477,7 @@ const POSPage = ({ user, onLogout }) => {
             
             <div className="modal-body">
               <div className="payment-summary">
-                <h4>Total a pagar: ${total.toFixed(2)}</h4>
+                <h4>Total a pagar: ${previewTotal.toFixed(2)}</h4>
               </div>
               
               <div className="payment-methods">
@@ -527,7 +530,7 @@ const POSPage = ({ user, onLogout }) => {
                     className="form-control"
                     placeholder="0.00"
                     step="0.01"
-                    min={total}
+                    min={previewTotal}
                   />
                   {cashReceived && (
                     <div className="change-amount">
@@ -537,37 +540,6 @@ const POSPage = ({ user, onLogout }) => {
                 </div>
               )}
 
-              <div className="tax-type-section">
-  <label className="form-label" htmlFor="tax-type-select">
-    Tipo de impuesto:
-  </label>
-  {loadingTaxTypes ? (
-    <div className="d-flex align-items-center" role="status" aria-live="polite">
-      <LoadingSpinner size="sm" />
-      <span className="ms-2">Cargando tipos de impuesto...</span>
-    </div>
-  ) : (
-    <select
-      id="tax-type-select"
-      className="form-control"
-      value={String(selectedTaxType?.id || '')}
-      onChange={(e) => {
-        const taxType = taxTypes.find(
-          (t) => String(t.id) === e.target.value
-        );
-        setSelectedTaxType(taxType || null);
-      }}
-    >
-      <option value="">Seleccione tipo de impuesto</option>
-      {taxTypes.map((taxType) => (
-        <option key={taxType.id} value={String(taxType.id)}>
-          {taxType.name} ({((getRate(taxType) || 0) * 100).toFixed(2)}%)
-        </option>
-      ))}
-    </select>
-  )}
-</div>
-  
 
               <div className="customer-info">
                 <h5>Información del cliente (opcional):</h5>
@@ -633,9 +605,9 @@ const POSPage = ({ user, onLogout }) => {
               <button
                 className="btn btn-primary"
                 onClick={handleCompleteSale}
-                disabled={createSaleMutation.isLoading}
+                disabled={isSubmitting}
               >
-                {createSaleMutation.isLoading ? (
+                {isSubmitting ? (
                   <LoadingSpinner size="sm" />
                 ) : (
                   'Confirmar Venta'
