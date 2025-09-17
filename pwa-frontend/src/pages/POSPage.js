@@ -59,12 +59,16 @@ const POSPage = ({ user, onLogout }) => {
     }
   );
 
+  // Helper function to get normalized tax rate
+  const getRate = (taxType) => taxType?.rate ?? taxType?.tax_rate;
+
   // Set default tax type when tax types are loaded
   useEffect(() => {
     if (taxTypes.length > 0 && !selectedTaxType) {
-      // Set the first tax type as default (usually ITBIS 18%)
-      setSelectedTaxType(taxTypes[0]);
-      console.log('[POS] Default tax type set:', taxTypes[0]);
+      // Choose first tax type with a defined rate (including 0%)
+      const defaultTaxType = taxTypes.find(t => getRate(t) !== undefined) || taxTypes[0];
+      setSelectedTaxType(defaultTaxType);
+      console.log('[POS] Default tax type set:', defaultTaxType);
     }
   }, [taxTypes, selectedTaxType]);
 
@@ -197,14 +201,20 @@ const POSPage = ({ user, onLogout }) => {
     if (savedCart) {
       try {
         const parsedCart = JSON.parse(savedCart);
-        setCart(parsedCart);
-        console.log('[Cart] Loaded cart from storage:', parsedCart);
+        // Force a delay to ensure React has time to render
+        setTimeout(() => {
+          setCart(parsedCart);
+          console.log('[Cart] Loaded cart from storage:', parsedCart);
+          setCartLoaded(true);
+        }, 100);
       } catch (error) {
         console.error('[Cart] Error loading cart from storage:', error);
         localStorage.removeItem('pos_cart');
+        setCartLoaded(true);
       }
+    } else {
+      setCartLoaded(true);
     }
-    setCartLoaded(true);
   }, []);
 
   // Save cart to localStorage whenever cart changes (but only after initial load)
@@ -217,7 +227,7 @@ const POSPage = ({ user, onLogout }) => {
 
   // Calculate totals
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const taxRate = selectedTaxType?.rate || 0.18; // Use selected tax rate or default 18% ITBIS
+  const taxRate = getRate(selectedTaxType) ?? 0.18; // Use selected tax rate or default 18% ITBIS
   const tax = subtotal * taxRate;
   const total = subtotal + tax;
   const change = cashReceived ? Math.max(0, parseFloat(cashReceived) - total) : 0;
@@ -262,15 +272,8 @@ const POSPage = ({ user, onLogout }) => {
     createSaleMutation.mutate(saleData);
   };
 
-  const isLoading = loadingProducts || loadingCategories || loadingCustomers || loadingTaxTypes;
-
-  if (isLoading) {
-    return (
-      <div className="min-vh-100 d-flex align-items-center justify-content-center">
-        <LoadingSpinner size="lg" message="Cargando POS..." />
-      </div>
-    );
-  }
+  // Removed global loading gate to allow cart to render immediately
+  // Individual sections will show their own loading states
 
   return (
     <div className="pos-container">
@@ -534,21 +537,28 @@ const POSPage = ({ user, onLogout }) => {
 
               <div className="tax-type-section">
                 <h5>Tipo de impuesto:</h5>
-                <select 
-                  className="form-control"
-                  value={selectedTaxType?.id || ''}
-                  onChange={(e) => {
-                    const taxType = taxTypes.find(t => t.id === parseInt(e.target.value));
-                    setSelectedTaxType(taxType);
-                  }}
-                >
-                  <option value="">Seleccione tipo de impuesto</option>
-                  {taxTypes.map(taxType => (
-                    <option key={taxType.id} value={taxType.id}>
-                      {taxType.name} ({(taxType.rate * 100).toFixed(0)}%)
-                    </option>
-                  ))}
-                </select>
+                {loadingTaxTypes ? (
+                  <div className="form-control d-flex align-items-center">
+                    <LoadingSpinner size="sm" />
+                    <span className="ms-2">Cargando tipos de impuesto...</span>
+                  </div>
+                ) : (
+                  <select 
+                    className="form-control"
+                    value={String(selectedTaxType?.id || '')}
+                    onChange={(e) => {
+                      const taxType = taxTypes.find(t => String(t.id) === e.target.value);
+                      setSelectedTaxType(taxType);
+                    }}
+                  >
+                    <option value="">Seleccione tipo de impuesto</option>
+                    {taxTypes.map(taxType => (
+                      <option key={taxType.id} value={String(taxType.id)}>
+                        {taxType.name} ({((getRate(taxType) || 0) * 100).toFixed(0)}%)
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="customer-info">
