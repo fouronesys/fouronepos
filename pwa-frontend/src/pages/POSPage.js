@@ -54,8 +54,10 @@ const POSPage = ({ user, onLogout }) => {
     'taxTypes',
     apiService.getTaxTypes,
     {
-      staleTime: 5 * 60 * 1000,
-      refetchOnWindowFocus: false,
+      staleTime: 0,  // Forzar refetch inmediato
+      cacheTime: 0,  // No cachear para forzar nueva petición
+      refetchOnWindowFocus: true,
+      refetchOnMount: true,
     }
   );
 

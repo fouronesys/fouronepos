@@ -1790,8 +1790,8 @@ async function billOrder(orderId) {
 async function showBillingForm(order) {
     try {
         // Get tax types for the form
-        const taxTypesResponse = await apiRequest('/admin/api/tax-types');
-        const taxTypes = taxTypesResponse.tax_types || [];
+        const taxTypesResponse = await apiRequest('/api/tax-types');
+        const taxTypes = taxTypesResponse || [];
         
         // Create billing form modal
         const billingFormHtml = `
