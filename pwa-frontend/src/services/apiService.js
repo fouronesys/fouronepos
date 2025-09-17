@@ -375,6 +375,19 @@ class ApiService {
     }
   }
 
+  async getTaxTypes() {
+    try {
+      const response = await this.axiosInstance.get('/tax-types');
+      return response.data;
+    } catch (error) {
+      if (!navigator.onLine) {
+        const cachedTaxTypes = await offlineStorage.getTaxTypes();
+        return cachedTaxTypes;
+      }
+      throw error;
+    }
+  }
+
   // Utility methods
   isOnline() {
     return navigator.onLine;

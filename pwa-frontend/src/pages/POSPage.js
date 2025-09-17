@@ -48,6 +48,15 @@ const POSPage = ({ user, onLogout }) => {
     }
   );
 
+  const { data: taxTypes = [], isLoading: loadingTaxTypes } = useQuery(
+    'taxTypes',
+    apiService.getTaxTypes,
+    {
+      staleTime: 5 * 60 * 1000,
+      refetchOnWindowFocus: false,
+    }
+  );
+
   // Sale mutation
   const createSaleMutation = useMutation(apiService.createSale, {
     onSuccess: (data) => {
@@ -122,6 +131,7 @@ const POSPage = ({ user, onLogout }) => {
 
   const clearCart = () => {
     setCart([]);
+    localStorage.removeItem('pos_cart');
     toast.success('Carrito vaciado');
   };
 
@@ -168,6 +178,27 @@ const POSPage = ({ user, onLogout }) => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Load cart from localStorage on component mount
+  useEffect(() => {
+    const savedCart = localStorage.getItem('pos_cart');
+    if (savedCart) {
+      try {
+        const parsedCart = JSON.parse(savedCart);
+        setCart(parsedCart);
+        console.log('[Cart] Loaded cart from storage:', parsedCart);
+      } catch (error) {
+        console.error('[Cart] Error loading cart from storage:', error);
+        localStorage.removeItem('pos_cart');
+      }
+    }
+  }, []);
+
+  // Save cart to localStorage whenever cart changes
+  useEffect(() => {
+    localStorage.setItem('pos_cart', JSON.stringify(cart));
+    console.log('[Cart] Saved cart to storage:', cart);
+  }, [cart]);
 
   // Calculate totals
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);

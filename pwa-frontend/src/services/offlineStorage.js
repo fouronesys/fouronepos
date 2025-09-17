@@ -10,6 +10,8 @@ const STORES = {
   products: 'products', 
   categories: 'categories',
   tables: 'tables',
+  customers: 'customers',
+  taxTypes: 'taxTypes',
   users: 'users',
   pendingSync: 'pendingSync',
   settings: 'settings'
@@ -68,6 +70,20 @@ class OfflineStorage {
           });
           pendingSyncStore.createIndex('operation', 'operation');
           pendingSyncStore.createIndex('timestamp', 'timestamp');
+        }
+
+        // Customers store
+        if (!db.objectStoreNames.contains(STORES.customers)) {
+          const customersStore = db.createObjectStore(STORES.customers, { keyPath: 'id' });
+          customersStore.createIndex('name', 'name');
+          customersStore.createIndex('rnc', 'rnc');
+        }
+
+        // Tax Types store
+        if (!db.objectStoreNames.contains(STORES.taxTypes)) {
+          const taxTypesStore = db.createObjectStore(STORES.taxTypes, { keyPath: 'id' });
+          taxTypesStore.createIndex('name', 'name');
+          taxTypesStore.createIndex('rate', 'rate');
         }
 
         // Settings store
@@ -281,6 +297,14 @@ class OfflineStorage {
     return await this.getAllFromStore(STORES.tables);
   }
 
+  async getCustomers() {
+    return await this.getAllFromStore(STORES.customers);
+  }
+
+  async getTaxTypes() {
+    return await this.getAllFromStore(STORES.taxTypes);
+  }
+
   async cacheApiData(endpoint, data) {
     // Cache data from API calls
     const storeName = this.getStoreNameFromEndpoint(endpoint);
@@ -301,6 +325,8 @@ class OfflineStorage {
     if (endpoint.includes('/products')) return STORES.products;
     if (endpoint.includes('/categories')) return STORES.categories;
     if (endpoint.includes('/tables')) return STORES.tables;
+    if (endpoint.includes('/customers')) return STORES.customers;
+    if (endpoint.includes('/tax-types')) return STORES.taxTypes;
     if (endpoint.includes('/sales')) return STORES.sales;
     return null;
   }
