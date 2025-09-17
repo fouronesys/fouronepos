@@ -103,8 +103,7 @@
                             <div class="mb-3">
                                 <label for="purchaseTaxType" class="form-label">Tipo de Impuesto</label>
                                 <select class="form-select" id="purchaseTaxType" onchange="updatePurchaseTotals()">
-                                    <option value="0.18">ITBIS (18%)</option>
-                                    <option value="0.00">Sin impuestos</option>
+                                    <option value="">Cargando tipos de impuesto...</option>
                                 </select>
                             </div>
                         </div>
@@ -261,19 +260,26 @@ function updatePurchaseTotals() {
         subtotal += total;
     });
     
-    const taxRate = parseFloat(document.getElementById('purchaseTaxType').value || 0.18);
+    const taxSelect = document.getElementById('purchaseTaxType');
+    const taxRate = taxSelect.value ? parseFloat(taxSelect.value) : 0;
     const tax = subtotal * taxRate;
     const total = subtotal + tax;
     
     // Update tax label and visibility
     const taxRow = document.getElementById('purchaseTaxRow');
     const taxLabel = document.getElementById('purchaseTaxLabel');
+    const taxSelect = document.getElementById('purchaseTaxType');
+    
     if (taxRate === 0) {
-        taxLabel.textContent = 'Sin impuestos:';
+        const selectedOption = taxSelect.options[taxSelect.selectedIndex];
+        const taxName = selectedOption && selectedOption.dataset.taxTypeName ? selectedOption.dataset.taxTypeName : 'Sin impuestos';
+        taxLabel.textContent = `${taxName}:`;
         taxRow.style.display = 'none';
     } else {
+        const selectedOption = taxSelect.options[taxSelect.selectedIndex];
+        const taxName = selectedOption && selectedOption.dataset.taxTypeName ? selectedOption.dataset.taxTypeName : 'ITBIS';
         const percentage = Math.round(taxRate * 100);
-        taxLabel.textContent = `ITBIS (${percentage}%):`;
+        taxLabel.textContent = `${taxName} (${percentage}%):`;
         taxRow.style.display = 'flex';
     }
     
@@ -324,7 +330,8 @@ async function savePurchase() {
         return;
     }
     
-    const taxRate = parseFloat(document.getElementById('purchaseTaxType').value || 0.18);
+    const taxSelect = document.getElementById('purchaseTaxType');
+    const taxRate = taxSelect.value ? parseFloat(taxSelect.value) : 0;
     const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_cost), 0);
     const tax = subtotal * taxRate;
     const total = subtotal + tax;
@@ -361,8 +368,69 @@ async function savePurchase() {
     }
 }
 
+// Load tax types from API
+async function loadTaxTypes() {
+    try {
+        const response = await fetch('/api/tax-types', {
+            credentials: 'same-origin'
+        });
+        
+        if (response.ok) {
+            const taxTypes = await response.json();
+            const select = document.getElementById('purchaseTaxType');
+            
+            // Clear loading option
+            select.innerHTML = '';
+            
+            // Add default option
+            select.innerHTML = '<option value="">Seleccione tipo de impuesto</option>';
+            
+            // Add tax types from API
+            taxTypes.forEach(taxType => {
+                const option = document.createElement('option');
+                option.value = taxType.rate;
+                option.textContent = `${taxType.name} (${(taxType.rate * 100).toFixed(0)}%)`;
+                option.dataset.taxTypeName = taxType.name;
+                select.appendChild(option);
+            });
+            
+            // Set default to first tax type (usually ITBIS)
+            if (taxTypes.length > 0) {
+                select.value = taxTypes[0].rate;
+                updatePurchaseTotals();
+            }
+        } else {
+            console.error('Error loading tax types');
+            // Fallback to hardcoded options
+            const select = document.getElementById('purchaseTaxType');
+            select.innerHTML = `
+                <option value="">Seleccione tipo de impuesto</option>
+                <option value="0.18" data-tax-type-name="ITBIS">ITBIS (18%)</option>
+                <option value="0.00" data-tax-type-name="Sin Impuesto">Sin impuestos</option>
+            `;
+            // Set default to ITBIS
+            select.value = "0.18";
+            updatePurchaseTotals();
+        }
+    } catch (error) {
+        console.error('Error loading tax types:', error);
+        // Fallback to hardcoded options
+        const select = document.getElementById('purchaseTaxType');
+        select.innerHTML = `
+            <option value="">Seleccione tipo de impuesto</option>
+            <option value="0.18" data-tax-type-name="ITBIS">ITBIS (18%)</option>
+            <option value="0.00" data-tax-type-name="Sin Impuesto">Sin impuestos</option>
+        `;
+        // Set default to ITBIS
+        select.value = "0.18";
+        updatePurchaseTotals();
+    }
+}
+
 // Add initial purchase item
 document.addEventListener('DOMContentLoaded', function() {
+    // Load tax types on page load
+    loadTaxTypes();
     // Modal events handled by Bootstrap
 });
 </script>
