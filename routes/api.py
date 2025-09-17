@@ -7,10 +7,14 @@ from sqlalchemy import text
 import time
 import random
 import os
+import logging
 from receipt_generator import generate_pdf_receipt, generate_thermal_receipt_text
 from utils import get_company_info_for_receipt, validate_ncf
 from flask_wtf.csrf import validate_csrf
 from werkzeug.exceptions import BadRequest
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -750,14 +754,42 @@ def finalize_sale(sale_id):
                 } for item in sale.sale_items]
             }
             
-            # Import and use thermal receipt generator
-            from receipt_generator import generate_thermal_receipt_text
+            # Import receipt generators
+            from receipt_generator import generate_thermal_receipt_text, generate_pdf_receipt
             receipt_text = generate_thermal_receipt_text(sale_data)
             
             if receipt_text:
                 response_data['receipt_printed'] = True
                 response_data['receipt_text'] = receipt_text
                 response_data['message'] = 'Venta finalizada exitosamente. Recibo generado automáticamente.'
+                
+                # Generate PDF receipt for download
+                try:
+                    pdf_path = generate_pdf_receipt(sale_data)
+                    if pdf_path:
+                        # Convert absolute path to web-accessible relative path
+                        web_path = pdf_path.replace(os.getcwd() + '/', '')
+                        response_data['pdf_receipt_path'] = web_path
+                        response_data['pdf_generated'] = True
+                        logger.info(f"Recibo PDF generado para venta {sale.id}: {web_path}")
+                    else:
+                        response_data['pdf_generated'] = False
+                except Exception as pdf_error:
+                    logger.error(f"Error generando PDF para venta {sale.id}: {str(pdf_error)}")
+                    response_data['pdf_generated'] = False
+                
+                # Attempt automatic thermal printing
+                try:
+                    from thermal_printer import print_receipt_auto
+                    print_success = print_receipt_auto(sale_data)
+                    response_data['thermal_print_success'] = print_success
+                    if print_success:
+                        logger.info(f"Recibo térmico impreso automáticamente para venta {sale.id}")
+                    else:
+                        logger.warning(f"Fallo en impresión térmica automática para venta {sale.id}")
+                except Exception as thermal_error:
+                    logger.error(f"Error en impresión térmica: {str(thermal_error)}")
+                    response_data['thermal_print_success'] = False
             else:
                 response_data['message'] = 'Venta finalizada exitosamente. Error generando recibo automático.'
         except Exception as print_error:
@@ -2103,12 +2135,25 @@ def finalize_table_sale(sale_id):
             sale_items = models.SaleItem.query.filter_by(sale_id=sale.id).all()
             sale_data = _prepare_sale_data_for_receipt(sale, sale_items)
             
-            from utils import generate_thermal_receipt_text
-            receipt_text = generate_thermal_receipt_text(sale_data, receipt_format)
+            from receipt_generator import generate_thermal_receipt_text
+            receipt_text = generate_thermal_receipt_text(sale_data)
             
             # Add receipt data to response for automatic display
             response_data['receipt_text'] = receipt_text
             response_data['auto_print'] = True
+            
+            # Attempt automatic thermal printing
+            try:
+                from thermal_printer import print_receipt_auto
+                print_success = print_receipt_auto(sale_data)
+                response_data['thermal_print_success'] = print_success
+                if print_success:
+                    logger.info(f"Recibo térmico impreso automáticamente para venta {sale.id}")
+                else:
+                    logger.warning(f"Fallo en impresión térmica automática para venta {sale.id}")
+            except Exception as thermal_error:
+                logger.error(f"Error en impresión térmica: {str(thermal_error)}")
+                response_data['thermal_print_success'] = False
             
         except Exception as e:
             print(f"[ERROR PRINT] Auto receipt error for sale {sale.id}: {str(e)}")

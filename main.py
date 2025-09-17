@@ -64,7 +64,7 @@ db.init_app(app)
 
 
 # Import routes after app initialization
-from routes import auth, admin, waiter, api, inventory, dgii
+from routes import auth, admin, waiter, api, inventory, dgii, test_api
 
 
 # Register blueprints
@@ -74,6 +74,7 @@ app.register_blueprint(waiter.bp)
 app.register_blueprint(api.bp)
 app.register_blueprint(inventory.bp)
 app.register_blueprint(dgii.bp)
+app.register_blueprint(test_api.bp)
 
 # Exempt API login endpoint from CSRF protection for PWA authentication
 csrf.exempt(api.api_login)
