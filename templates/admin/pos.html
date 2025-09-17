@@ -1053,7 +1053,29 @@ function populateTaxTypeDropdown() {
 
 // Add product to cart (using CartManager)
 function addToCart(productId, productName, price, taxTypes = []) {
-    cartManager.addItem(productId, productName, price, taxTypes);
+    try {
+        // Handle both array and JSON string inputs for tax_types
+        let parsedTaxTypes = taxTypes;
+        if (typeof taxTypes === 'string') {
+            try {
+                parsedTaxTypes = JSON.parse(taxTypes);
+            } catch (e) {
+                console.warn('[POS] Failed to parse tax_types, using empty array:', e);
+                parsedTaxTypes = [];
+            }
+        }
+        
+        // Ensure it's an array
+        if (!Array.isArray(parsedTaxTypes)) {
+            parsedTaxTypes = [];
+        }
+        
+        cartManager.addItem(productId, productName, price, parsedTaxTypes);
+        
+    } catch (error) {
+        console.error('[POS] Error adding product to cart:', error);
+        showNotification(`Error agregando producto al carrito: ${error.message}`, 'error');
+    }
 }
 
 // Update cart display
