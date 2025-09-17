@@ -186,33 +186,6 @@ function formatDate(date) {
     });
 }
 
-// API request wrapper with error handling
-async function apiRequest(url, options = {}) {
-    const csrfToken = getCsrfToken();
-    
-    const defaultOptions = {
-        credentials: 'same-origin',
-        headers: {
-            'Content-Type': 'application/json',
-            ...(csrfToken && { 'X-CSRFToken': csrfToken }),
-            ...options.headers
-        }
-    };
-
-    try {
-        const response = await fetch(url, { ...defaultOptions, ...options });
-        
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Error de red' }));
-            throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        return await response.json();
-    } catch (error) {
-        console.error(`[Utils] API request failed: ${url}`, error);
-        throw error;
-    }
-}
 
 // Validate form data
 function validateRequiredFields(formData, requiredFields) {
