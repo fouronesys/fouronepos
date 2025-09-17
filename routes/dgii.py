@@ -22,15 +22,24 @@ bp = Blueprint('dgii', __name__, url_prefix='/dgii')
 
 def require_admin():
     """Check if user is authenticated and is an admin"""
+    # Check if this is an AJAX/JSON request
+    is_json_request = request.is_json or 'application/json' in request.headers.get('Content-Type', '')
+    
     if 'user_id' not in session:
+        if is_json_request:
+            return None  # Will be handled by calling function
         return redirect(url_for('auth.login'))
     
     user = User.query.get(session['user_id'])
     if not user or not user.active:
         session.clear()
+        if is_json_request:
+            return None  # Will be handled by calling function
         return redirect(url_for('auth.login'))
     
     if user.role.value != 'ADMINISTRADOR':
+        if is_json_request:
+            return None  # Will be handled by calling function
         flash('Acceso denegado. Se requieren permisos de administrador.', 'error')
         return redirect(url_for('admin.dashboard'))
     
@@ -245,21 +254,25 @@ def export_606():
 @bp.route('/export/607', methods=['POST'])
 def export_607():
     """Export DGII 607 (Sales) CSV"""
-    current_app.logger.debug("[DEBUG DGII 607] Export 607 called")
+    print(f"[DEBUG 607] Request data check:")
+    print(f"[DEBUG 607] JSON: {request.get_json(silent=True)}")
+    print(f"[DEBUG 607] Form: {dict(request.form)}")
+    print(f"[DEBUG 607] Args: {dict(request.args)}")
     
     user = require_admin()
+    
     if not isinstance(user, User):
-        current_app.logger.error("[DEBUG DGII 607] User authorization failed")
+        print(f"[DEBUG 607] Auth failed, user type: {type(user)}")
         return jsonify({'error': 'No autorizado'}), 401
     
-    current_app.logger.debug(f"[DEBUG DGII 607] User authorized: {user.username}")
+    print(f"[DEBUG 607] User authenticated: {user.username}")
     
     # Accept multiple input formats (JSON, form data, or query parameters)
     data = request.get_json(silent=True) or request.form or request.args
-    current_app.logger.debug(f"[DEBUG DGII 607] Request data: {data}")
+    print(f"[DEBUG 607] Final data: {data}")
     
     if not data:
-        current_app.logger.error("[DEBUG DGII 607] No data provided")
+        print("[DEBUG 607] ERROR: No data provided!")
         return jsonify({'error': 'Datos no proporcionados'}), 400
     
     # Support both individual year/month and period format (YYYY-MM)
@@ -665,13 +678,9 @@ def export_607_excel():
 def export_607_pdf():
     """Export DGII 607 (Sales) to PDF format"""
     try:
-        current_app.logger.info("Starting PDF export request")
-        
         user = require_admin()
-        current_app.logger.info(f"User check result: {type(user)} - {user}")
         
         if not isinstance(user, User):
-            current_app.logger.error(f"User auth failed: {type(user)}")
             return jsonify({'error': 'No autorizado'}), 401
         
         # Accept multiple input formats (JSON, form data, or query parameters)
