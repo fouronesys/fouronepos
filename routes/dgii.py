@@ -254,25 +254,15 @@ def export_606():
 @bp.route('/export/607', methods=['POST'])
 def export_607():
     """Export DGII 607 (Sales) CSV"""
-    print(f"[DEBUG 607] Request data check:")
-    print(f"[DEBUG 607] JSON: {request.get_json(silent=True)}")
-    print(f"[DEBUG 607] Form: {dict(request.form)}")
-    print(f"[DEBUG 607] Args: {dict(request.args)}")
-    
     user = require_admin()
     
     if not isinstance(user, User):
-        print(f"[DEBUG 607] Auth failed, user type: {type(user)}")
         return jsonify({'error': 'No autorizado'}), 401
-    
-    print(f"[DEBUG 607] User authenticated: {user.username}")
     
     # Accept multiple input formats (JSON, form data, or query parameters)
     data = request.get_json(silent=True) or request.form or request.args
-    print(f"[DEBUG 607] Final data: {data}")
     
     if not data:
-        print("[DEBUG 607] ERROR: No data provided!")
         return jsonify({'error': 'Datos no proporcionados'}), 400
     
     # Support both individual year/month and period format (YYYY-MM)

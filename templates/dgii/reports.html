@@ -165,6 +165,7 @@ document.getElementById('report606Form').addEventListener('submit', function(e) 
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
         },
         body: JSON.stringify({
             year: parseInt(year),
@@ -218,6 +219,7 @@ document.getElementById('report607Form').addEventListener('submit', function(e) 
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
         },
         body: JSON.stringify({
             year: parseInt(year),
@@ -281,6 +283,7 @@ function export607PDF() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
         },
         body: JSON.stringify({
             year: parseInt(year),
@@ -324,6 +327,7 @@ function export607TXT() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
         },
         body: JSON.stringify({
             year: parseInt(year),
@@ -375,6 +379,7 @@ function export606PDF() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
         },
         body: JSON.stringify({
             year: parseInt(year),
@@ -418,6 +423,7 @@ function export606TXT() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
         },
         body: JSON.stringify({
             year: parseInt(year),
