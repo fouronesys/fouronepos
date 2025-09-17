@@ -15,6 +15,7 @@ class ApiService {
       }
     });
 
+    this.csrfToken = null;
     this.setupInterceptors();
     this.setupOfflineSync();
   }
@@ -22,9 +23,26 @@ class ApiService {
   setupInterceptors() {
     // Request interceptor
     this.axiosInstance.interceptors.request.use(
-      (config) => {
+      async (config) => {
         // No need to add Bearer token, Flask uses session cookies
-        // CSRF token can be added here if needed for POST/PUT/DELETE requests
+        
+        // Add CSRF token for POST/PUT/DELETE requests
+        if (['post', 'put', 'delete'].includes(config.method?.toLowerCase())) {
+          // Skip CSRF for login endpoint
+          if (!config.url?.includes('/auth/login')) {
+            try {
+              if (!this.csrfToken) {
+                this.csrfToken = await this.getCsrfToken();
+              }
+              if (this.csrfToken) {
+                config.headers['X-CSRFToken'] = this.csrfToken;
+              }
+            } catch (error) {
+              console.warn('Failed to get CSRF token for request:', error);
+            }
+          }
+        }
+        
         return config;
       },
       (error) => Promise.reject(error)
@@ -40,10 +58,20 @@ class ApiService {
         return response;
       },
       async (error) => {
+        // Handle CSRF token errors
+        if (error.response && (error.response.status === 400 || error.response.status === 403)) {
+          const errorMessage = error.response.data?.error || '';
+          if (errorMessage.includes('Token de seguridad') || errorMessage.includes('CSRF')) {
+            console.log('🔄 CSRF token expired, clearing cache');
+            this.clearCsrfToken();
+          }
+        }
+        
         // Handle offline scenarios
         if (!navigator.onLine || error.code === 'NETWORK_ERROR') {
           return this.handleOfflineRequest(error.config);
         }
+        
         return Promise.reject(error);
       }
     );
@@ -125,11 +153,19 @@ class ApiService {
   }
 
   async queueOfflineOperation(config) {
+    // Include CSRF token for offline operations that will be synced later
+    const headers = { ...config.headers };
+    if (['POST', 'PUT', 'DELETE'].includes(config.method?.toUpperCase())) {
+      if (this.csrfToken) {
+        headers['X-CSRFToken'] = this.csrfToken;
+      }
+    }
+
     const operation = {
       method: config.method.toUpperCase(),
       url: config.url,
       data: config.data,
-      headers: config.headers,
+      headers: headers,
       timestamp: Date.now()
     };
 
@@ -229,12 +265,19 @@ class ApiService {
   // CSRF Token management
   async getCsrfToken() {
     try {
-      const response = await this.axiosInstance.get('/csrf-token');
-      return response.data.csrf_token;
+      const response = await this.axiosInstance.get('/csrf');
+      this.csrfToken = response.data.csrf_token;
+      return this.csrfToken;
     } catch (error) {
       console.warn('Failed to get CSRF token:', error);
+      this.csrfToken = null;
       return null;
     }
+  }
+
+  // Clear cached CSRF token (useful when session expires)
+  clearCsrfToken() {
+    this.csrfToken = null;
   }
 
   // Specific API methods
@@ -267,10 +310,12 @@ class ApiService {
     try {
       await this.axiosInstance.post('/auth/logout');
       localStorage.removeItem('user_data');
+      this.clearCsrfToken();
       return { success: true };
     } catch (error) {
       // Clear local data even if API call fails
       localStorage.removeItem('user_data');
+      this.clearCsrfToken();
       throw error;
     }
   }

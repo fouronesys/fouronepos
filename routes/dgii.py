@@ -30,7 +30,7 @@ def require_admin():
         session.clear()
         return redirect(url_for('auth.login'))
     
-    if user.role.value != 'administrador':
+    if user.role.value != 'ADMINISTRADOR':
         flash('Acceso denegado. Se requieren permisos de administrador.', 'error')
         return redirect(url_for('admin.dashboard'))
     
