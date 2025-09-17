@@ -175,7 +175,14 @@ document.getElementById('report606Form').addEventListener('submit', function(e) 
         if (response.ok) {
             return response.json();
         }
-        return response.json().then(err => Promise.reject(err));
+        // Check if response is JSON before trying to parse
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            return response.json().then(err => Promise.reject(err));
+        } else {
+            // If not JSON, return a generic error
+            return Promise.reject({ error: `Error ${response.status}: ${response.statusText}` });
+        }
     })
     .then(data => {
         if (data.success && data.csv_data) {
@@ -221,7 +228,14 @@ document.getElementById('report607Form').addEventListener('submit', function(e) 
         if (response.ok) {
             return response.json();
         }
-        return response.json().then(err => Promise.reject(err));
+        // Check if response is JSON before trying to parse
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            return response.json().then(err => Promise.reject(err));
+        } else {
+            // If not JSON, return a generic error
+            return Promise.reject({ error: `Error ${response.status}: ${response.statusText}` });
+        }
     })
     .then(data => {
         if (data.success && data.csv_data) {
@@ -277,7 +291,14 @@ function export607PDF() {
         if (response.ok) {
             return response.blob();
         }
-        return response.json().then(err => Promise.reject(err));
+        // Check if response is JSON before trying to parse
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            return response.json().then(err => Promise.reject(err));
+        } else {
+            // If not JSON, return a generic error
+            return Promise.reject({ error: `Error ${response.status}: ${response.statusText}` });
+        }
     })
     .then(blob => {
         const url = window.URL.createObjectURL(blob);
@@ -313,7 +334,14 @@ function export607TXT() {
         if (response.ok) {
             return response.json();
         }
-        return response.json().then(err => Promise.reject(err));
+        // Check if response is JSON before trying to parse
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            return response.json().then(err => Promise.reject(err));
+        } else {
+            // If not JSON, return a generic error
+            return Promise.reject({ error: `Error ${response.status}: ${response.statusText}` });
+        }
     })
     .then(data => {
         if (data.success && data.txt_data) {
@@ -357,7 +385,14 @@ function export606PDF() {
         if (response.ok) {
             return response.blob();
         }
-        return response.json().then(err => Promise.reject(err));
+        // Check if response is JSON before trying to parse
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            return response.json().then(err => Promise.reject(err));
+        } else {
+            // If not JSON, return a generic error
+            return Promise.reject({ error: `Error ${response.status}: ${response.statusText}` });
+        }
     })
     .then(blob => {
         const url = window.URL.createObjectURL(blob);
@@ -393,7 +428,14 @@ function export606TXT() {
         if (response.ok) {
             return response.json();
         }
-        return response.json().then(err => Promise.reject(err));
+        // Check if response is JSON before trying to parse
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            return response.json().then(err => Promise.reject(err));
+        } else {
+            // If not JSON, return a generic error
+            return Promise.reject({ error: `Error ${response.status}: ${response.statusText}` });
+        }
     })
     .then(data => {
         if (data.success && data.csv_data) {
