@@ -42,6 +42,12 @@ class OrderStatus(enum.Enum):
     SERVED = "served"
 
 
+class TaxMode(enum.Enum):
+    PRODUCT_BASED = "product_based"  # Usar impuestos por producto (comportamiento actual)
+    UNIFORM_TAX = "uniform_tax"      # Aplicar un tipo de impuesto uniforme a toda la venta
+    TAX_EXEMPT = "tax_exempt"        # Exento de impuestos
+
+
 class User(db.Model):
     __tablename__ = 'users'
     
@@ -275,6 +281,9 @@ class Sale(db.Model):
     subtotal: Mapped[float] = mapped_column(Float, nullable=False)
     tax_amount: Mapped[float] = mapped_column(Float, default=0.0)
     service_charge_amount: Mapped[float] = mapped_column(Float, default=0.0)  # Propina/service charge
+    # Campos para alineación con módulo de compras
+    tax_mode: Mapped[TaxMode] = mapped_column(Enum(TaxMode), default=TaxMode.PRODUCT_BASED, server_default='product_based')
+    tax_type_id: Mapped[int] = mapped_column(Integer, ForeignKey('tax_types.id', ondelete='SET NULL'), nullable=True)
     total: Mapped[float] = mapped_column(Float, nullable=False)
     payment_method: Mapped[str] = mapped_column(String(50), default="cash")
     cash_received: Mapped[float] = mapped_column(Float, nullable=True)  # Amount of cash received
@@ -300,6 +309,7 @@ class Sale(db.Model):
     customer = relationship("Customer", back_populates="sales")
     ncf_sequence = relationship("NCFSequence", back_populates="sales")
     sale_items = relationship("SaleItem", back_populates="sale")
+    tax_type = relationship("TaxType", foreign_keys=[tax_type_id])
 
 
 class SaleItem(db.Model):
