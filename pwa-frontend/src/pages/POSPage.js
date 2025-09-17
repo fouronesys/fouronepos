@@ -80,19 +80,61 @@ const POSPage = ({ user, onLogout }) => {
 
   // Cart operations
   const addToCart = (product) => {
-    setCart(prevCart => {
-      const existingItem = prevCart.find(item => item.id === product.id);
-      if (existingItem) {
-        return prevCart.map(item =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      } else {
-        return [...prevCart, { ...product, quantity: 1 }];
-      }
+    console.log('[CART DEBUG] 🛒 Intentando añadir producto al carrito:', {
+      product: product,
+      productId: product.id,
+      productName: product.name,
+      productPrice: product.price,
+      productTaxRate: product.tax_rate,
+      productIsTaxIncluded: product.is_tax_included,
+      productTaxTypes: product.tax_types,
+      timestamp: new Date().toISOString()
     });
-    toast.success(`${product.name} agregado al carrito`);
+
+    try {
+      setCart(prevCart => {
+        console.log('[CART DEBUG] 📊 Estado del carrito antes de añadir:', {
+          cartLength: prevCart.length,
+          cartItems: prevCart.map(item => ({ id: item.id, name: item.name, quantity: item.quantity }))
+        });
+
+        const existingItem = prevCart.find(item => item.id === product.id);
+        console.log('[CART DEBUG] 🔍 Producto existente en carrito:', existingItem);
+
+        let newCart;
+        if (existingItem) {
+          console.log('[CART DEBUG] ➕ Incrementando cantidad de producto existente');
+          newCart = prevCart.map(item =>
+            item.id === product.id
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
+          );
+        } else {
+          console.log('[CART DEBUG] 🆕 Añadiendo nuevo producto al carrito');
+          newCart = [...prevCart, { ...product, quantity: 1 }];
+        }
+
+        console.log('[CART DEBUG] ✅ Estado del carrito después de añadir:', {
+          cartLength: newCart.length,
+          cartItems: newCart.map(item => ({ id: item.id, name: item.name, quantity: item.quantity })),
+          addedProduct: product.name
+        });
+
+        return newCart;
+      });
+
+      console.log('[CART DEBUG] 🎉 Producto añadido exitosamente, mostrando toast');
+      toast.success(`${product.name} agregado al carrito`);
+
+    } catch (error) {
+      console.error('[CART DEBUG] ❌ Error al añadir producto al carrito:', {
+        error: error,
+        errorMessage: error.message,
+        errorStack: error.stack,
+        product: product
+      });
+      toast.error(`Error al añadir ${product.name} al carrito: ${error.message}`);
+    }
   };
 
   const updateQuantity = (productId, newQuantity) => {
