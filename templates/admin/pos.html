@@ -2039,25 +2039,12 @@ async function showBillingForm(order) {
                                     </div>
                                 </div>
                                 
-                                <!-- Tax Type Selection -->
+                                <!-- Tax Information (automatic) -->
                                 <div class="row mb-3">
                                     <div class="col-12">
-                                        <label class="form-label"><strong>Aplicar Impuesto</strong></label>
-                                        <div class="tax-types-grid">
-                                            ${taxTypes.map(tax => {
-                                                const isDefault = (tax.name === 'ITBIS Incluido 18%');
-                                                const rate = Math.round(tax.rate * 100);
-                                                const type = tax.is_inclusive ? 'Incluído' : 'Exclusivo';
-                                                return `
-                                                    <div class="form-check tax-option">
-                                                        <input class="form-check-input" type="radio" name="tax_type_id" id="billing_tax_${tax.id}" value="${tax.id}" ${isDefault ? 'checked' : ''}>
-                                                        <label class="form-check-label" for="billing_tax_${tax.id}">
-                                                            <strong>${tax.name}</strong><br>
-                                                            <small class="text-muted">${rate}% ${type}</small>
-                                                        </label>
-                                                    </div>
-                                                `;
-                                            }).join('')}
+                                        <div class="alert alert-info">
+                                            <i class="bi bi-info-circle me-2"></i>
+                                            <strong>Impuestos:</strong> Se aplicarán automáticamente según la configuración de cada producto
                                         </div>
                                     </div>
                                 </div>
@@ -2183,15 +2170,9 @@ async function finalizeBillingOrder(order) {
         // Validate required fields
         const paymentMethod = formData.get('payment_method');
         const ncfType = formData.get('ncf_type');
-        const taxTypeId = formData.get('tax_type_id');
         
         if (!paymentMethod) {
             showNotification('Debe seleccionar un método de pago', 'error');
-            return;
-        }
-        
-        if (!taxTypeId) {
-            showNotification('Debe seleccionar un tipo de impuesto', 'error');
             return;
         }
         
@@ -2222,13 +2203,12 @@ async function finalizeBillingOrder(order) {
         finalizeBtn.disabled = true;
         finalizeBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Procesando...';
         
-        // Prepare finalization data
+        // Prepare finalization data (taxes handled automatically by server)
         const finalizeData = {
             ncf_type: ncfType,
             payment_method: paymentMethod,
             client_name: formData.get('client_name') || '',
-            client_rnc: formData.get('client_rnc') || '',
-            tax_type_id: parseInt(taxTypeId)
+            client_rnc: formData.get('client_rnc') || ''
         };
         
         // Add cash payment details
@@ -2429,40 +2409,57 @@ async function loadSaleForEditing(saleData) {
     
     try {
         // Clear current cart
+        console.log('[POS] Clearing current cart...');
         cartManager.clear();
         
         // Set table selection if applicable
         if (saleData.table_id) {
+            console.log('[POS] Setting table ID to:', saleData.table_id);
             const tableSelect = document.getElementById('table-select');
             if (tableSelect) {
                 tableSelect.value = saleData.table_id;
+                console.log('[POS] Table set successfully');
+            } else {
+                console.warn('[POS] Table select element not found');
             }
         }
         
         // Set description if available
         if (saleData.description) {
+            console.log('[POS] Setting description to:', saleData.description);
             const descriptionInput = document.getElementById('order-description');
             if (descriptionInput) {
                 descriptionInput.value = saleData.description;
+                console.log('[POS] Description set successfully');
+            } else {
+                console.warn('[POS] Description input not found');
             }
         }
         
         // Add items to cart
+        console.log('[POS] Adding', saleData.items.length, 'items to cart...');
         for (const item of saleData.items) {
-            cartManager.addItemDirectly(
-                item.product_id,
-                item.product_name,
-                item.price,
-                item.quantity
-            );
+            console.log('[POS] Adding item:', item);
+            try {
+                cartManager.addItemDirectly(
+                    item.product_id,
+                    item.product_name,
+                    item.price,
+                    item.quantity
+                );
+                console.log('[POS] Item added successfully:', item.product_name);
+            } catch (itemError) {
+                console.error('[POS] Error adding item:', item, itemError);
+            }
         }
         
         // Update cart display
+        console.log('[POS] Updating cart display...');
         updateCartDisplay();
         
         showNotification(`Orden #${saleData.id} cargada para edición`, 'info');
         
-        console.log('[POS] Sale loaded successfully for editing');
+        console.log('[POS] Sale loaded successfully for editing. Cart has', cartManager.getItems().length, 'items');
         
     } catch (error) {
         console.error('[POS] Error loading sale for editing:', error);
@@ -2496,7 +2493,12 @@ async function initializePOS() {
     {% if edit_sale_data %}
     try {
         const editSaleData = {{ edit_sale_data | tojson }};
-        await loadSaleForEditing(editSaleData);
+        console.log('[POS] Edit sale data received:', editSaleData);
+        if (editSaleData && editSaleData.id) {
+            await loadSaleForEditing(editSaleData);
+        } else {
+            console.error('[POS] Invalid edit sale data:', editSaleData);
+        }
     } catch (error) {
         console.error('[POS] Error loading edit sale data:', error);
     }
