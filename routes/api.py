@@ -93,25 +93,59 @@ def get_categories():
     } for c in categories])
 
 
+# Variable global con tipos de impuesto predefinidos
+GLOBAL_TAX_TYPES = [
+    {
+        'id': 1,
+        'name': 'ITBIS',
+        'description': 'Impuesto sobre las Transferencias de Bienes Industrializados y Servicios',
+        'rate': 0.18,
+        'is_inclusive': False,
+        'is_percentage': True,
+        'display_order': 1
+    },
+    {
+        'id': 2,
+        'name': 'ITBIS Exento',
+        'description': 'Productos exentos de ITBIS (0%)',
+        'rate': 0.0,
+        'is_inclusive': False,
+        'is_percentage': True,
+        'display_order': 2
+    },
+    {
+        'id': 3,
+        'name': 'ITBIS Reducido',
+        'description': 'ITBIS reducido para lácteos, café, azúcares, cacao (16%)',
+        'rate': 0.16,
+        'is_inclusive': False,
+        'is_percentage': True,
+        'display_order': 3
+    },
+    {
+        'id': 4,
+        'name': 'Propina Legal',
+        'description': 'Propina legal del 10%',
+        'rate': 0.1,
+        'is_inclusive': False,
+        'is_percentage': True,
+        'display_order': 4
+    },
+    {
+        'id': 5,
+        'name': 'Sin Impuesto',
+        'description': 'Productos sin impuesto aplicable',
+        'rate': 0.0,
+        'is_inclusive': False,
+        'is_percentage': True,
+        'display_order': 5
+    }
+]
+
 @bp.route('/tax-types')
 def get_tax_types():
-    """Get all active tax types for frontend loading"""
-    # Allow access to tax types without strict authentication since it's configuration data
-    # This enables dropdowns to work properly in the PWA frontend
-    try:
-        tax_types = models.TaxType.query.filter_by(active=True).order_by(models.TaxType.display_order, models.TaxType.name).all()
-        
-        return jsonify([{
-            'id': t.id,
-            'name': t.name,
-            'description': t.description,
-            'rate': t.rate,
-            'is_inclusive': t.is_inclusive,
-            'is_percentage': t.is_percentage,
-            'display_order': t.display_order
-        } for t in tax_types])
-    except Exception as e:
-        return jsonify({'error': 'Error al cargar tipos de impuesto', 'message': str(e)}), 500
+    """Get all active tax types from global variable"""
+    return jsonify(GLOBAL_TAX_TYPES)
 
 
 @bp.route('/tables/<int:table_id>/status', methods=['PUT'])
