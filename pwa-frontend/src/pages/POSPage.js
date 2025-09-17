@@ -16,6 +16,7 @@ const POSPage = ({ user, onLogout }) => {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [selectedTaxType, setSelectedTaxType] = useState(null);
 
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
@@ -71,6 +72,7 @@ const POSPage = ({ user, onLogout }) => {
       setSelectedCustomer(null);
       setCustomerSearchTerm('');
       setShowCustomerDropdown(false);
+      setSelectedTaxType(null);
       queryClient.invalidateQueries('sales');
     },
     onError: (error) => {
@@ -202,7 +204,8 @@ const POSPage = ({ user, onLogout }) => {
 
   // Calculate totals
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const tax = subtotal * 0.18; // 18% ITBIS
+  const taxRate = selectedTaxType?.rate || 0.18; // Use selected tax rate or default 18% ITBIS
+  const tax = subtotal * taxRate;
   const total = subtotal + tax;
   const change = cashReceived ? Math.max(0, parseFloat(cashReceived) - total) : 0;
 
@@ -513,6 +516,25 @@ const POSPage = ({ user, onLogout }) => {
                   )}
                 </div>
               )}
+
+              <div className="tax-type-section">
+                <h5>Tipo de impuesto:</h5>
+                <select 
+                  className="form-control"
+                  value={selectedTaxType?.id || ''}
+                  onChange={(e) => {
+                    const taxType = taxTypes.find(t => t.id === parseInt(e.target.value));
+                    setSelectedTaxType(taxType);
+                  }}
+                >
+                  <option value="">Seleccione tipo de impuesto</option>
+                  {taxTypes.map(taxType => (
+                    <option key={taxType.id} value={taxType.id}>
+                      {taxType.name} ({(taxType.rate * 100).toFixed(0)}%)
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <div className="customer-info">
                 <h5>Información del cliente (opcional):</h5>
