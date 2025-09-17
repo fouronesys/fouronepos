@@ -132,19 +132,31 @@ def export_606():
     if not isinstance(user, User):
         return jsonify({'error': 'No autorizado'}), 401
     
-    data = request.get_json()
+    # Accept multiple input formats (JSON, form data, or query parameters)
+    data = request.get_json(silent=True) or request.form or request.args
     if not data:
         return jsonify({'error': 'Datos no proporcionados'}), 400
     
-    year = data.get('year')
-    month = data.get('month')
-    
-    if not year or not month:
-        return jsonify({'error': 'Año y mes son requeridos'}), 400
+    # Support both individual year/month and period format (YYYY-MM)
+    if data.get('period'):
+        try:
+            year, month = map(int, data['period'].split('-')[:2])
+        except (ValueError, AttributeError):
+            return jsonify({'error': 'Formato de período inválido. Use YYYY-MM'}), 400
+    else:
+        year = data.get('year')
+        month = data.get('month')
+        
+        if not year or not month:
+            return jsonify({'error': 'Año y mes son requeridos'}), 400
     
     try:
         year = int(year)
         month = int(month)
+        
+        # Validate month range
+        if not (1 <= month <= 12):
+            return jsonify({'error': 'Mes debe estar entre 1 y 12'}), 400
         
         # Date range for the month
         start_date = datetime(year, month, 1)
@@ -233,35 +245,50 @@ def export_606():
 @bp.route('/export/607', methods=['POST'])
 def export_607():
     """Export DGII 607 (Sales) CSV"""
-    print("[DEBUG DGII 607] Export 607 called")
+    current_app.logger.debug("[DEBUG DGII 607] Export 607 called")
     
     user = require_admin()
     if not isinstance(user, User):
-        print("[DEBUG DGII 607] User authorization failed")
+        current_app.logger.error("[DEBUG DGII 607] User authorization failed")
         return jsonify({'error': 'No autorizado'}), 401
     
-    print(f"[DEBUG DGII 607] User authorized: {user.username}")
+    current_app.logger.debug(f"[DEBUG DGII 607] User authorized: {user.username}")
     
-    data = request.get_json()
-    print(f"[DEBUG DGII 607] Request data: {data}")
+    # Accept multiple input formats (JSON, form data, or query parameters)
+    data = request.get_json(silent=True) or request.form or request.args
+    current_app.logger.debug(f"[DEBUG DGII 607] Request data: {data}")
     
     if not data:
-        print("[DEBUG DGII 607] No data provided")
+        current_app.logger.error("[DEBUG DGII 607] No data provided")
         return jsonify({'error': 'Datos no proporcionados'}), 400
     
-    year = data.get('year')
-    month = data.get('month')
+    # Support both individual year/month and period format (YYYY-MM)
+    if data.get('period'):
+        try:
+            year, month = map(int, data['period'].split('-')[:2])
+        except (ValueError, AttributeError):
+            current_app.logger.error("[DEBUG DGII 607] Invalid period format")
+            return jsonify({'error': 'Formato de período inválido. Use YYYY-MM'}), 400
+    else:
+        year = data.get('year')
+        month = data.get('month')
+        
+        if not year or not month:
+            current_app.logger.error("[DEBUG DGII 607] Missing year or month")
+            return jsonify({'error': 'Año y mes son requeridos'}), 400
     
-    print(f"[DEBUG DGII 607] Year: {year}, Month: {month}")
-    
-    if not year or not month:
-        print("[DEBUG DGII 607] Missing year or month")
-        return jsonify({'error': 'Año y mes son requeridos'}), 400
+    current_app.logger.debug(f"[DEBUG DGII 607] Year: {year}, Month: {month}")
     
     try:
         year = int(year)
         month = int(month)
-        print(f"[DEBUG DGII 607] Converted Year: {year}, Month: {month}")
+        
+        # Validate month range
+        if not (1 <= month <= 12):
+            current_app.logger.error("[DEBUG DGII 607] Invalid month range")
+            return jsonify({'error': 'Mes debe estar entre 1 y 12'}), 400
+            
+        current_app.logger.debug(f"[DEBUG DGII 607] Converted Year: {year}, Month: {month}")
         
         # Date range for the month
         start_date = datetime(year, month, 1)
@@ -271,14 +298,14 @@ def export_607():
             end_date = datetime(year, month + 1, 1)
         
         # Get sales for the period (only completed sales)
-        print(f"[DEBUG DGII 607] Querying sales from {start_date} to {end_date}")
+        current_app.logger.debug(f"[DEBUG DGII 607] Querying sales from {start_date} to {end_date}")
         sales = Sale.query.filter(
             Sale.created_at >= start_date,
             Sale.created_at < end_date,
             Sale.status == 'completed'
         ).all()
         
-        print(f"[DEBUG DGII 607] Found {len(sales)} sales")
+        current_app.logger.info(f"[DEBUG DGII 607] Found {len(sales)} sales")
         
         # Generate CSV
         output = io.StringIO()
@@ -286,11 +313,11 @@ def export_607():
         
         # Write header
         writer.writerow(DGII_607_HEADERS)
-        print("[DEBUG DGII 607] CSV header written")
+        current_app.logger.debug("[DEBUG DGII 607] CSV header written")
         
         # Write sales records
         for sale in sales:
-            print(f"[DEBUG DGII 607] Processing sale {sale.id}")
+            current_app.logger.debug(f"[DEBUG DGII 607] Processing sale {sale.id}")
             # Determine identification type based on customer RNC/Cédula
             if sale.customer_rnc and len(sale.customer_rnc) == 9:
                 tipo_id = '1'  # RNC
@@ -336,7 +363,7 @@ def export_607():
         # Generate filename
         filename = f"607_{year}_{month:02d}.csv"
         
-        print("[DEBUG DGII 607] CSV processing completed successfully")
+        current_app.logger.info("[DEBUG DGII 607] CSV processing completed successfully")
         
         # Return file data
         response_data = {
@@ -346,13 +373,11 @@ def export_607():
             'csv_data': csv_content,
             'message': f'Reporte 607 generado: {len(sales)} ventas para {calendar.month_name[month]} {year}'
         }
-        print(f"[DEBUG DGII 607] Response data prepared: {response_data['message']}")
+        current_app.logger.info(f"[DEBUG DGII 607] Response data prepared: {response_data['message']}")
         return jsonify(response_data)
         
     except Exception as e:
-        print(f"[DEBUG DGII 607] Exception occurred: {str(e)}")
-        import traceback
-        print(f"[DEBUG DGII 607] Traceback: {traceback.format_exc()}")
+        current_app.logger.exception(f"[DEBUG DGII 607] Exception occurred: {str(e)}")
         return jsonify({'error': f'Error generando reporte 607: {str(e)}'}), 400
 
 
@@ -456,8 +481,10 @@ def export_606_excel():
         ).join(Supplier).all()
         
         # Create Excel workbook
-        wb = openpyxl.Workbook()
+        wb = openpyxl.Workbook()  # Use default mode, not write_only
         ws = wb.active
+        if ws is None:
+            ws = wb.create_sheet('DGII 606')
         ws.title = f"DGII 606 - {calendar.month_name[month]} {year}"
         
         # Add title
@@ -550,8 +577,10 @@ def export_607_excel():
         ).all()
         
         # Create Excel workbook
-        wb = openpyxl.Workbook()
+        wb = openpyxl.Workbook()  # Use default mode, not write_only
         ws = wb.active
+        if ws is None:
+            ws = wb.create_sheet('DGII 607')
         ws.title = f"DGII 607 - {calendar.month_name[month]} {year}"
         
         # Add title and headers
