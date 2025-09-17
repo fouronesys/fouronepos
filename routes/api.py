@@ -2499,7 +2499,7 @@ def api_logout():
     })
 
 
-@bp.route('/csrf-token')
+@bp.route('/csrf')
 def get_csrf_token():
     """Get CSRF token for API requests"""
     from flask_wtf.csrf import generate_csrf
@@ -2511,3 +2511,183 @@ def get_csrf_token():
     except Exception as e:
         print(f"[ERROR] Failed to generate CSRF token: {str(e)}")
         return jsonify({'error': 'Error generando token CSRF'}), 500
+
+
+@bp.route('/sales/preview', methods=['POST'])
+def preview_sale_calculation():
+    """Preview sale tax calculations without creating records - server-side totals as source of truth"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    # Validate CSRF token
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No se proporcionaron datos'}), 400
+    
+    items = data.get('items', [])
+    apply_service_charge = data.get('apply_service_charge', False)
+    service_charge_rate = 0.10  # 10% standard tip rate in Dominican Republic
+    
+    if not items:
+        return jsonify({'error': 'Se requiere al menos un producto'}), 400
+    
+    try:
+        # Calculate totals using same logic as finalize_sale
+        subtotal_by_rate = {}
+        exclusive_tax_by_rate = {}
+        total_subtotal = 0
+        total_tax_included = 0
+        item_details = []
+        
+        # Process each item
+        for item_data in items:
+            product_id = item_data.get('product_id')
+            quantity = item_data.get('quantity', 1)
+            
+            if not product_id:
+                return jsonify({'error': 'product_id es requerido para cada item'}), 400
+            
+            try:
+                quantity = int(quantity)
+                if quantity <= 0:
+                    return jsonify({'error': 'La cantidad debe ser mayor a 0'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': 'La cantidad debe ser un número válido'}), 400
+            
+            # Get product
+            product = models.Product.query.get(product_id)
+            if not product:
+                return jsonify({'error': f'Producto {product_id} no encontrado'}), 404
+            
+            # Determine tax rate and inclusivity (same logic as add_sale_item)
+            frontend_tax_type_id = item_data.get('tax_type_id')
+            frontend_is_inclusive = item_data.get('is_inclusive')
+            
+            if frontend_tax_type_id:
+                # Use tax information explicitly provided by frontend
+                tax_type = None
+                for tt in models.TaxType.query.filter_by(active=True).all():
+                    if tt.id == frontend_tax_type_id:
+                        tax_type = {'rate': tt.rate, 'is_inclusive': tt.is_inclusive}
+                        break
+                
+                if tax_type:
+                    total_tax_rate = tax_type['rate']
+                    has_inclusive_tax = frontend_is_inclusive if frontend_is_inclusive is not None else tax_type['is_inclusive']
+                else:
+                    total_tax_rate = 0.18  # Default ITBIS 18%
+                    has_inclusive_tax = True
+            else:
+                # Get product's tax types for NEW TAX SYSTEM
+                product_tax_types = []
+                for product_tax in product.product_taxes:
+                    if product_tax.tax_type.active:
+                        product_tax_types.append({
+                            'rate': product_tax.tax_type.rate,
+                            'is_inclusive': product_tax.tax_type.is_inclusive
+                        })
+                
+                if product_tax_types:
+                    total_tax_rate = sum(tax['rate'] for tax in product_tax_types)
+                    has_inclusive_tax = any(tax['is_inclusive'] for tax in product_tax_types)
+                else:
+                    # Default fallback for fiscal compliance
+                    total_tax_rate = 0.18  # Default ITBIS 18%
+                    has_inclusive_tax = True
+            
+            # Calculate item totals
+            item_total = product.price * quantity
+            
+            if total_tax_rate not in subtotal_by_rate:
+                subtotal_by_rate[total_tax_rate] = 0
+            
+            item_subtotal = 0
+            item_tax_amount = 0
+            
+            if has_inclusive_tax and total_tax_rate > 0:
+                # Tax is included in the price
+                base_amount = item_total / (1 + total_tax_rate)
+                tax_amount = item_total - base_amount
+                subtotal_by_rate[total_tax_rate] += base_amount
+                total_subtotal += base_amount
+                total_tax_included += round(tax_amount, 2)
+                item_subtotal = base_amount
+                item_tax_amount = tax_amount
+            else:
+                # Tax is exclusive or no tax
+                subtotal_by_rate[total_tax_rate] += item_total
+                total_subtotal += item_total
+                item_subtotal = item_total
+                if total_tax_rate > 0:
+                    if total_tax_rate not in exclusive_tax_by_rate:
+                        exclusive_tax_by_rate[total_tax_rate] = 0
+                    exclusive_tax_by_rate[total_tax_rate] += item_total
+            
+            # Add item details for response
+            item_details.append({
+                'product_id': product_id,
+                'product_name': product.name,
+                'quantity': quantity,
+                'unit_price': product.price,
+                'total_price': item_total,
+                'tax_rate': total_tax_rate,
+                'is_tax_included': has_inclusive_tax,
+                'item_subtotal': round(item_subtotal, 2),
+                'item_tax_amount': round(item_tax_amount, 2)
+            })
+        
+        # Calculate service charge BEFORE exclusive taxes
+        service_charge_amount = 0
+        if apply_service_charge:
+            service_charge_amount = round(total_subtotal * service_charge_rate, 2)
+        
+        # Calculate exclusive taxes on tax base (subtotal + service charge)
+        tax_base = total_subtotal + service_charge_amount
+        total_tax_added = 0
+        
+        for rate, rate_subtotal in exclusive_tax_by_rate.items():
+            # Apply tax proportionally to items that have this rate
+            proportion = rate_subtotal / total_subtotal if total_subtotal > 0 else 0
+            tax_on_base = tax_base * proportion * rate
+            total_tax_added += round(tax_on_base, 2)
+            
+            # Update item details with exclusive tax amounts
+            for item in item_details:
+                if item['tax_rate'] == rate and not item['is_tax_included']:
+                    item_proportion = (item['total_price']) / rate_subtotal if rate_subtotal > 0 else 0
+                    item['item_tax_amount'] = round(tax_on_base * item_proportion, 2)
+        
+        # Final totals
+        final_subtotal = round(total_subtotal, 2)
+        final_tax_amount = round(total_tax_included + total_tax_added, 2)
+        final_service_charge = service_charge_amount
+        final_total = round(total_subtotal + total_tax_added + service_charge_amount, 2)
+        
+        return jsonify({
+            'success': True,
+            'preview': True,
+            'items': item_details,
+            'totals': {
+                'subtotal': final_subtotal,
+                'tax_amount': final_tax_amount,
+                'service_charge_amount': final_service_charge,
+                'total': final_total
+            },
+            'tax_breakdown': {
+                'included_taxes': round(total_tax_included, 2),
+                'exclusive_taxes': round(total_tax_added, 2),
+                'service_charge_rate': service_charge_rate if apply_service_charge else 0,
+                'tax_base': round(tax_base, 2) if exclusive_tax_by_rate else final_subtotal
+            }
+        })
+        
+    except Exception as e:
+        print(f"[ERROR] Sales preview calculation failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Error en cálculo de preview', 'details': str(e)}), 500

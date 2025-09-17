@@ -433,6 +433,87 @@ class ApiService {
     }
   }
 
+  async previewSaleCalculation(items, options = {}) {
+    try {
+      const payload = {
+        items: items,
+        apply_service_charge: options.applyServiceCharge || false
+      };
+      
+      const response = await this.axiosInstance.post('/sales/preview', payload);
+      return response.data;
+    } catch (error) {
+      if (!navigator.onLine) {
+        // For offline scenarios, we'll need to calculate locally
+        // This is a fallback to maintain functionality when offline
+        console.warn('🔄 Using offline tax calculation fallback');
+        return this.calculateTaxesOffline(items, options);
+      }
+      throw error;
+    }
+  }
+
+  // Offline fallback for tax calculations (simplified version)
+  calculateTaxesOffline(items, options = {}) {
+    let totalSubtotal = 0;
+    let totalTax = 0;
+    const processedItems = [];
+
+    items.forEach(item => {
+      const itemTotal = (item.unit_price || item.price || 0) * item.quantity;
+      const taxRate = item.tax_rate || 0.18; // Default ITBIS 18%
+      const isTaxIncluded = item.is_tax_included !== undefined ? item.is_tax_included : true;
+      
+      let itemSubtotal, itemTaxAmount;
+      
+      if (isTaxIncluded && taxRate > 0) {
+        itemSubtotal = itemTotal / (1 + taxRate);
+        itemTaxAmount = itemTotal - itemSubtotal;
+      } else {
+        itemSubtotal = itemTotal;
+        itemTaxAmount = taxRate > 0 ? itemTotal * taxRate : 0;
+      }
+      
+      totalSubtotal += itemSubtotal;
+      totalTax += itemTaxAmount;
+      
+      processedItems.push({
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price || item.price || 0,
+        total_price: itemTotal,
+        tax_rate: taxRate,
+        is_tax_included: isTaxIncluded,
+        item_subtotal: Math.round(itemSubtotal * 100) / 100,
+        item_tax_amount: Math.round(itemTaxAmount * 100) / 100
+      });
+    });
+
+    const serviceChargeAmount = options.applyServiceCharge ? 
+      Math.round(totalSubtotal * 0.10 * 100) / 100 : 0;
+    
+    const finalTotal = Math.round((totalSubtotal + totalTax + serviceChargeAmount) * 100) / 100;
+
+    return {
+      success: true,
+      preview: true,
+      offline: true,
+      items: processedItems,
+      totals: {
+        subtotal: Math.round(totalSubtotal * 100) / 100,
+        tax_amount: Math.round(totalTax * 100) / 100,
+        service_charge_amount: serviceChargeAmount,
+        total: finalTotal
+      },
+      tax_breakdown: {
+        included_taxes: Math.round(totalTax * 100) / 100,
+        exclusive_taxes: 0,
+        service_charge_rate: options.applyServiceCharge ? 0.10 : 0,
+        tax_base: Math.round(totalSubtotal * 100) / 100
+      }
+    };
+  }
+
   // Utility methods
   isOnline() {
     return navigator.onLine;
