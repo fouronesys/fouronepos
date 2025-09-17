@@ -1,0 +1,43 @@
+{% macro tax_type_select(field_id, label='Tipo de Impuesto', required=false, onchange='', include_modes=false, current_value='') %}
+<!-- 
+  Macro compartido para selector de tipo de impuesto
+  Alineado con la lógica del módulo de compras
+  
+  Parámetros:
+  - field_id: ID del campo (requerido)
+  - label: Etiqueta del campo (opcional, por defecto "Tipo de Impuesto")
+  - required: Si el campo es requerido (opcional, por defecto false)
+  - onchange: Función JavaScript a ejecutar en onChange (opcional)
+  - include_modes: Si incluir modos especiales como "Exento", "Uniforme" y "Por producto" (opcional, por defecto false)
+  - current_value: Valor actual seleccionado (opcional)
+-->
+
+<div class="mb-3">
+    <label for="{{ field_id }}" class="form-label config-label">
+        {{ label }}
+        {% if required %}<span class="text-danger">*</span>{% endif %}
+    </label>
+    <select class="form-select modern-input" 
+            id="{{ field_id }}" 
+            name="{{ field_id }}"
+            {% if required %}required{% endif %}
+            {% if onchange %}onchange="{{ onchange }}"{% endif %}>
+        
+        {% if include_modes %}
+        <!-- Modos especiales para POS alineados con módulo de compras -->
+        <option value="tax_exempt" data-mode="special" data-rate="0" data-inclusive="false">🚫 Exento de Impuestos</option>
+        <option value="uniform_tax" data-mode="special" data-rate="0.18" data-inclusive="false">📋 Impuesto Uniforme</option>
+        <option value="product_based" data-mode="special" data-rate="0.18" data-inclusive="true">📦 Por Producto (actual)</option>
+        <option disabled>────────────────</option>
+        {% endif %}
+        
+        <option value="">Cargando tipos de impuesto...</option>
+    </select>
+    
+    {% if include_modes %}
+    <small class="form-text text-muted">
+        Seleccione "Exento" para ventas sin impuesto, "Uniforme" para aplicar un tipo específico a toda la venta, o "Por Producto" para el comportamiento actual
+    </small>
+    {% endif %}
+</div>
+{% endmacro %}

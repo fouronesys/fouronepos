@@ -357,13 +357,14 @@
                 <!-- Tax Configuration Section -->
                 <div class="cart-config">
                     <div class="config-item">
-                        <label for="tax-type-select" class="config-label">
-                            <i class="bi bi-percent"></i>
-                            <span>Tipo de Impuesto</span>
-                        </label>
-                        <select class="modern-input" id="tax-type-select" onchange="updateTaxCalculation()">
-                            <option value="">Cargando tipos de impuesto...</option>
-                        </select>
+                        <i class="bi bi-percent"></i>
+                        {% from 'macros/tax_type_select.html' import tax_type_select %}
+                        {{ tax_type_select(
+                            field_id='tax-type-select',
+                            label='Tipo de Impuesto',
+                            include_modes=true,
+                            onchange='updateTaxCalculation()'
+                        ) }}
                     </div>
                 </div>
                 
