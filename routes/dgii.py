@@ -454,19 +454,33 @@ def export_606_excel():
     if not isinstance(user, User):
         return jsonify({'error': 'No autorizado'}), 401
     
-    data = request.get_json()
+    # Accept multiple input formats (JSON, form data, or query parameters)
+    data = request.get_json(silent=True) or request.form or request.args
     if not data:
         return jsonify({'error': 'Datos no proporcionados'}), 400
     
-    year = data.get('year')
-    month = data.get('month')
-    
-    if not year or not month:
-        return jsonify({'error': 'Año y mes son requeridos'}), 400
+    # Support both individual year/month and period format (YYYY-MM)
+    if data.get('period'):
+        try:
+            year, month = map(int, data['period'].split('-')[:2])
+        except (ValueError, AttributeError):
+            return jsonify({'error': 'Formato de período inválido. Use YYYY-MM'}), 400
+    else:
+        year = data.get('year')
+        month = data.get('month')
+        
+        if not year or not month:
+            return jsonify({'error': 'Año y mes son requeridos'}), 400
     
     try:
         year = int(year)
         month = int(month)
+        
+        # Validate month range
+        if not (1 <= month <= 12):
+            return jsonify({'error': 'Mes debe estar entre 1 y 12'}), 400
+            
+        current_app.logger.debug(f'DGII 606 Excel export started: {year}-{month:02d}')
         
         # Get purchases for the period
         start_date = datetime(year, month, 1)
@@ -481,11 +495,13 @@ def export_606_excel():
         ).join(Supplier).all()
         
         # Create Excel workbook
-        wb = openpyxl.Workbook()  # Use default mode, not write_only
+        wb = openpyxl.Workbook()
         ws = wb.active
         if ws is None:
             ws = wb.create_sheet('DGII 606')
+            wb.active = ws
         ws.title = f"DGII 606 - {calendar.month_name[month]} {year}"
+        current_app.logger.debug(f'Excel workbook created with {len(purchases)} purchases')
         
         # Add title
         ws.merge_cells('A1:P1')
@@ -551,6 +567,7 @@ def export_606_excel():
                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         
     except Exception as e:
+        current_app.logger.exception(f'Error generating Excel 606: {str(e)}')
         return jsonify({'error': f'Error generando Excel 606: {str(e)}'}), 400
 
 
@@ -561,13 +578,32 @@ def export_607_excel():
     if not isinstance(user, User):
         return jsonify({'error': 'No autorizado'}), 401
     
-    data = request.get_json()
-    year, month = data.get('year'), data.get('month')
-    if not year or not month:
-        return jsonify({'error': 'Año y mes son requeridos'}), 400
+    # Accept multiple input formats (JSON, form data, or query parameters)
+    data = request.get_json(silent=True) or request.form or request.args
+    if not data:
+        return jsonify({'error': 'Datos no proporcionados'}), 400
+    
+    # Support both individual year/month and period format (YYYY-MM)
+    if data.get('period'):
+        try:
+            year, month = map(int, data['period'].split('-')[:2])
+        except (ValueError, AttributeError):
+            return jsonify({'error': 'Formato de período inválido. Use YYYY-MM'}), 400
+    else:
+        year = data.get('year')
+        month = data.get('month')
+        
+        if not year or not month:
+            return jsonify({'error': 'Año y mes son requeridos'}), 400
     
     try:
         year, month = int(year), int(month)
+        
+        # Validate month range
+        if not (1 <= month <= 12):
+            return jsonify({'error': 'Mes debe estar entre 1 y 12'}), 400
+            
+        current_app.logger.debug(f'DGII 607 Excel export started: {year}-{month:02d}')
         start_date = datetime(year, month, 1)
         end_date = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
         
@@ -638,18 +674,32 @@ def export_607_pdf():
             current_app.logger.error(f"User auth failed: {type(user)}")
             return jsonify({'error': 'No autorizado'}), 401
         
-        data = request.get_json()
+        # Accept multiple input formats (JSON, form data, or query parameters)
+        data = request.get_json(silent=True) or request.form or request.args
         if not data:
             return jsonify({'error': 'Datos no proporcionados'}), 400
         
-        year = data.get('year')
-        month = data.get('month')
-        
-        if not year or not month:
-            return jsonify({'error': 'Año y mes son requeridos'}), 400
+        # Support both individual year/month and period format (YYYY-MM)
+        if data.get('period'):
+            try:
+                year, month = map(int, data['period'].split('-')[:2])
+            except (ValueError, AttributeError):
+                return jsonify({'error': 'Formato de período inválido. Use YYYY-MM'}), 400
+        else:
+            year = data.get('year')
+            month = data.get('month')
+            
+            if not year or not month:
+                return jsonify({'error': 'Año y mes son requeridos'}), 400
         
         year = int(year)
         month = int(month)
+        
+        # Validate month range
+        if not (1 <= month <= 12):
+            return jsonify({'error': 'Mes debe estar entre 1 y 12'}), 400
+            
+        current_app.logger.debug(f'DGII 607 PDF export started: {year}-{month:02d}')
         
         # Date range for the month
         start_date = datetime(year, month, 1)
@@ -717,18 +767,32 @@ def export_607_txt():
             current_app.logger.error(f"User auth failed: {type(user)}")
             return jsonify({'error': 'No autorizado'}), 401
         
-        data = request.get_json()
+        # Accept multiple input formats (JSON, form data, or query parameters)
+        data = request.get_json(silent=True) or request.form or request.args
         if not data:
             return jsonify({'error': 'Datos no proporcionados'}), 400
         
-        year = data.get('year')
-        month = data.get('month')
-        
-        if not year or not month:
-            return jsonify({'error': 'Año y mes son requeridos'}), 400
+        # Support both individual year/month and period format (YYYY-MM)
+        if data.get('period'):
+            try:
+                year, month = map(int, data['period'].split('-')[:2])
+            except (ValueError, AttributeError):
+                return jsonify({'error': 'Formato de período inválido. Use YYYY-MM'}), 400
+        else:
+            year = data.get('year')
+            month = data.get('month')
+            
+            if not year or not month:
+                return jsonify({'error': 'Año y mes son requeridos'}), 400
         
         year = int(year)
         month = int(month)
+        
+        # Validate month range
+        if not (1 <= month <= 12):
+            return jsonify({'error': 'Mes debe estar entre 1 y 12'}), 400
+            
+        current_app.logger.debug(f'DGII 607 TXT export started: {year}-{month:02d}')
         
         # Date range for the month
         start_date = datetime(year, month, 1)
