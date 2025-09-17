@@ -538,30 +538,36 @@ const POSPage = ({ user, onLogout }) => {
               )}
 
               <div className="tax-type-section">
-                <h5>Tipo de impuesto:</h5>
-                {loadingTaxTypes ? (
-                  <div className="form-control d-flex align-items-center">
-                    <LoadingSpinner size="sm" />
-                    <span className="ms-2">Cargando tipos de impuesto...</span>
-                  </div>
-                ) : (
-                  <select 
-                    className="form-control"
-                    value={String(selectedTaxType?.id || '')}
-                    onChange={(e) => {
-                      const taxType = taxTypes.find(t => String(t.id) === e.target.value);
-                      setSelectedTaxType(taxType);
-                    }}
-                  >
-                    <option value="">Seleccione tipo de impuesto</option>
-                    {taxTypes.map(taxType => (
-                      <option key={taxType.id} value={String(taxType.id)}>
-                        {taxType.name} ({((getRate(taxType) || 0) * 100).toFixed(0)}%)
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
+  <label className="form-label" htmlFor="tax-type-select">
+    Tipo de impuesto:
+  </label>
+  {loadingTaxTypes ? (
+    <div className="d-flex align-items-center" role="status" aria-live="polite">
+      <LoadingSpinner size="sm" />
+      <span className="ms-2">Cargando tipos de impuesto...</span>
+    </div>
+  ) : (
+    <select
+      id="tax-type-select"
+      className="form-control"
+      value={String(selectedTaxType?.id || '')}
+      onChange={(e) => {
+        const taxType = taxTypes.find(
+          (t) => String(t.id) === e.target.value
+        );
+        setSelectedTaxType(taxType || null);
+      }}
+    >
+      <option value="">Seleccione tipo de impuesto</option>
+      {taxTypes.map((taxType) => (
+        <option key={taxType.id} value={String(taxType.id)}>
+          {taxType.name} ({((getRate(taxType) || 0) * 100).toFixed(2)}%)
+        </option>
+      ))}
+    </select>
+  )}
+</div>
+  
 
               <div className="customer-info">
                 <h5>Información del cliente (opcional):</h5>
