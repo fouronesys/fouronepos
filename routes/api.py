@@ -74,7 +74,13 @@ def get_products():
         'name': p.name,
         'price': p.price,
         'stock': p.stock,
-        'category_id': p.category_id
+        'category_id': p.category_id,
+        'tax_types': [{
+            'id': pt.tax_type.id,
+            'name': pt.tax_type.name,
+            'rate': pt.tax_type.rate,
+            'is_inclusive': pt.tax_type.is_inclusive
+        } for pt in p.product_taxes] if p.product_taxes else []
     } for p in products])
 
 
@@ -93,69 +99,45 @@ def get_categories():
     } for c in categories])
 
 
-# Variable global con tipos de impuesto predefinidos
-GLOBAL_TAX_TYPES = [
-    {
-        'id': 1,
-        'name': 'ITBIS',
-        'description': 'Impuesto sobre las Transferencias de Bienes Industrializados y Servicios',
-        'rate': 0.18,
-        'is_inclusive': False,
-        'is_percentage': True,
-        'display_order': 1
-    },
-    {
-        'id': 2,
-        'name': 'ITBIS Exento',
-        'description': 'Productos exentos de ITBIS (0%)',
-        'rate': 0.0,
-        'is_inclusive': False,
-        'is_percentage': True,
-        'display_order': 2
-    },
-    {
-        'id': 3,
-        'name': 'ITBIS Reducido',
-        'description': 'ITBIS reducido para lácteos, café, azúcares, cacao (16%)',
-        'rate': 0.16,
-        'is_inclusive': False,
-        'is_percentage': True,
-        'display_order': 3
-    },
-    {
-        'id': 4,
-        'name': 'Propina Legal',
-        'description': 'Propina legal del 10%',
-        'rate': 0.1,
-        'is_inclusive': False,
-        'is_percentage': True,
-        'display_order': 4
-    },
-    {
-        'id': 5,
-        'name': 'Sin Impuesto',
-        'description': 'Productos sin impuesto aplicable',
-        'rate': 0.0,
-        'is_inclusive': False,
-        'is_percentage': True,
-        'display_order': 5
-    }
-]
+# REMOVED: GLOBAL_TAX_TYPES hardcoded list - now using database queries
 
 def get_tax_type_by_id(tax_type_id):
-    """Helper function to get tax type from global variable by ID"""
+    """Helper function to get tax type from database by ID"""
     if not tax_type_id:
         return None
     
-    for tax_type in GLOBAL_TAX_TYPES:
-        if tax_type['id'] == int(tax_type_id):
-            return tax_type
-    return None
+    tax_type = models.TaxType.query.filter_by(id=int(tax_type_id), active=True).first()
+    if not tax_type:
+        return None
+    
+    return {
+        'id': tax_type.id,
+        'name': tax_type.name,
+        'rate': tax_type.rate,
+        'is_inclusive': tax_type.is_inclusive,
+        'description': getattr(tax_type, 'description', ''),
+        'is_percentage': True,
+        'display_order': tax_type.id
+    }
 
 @bp.route('/tax-types')
 def get_tax_types():
-    """Get all active tax types from global variable"""
-    return jsonify(GLOBAL_TAX_TYPES)
+    """Get all active tax types from database (excluding non-product types)"""
+    # Get all active tax types, excluding 'Propina Legal' which is not a product tax
+    tax_types = models.TaxType.query.filter(
+        models.TaxType.active == True,
+        models.TaxType.name != 'Propina Legal'
+    ).all()
+    
+    return jsonify([{
+        'id': tax_type.id,
+        'name': tax_type.name,
+        'rate': tax_type.rate,
+        'is_inclusive': tax_type.is_inclusive,
+        'description': getattr(tax_type, 'description', ''),
+        'is_percentage': True,
+        'display_order': tax_type.id
+    } for tax_type in tax_types])
 
 
 @bp.route('/tables/<int:table_id>/status', methods=['PUT'])
@@ -652,13 +634,13 @@ def finalize_sale(sale_id):
         if change_amount is not None:
             sale.change_amount = change_amount
         
-        # Calculate totals by tax rate categories with support for included taxes
+        # Calculate totals with DR fiscal compliance (ITBIS over subtotal + service charge)
         subtotal_by_rate = {}
+        exclusive_tax_by_rate = {}  # Track exclusive tax rates for base calculation
         total_subtotal = 0
         total_tax_included = 0  # Tax that was already included in prices
-        total_tax_added = 0     # Tax that gets added to prices
         
-        # Group items by tax rate and calculate totals per category
+        # First pass: Calculate subtotal and identify tax rates
         for item in sale.sale_items:
             # Defensive fallback: if fields are NULL, use product's current values
             rate = item.tax_rate if item.tax_rate is not None else item.product.tax_rate
@@ -676,18 +658,29 @@ def finalize_sale(sale_id):
                 total_subtotal += base_amount
                 total_tax_included += round(tax_amount, 2)
             else:
-                # Tax is added to price (normal behavior) or no tax
+                # Tax is exclusive (added to price) or no tax
                 subtotal_by_rate[rate] += item.total_price
                 total_subtotal += item.total_price
                 if rate > 0:
-                    tax_amount = round(item.total_price * rate, 2)
-                    total_tax_added += tax_amount
+                    # Track exclusive tax rates and their subtotal amounts for later calculation
+                    if rate not in exclusive_tax_by_rate:
+                        exclusive_tax_by_rate[rate] = 0
+                    exclusive_tax_by_rate[rate] += item.total_price
         
-        # NEW: Calculate service charge (propina) if requested
+        # Calculate service charge (propina) BEFORE exclusive taxes per DR law
         service_charge_amount = 0
         if apply_service_charge:
-            # Apply service charge to subtotal (before adding exclusive taxes)
             service_charge_amount = round(total_subtotal * service_charge_rate, 2)
+        
+        # Calculate exclusive taxes on tax base (subtotal + service charge for DR compliance)
+        tax_base = total_subtotal + service_charge_amount
+        total_tax_added = 0
+        
+        for rate, rate_subtotal in exclusive_tax_by_rate.items():
+            # Apply tax proportionally to items that have this rate
+            proportion = rate_subtotal / total_subtotal if total_subtotal > 0 else 0
+            tax_on_base = tax_base * proportion * rate
+            total_tax_added += round(tax_on_base, 2)
         
         # Set sale totals
         sale.subtotal = round(total_subtotal, 2)

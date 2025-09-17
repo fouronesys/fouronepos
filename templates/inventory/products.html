@@ -177,13 +177,17 @@
                                 <input type="number" class="form-control" id="productPrice" step="0.01" min="0" required>
                             </div>
                             <div class="mb-3">
-                                <label for="productTaxRate" class="form-label">Tasa de Impuesto (ITBIS)</label>
-                                <select class="form-control" id="productTaxRate">
-                                    <option value="0">0% - Exento</option>
-                                    <option value="16">16% - Reducido (lácteos, café, azúcares, cacao)</option>
-                                    <option value="18" selected>18% - Estándar</option>
-                                </select>
-                                <div class="form-text">Seleccione la tasa de ITBIS aplicable según la normativa dominicana</div>
+                                <label class="form-label">Configuración de Impuestos</label>
+                                <div id="taxTypesContainer" class="tax-types-container">
+                                    <!-- Los tipos de impuestos se cargarán dinámicamente -->
+                                    <div class="d-flex align-items-center">
+                                        <div class="spinner-border spinner-border-sm me-2" role="status">
+                                            <span class="visually-hidden">Cargando...</span>
+                                        </div>
+                                        <span class="text-muted">Cargando tipos de impuestos...</span>
+                                    </div>
+                                </div>
+                                <div class="form-text">Seleccione los tipos de impuestos aplicables. Para productos exentos, seleccione "ITBIS Exento" o "Sin Impuesto"</div>
                             </div>
                             <div id="stockFields">
                                 <div class="mb-3">
@@ -247,6 +251,77 @@
 {% block scripts %}
 <script>
 let currentProductId = null;
+let taxTypes = [];
+
+// Load tax types on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadTaxTypes();
+});
+
+async function loadTaxTypes() {
+    try {
+        const response = await fetch('/api/tax-types');
+        const result = await response.json();
+        taxTypes = result || [];
+        
+        // Update the tax types container
+        updateTaxTypesContainer();
+    } catch (error) {
+        console.error('Error loading tax types:', error);
+        document.getElementById('taxTypesContainer').innerHTML = 
+            '<div class="alert alert-warning">Error al cargar tipos de impuestos</div>';
+    }
+}
+
+function updateTaxTypesContainer() {
+    const container = document.getElementById('taxTypesContainer');
+    if (!container) return;
+    
+    if (taxTypes.length === 0) {
+        container.innerHTML = '<div class="alert alert-warning">No hay tipos de impuestos disponibles</div>';
+        return;
+    }
+    
+    let html = '<div class="row">';
+    taxTypes.forEach((taxType, index) => {
+        const isDefaultSelected = taxType.name === 'ITBIS' || taxType.name === 'ITBIS Exclusivo';
+        html += `
+            <div class="col-md-6 mb-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="${taxType.id}" 
+                           id="taxType${taxType.id}" ${isDefaultSelected ? 'checked' : ''}>
+                    <label class="form-check-label" for="taxType${taxType.id}">
+                        <strong>${taxType.name}</strong> (${(taxType.rate * 100).toFixed(0)}%)
+                        ${taxType.description ? '<br><small class="text-muted">' + taxType.description + '</small>' : ''}
+                    </label>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+function getSelectedTaxTypes() {
+    const checkboxes = document.querySelectorAll('#taxTypesContainer input[type="checkbox"]:checked');
+    return Array.from(checkboxes).map(cb => parseInt(cb.value));
+}
+
+function setSelectedTaxTypes(taxTypeIds) {
+    // Clear all selections first
+    document.querySelectorAll('#taxTypesContainer input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+    });
+    
+    // Select the specified tax types
+    taxTypeIds.forEach(id => {
+        const checkbox = document.querySelector(`#taxTypesContainer input[value="${id}"]`);
+        if (checkbox) {
+            checkbox.checked = true;
+        }
+    });
+}
 
 function filterByCategory() {
     const categoryId = document.getElementById('categoryFilter').value;
@@ -266,19 +341,63 @@ function newProduct() {
     document.getElementById('productModalTitle').textContent = 'Nuevo Producto';
     document.getElementById('productForm').reset();
     document.getElementById('productType').value = 'inventariable';
-    document.getElementById('productTaxRate').value = '18';
     document.getElementById('productActive').checked = true;
+    
+    // Set default tax type to ITBIS standard
+    const defaultTaxType = taxTypes.find(t => t.name === 'ITBIS');
+    if (defaultTaxType) {
+        setSelectedTaxTypes([defaultTaxType.id]);
+    }
+    
     toggleStockFields();
 }
 
-function editProduct(productId) {
+async function editProduct(productId) {
     currentProductId = productId;
     document.getElementById('productModalTitle').textContent = 'Editar Producto';
     
-    // Here you would fetch product data and populate the form
-    // For now, just show the modal
-    const modal = new bootstrap.Modal(document.getElementById('productModal'));
-    modal.show();
+    try {
+        // Get CSRF token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+                         document.querySelector('input[name="csrf_token"]')?.value;
+        
+        const response = await fetch(`/inventory/api/products/${productId}`, {
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Error al cargar los datos del producto');
+        }
+        
+        const result = await response.json();
+        const product = result.product;
+        
+        // Populate form fields
+        document.getElementById('productName').value = product.name || '';
+        document.getElementById('productDescription').value = product.description || '';
+        document.getElementById('productCategory').value = product.category_id || '';
+        document.getElementById('productCost').value = product.cost || 0;
+        document.getElementById('productPrice').value = product.price || 0;
+        document.getElementById('productType').value = product.product_type || 'inventariable';
+        document.getElementById('productStock').value = product.stock || 0;
+        document.getElementById('productMinStock').value = product.min_stock || 5;
+        document.getElementById('productActive').checked = product.active !== false;
+        
+        // Set selected tax types
+        const taxTypeIds = (product.tax_types || []).map(tt => tt.id);
+        setSelectedTaxTypes(taxTypeIds);
+        
+        toggleStockFields();
+        
+        const modal = new bootstrap.Modal(document.getElementById('productModal'));
+        modal.show();
+        
+    } catch (error) {
+        console.error('Error loading product:', error);
+        alert('Error al cargar los datos del producto: ' + error.message);
+    }
 }
 
 function toggleStockFields() {
@@ -306,7 +425,7 @@ async function saveProduct() {
         category_id: parseInt(document.getElementById('productCategory').value),
         cost: parseFloat(document.getElementById('productCost').value || 0),
         price: parseFloat(document.getElementById('productPrice').value || 0),
-        tax_rate: parseFloat(document.getElementById('productTaxRate').value || 18) / 100,
+        tax_type_ids: getSelectedTaxTypes(),
         product_type: document.getElementById('productType').value,
         stock: document.getElementById('productType').value === 'inventariable' ? parseInt(document.getElementById('productStock').value || 0) : 0,
         min_stock: document.getElementById('productType').value === 'inventariable' ? parseInt(document.getElementById('productMinStock').value || 5) : 0,

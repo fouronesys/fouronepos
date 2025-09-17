@@ -282,6 +282,40 @@ def update_product(product_id):
         return jsonify({'error': str(e)}), 400
 
 
+@bp.route('/api/products/<int:product_id>', methods=['GET'])
+def get_product(product_id):
+    user = require_admin_or_manager()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    product = models.Product.query.get_or_404(product_id)
+    
+    # Get tax types for this product
+    tax_types = [{
+        'id': pt.tax_type.id,
+        'name': pt.tax_type.name,
+        'rate': pt.tax_type.rate,
+        'is_inclusive': pt.tax_type.is_inclusive
+    } for pt in product.product_taxes]
+    
+    return jsonify({
+        'success': True,
+        'product': {
+            'id': product.id,
+            'name': product.name,
+            'description': product.description,
+            'category_id': product.category_id,
+            'cost': product.cost,
+            'price': product.price,
+            'product_type': product.product_type,
+            'stock': product.stock,
+            'min_stock': product.min_stock,
+            'active': product.active,
+            'tax_types': tax_types
+        }
+    })
+
+
 @bp.route('/api/suppliers', methods=['POST'])
 def create_supplier():
     user = require_admin()

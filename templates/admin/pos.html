@@ -354,6 +354,20 @@
                     </div>
                 </div>
                 
+                <!-- Service Charge (Propina) Configuration -->
+                <div class="cart-config">
+                    <div class="config-item">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="apply-service-charge" onchange="updateTotals()">
+                            <label class="form-check-label" for="apply-service-charge">
+                                <i class="bi bi-percent me-2"></i>
+                                <strong>Aplicar propina del 10%</strong>
+                                <small class="d-block text-muted">Propina legal según normativa dominicana</small>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
                 
                 <!-- Cart Items -->
                 <div class="cart-items-container">
@@ -375,6 +389,10 @@
                     <div class="total-row tax-row" id="tax-row">
                         <span id="tax-label">ITBIS (18%)</span>
                         <span id="tax">RD$ 0.00</span>
+                    </div>
+                    <div class="total-row tax-row" id="service-charge-row" style="display: none;">
+                        <span>Propina (10%)</span>
+                        <span id="service-charge">RD$ 0.00</span>
                     </div>
                     <div class="total-row final-row">
                         <span>Total</span>
@@ -602,7 +620,7 @@ class CartManager {
     }
 
     // Add item to cart
-    addItem(productId, productName, price) {
+    addItem(productId, productName, price, taxTypes = []) {
         const existingItem = this.cart.find(item => item.id === productId);
         
         if (existingItem) {
@@ -613,7 +631,8 @@ class CartManager {
                 name: productName,
                 price: price,
                 quantity: 1,
-                addedAt: Date.now()
+                addedAt: Date.now(),
+                tax_types: taxTypes || []
             });
         }
         
@@ -676,13 +695,96 @@ class CartManager {
         return this.cart;
     }
 
-    // Get cart totals
+    // Get cart totals with automatic tax calculation per product (DR fiscal compliance)
     getTotals() {
-        const subtotal = this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        const taxRate = getCurrentTaxRate();
-        const tax = subtotal * taxRate;
-        const total = subtotal + tax;
-        return { subtotal, tax, total, taxRate };
+        let subtotal = 0;
+        let inclusiveTaxes = {}; // Taxes included in prices
+        let exclusiveTaxes = {}; // Taxes to be added to base
+        
+        // First pass: Calculate subtotal and identify tax types per product
+        this.cart.forEach(item => {
+            const itemSubtotal = item.price * item.quantity;
+            subtotal += itemSubtotal;
+            
+            // Process taxes for this product
+            if (item.tax_types && item.tax_types.length > 0) {
+                item.tax_types.forEach(taxType => {
+                    if (taxType.rate > 0) {
+                        const taxName = taxType.name || 'ITBIS';
+                        
+                        if (taxType.is_inclusive) {
+                            // Tax included in price - extract from item total
+                            const taxAmount = itemSubtotal - (itemSubtotal / (1 + taxType.rate));
+                            if (!inclusiveTaxes[taxName]) {
+                                inclusiveTaxes[taxName] = {
+                                    rate: taxType.rate,
+                                    amount: 0,
+                                    is_inclusive: true
+                                };
+                            }
+                            inclusiveTaxes[taxName].amount += taxAmount;
+                        } else {
+                            // Tax exclusive - will be calculated on tax base later
+                            if (!exclusiveTaxes[taxName]) {
+                                exclusiveTaxes[taxName] = {
+                                    rate: taxType.rate,
+                                    amount: 0,
+                                    is_inclusive: false,
+                                    itemsSubtotal: 0 // Track subtotal of items with this tax
+                                };
+                            }
+                            exclusiveTaxes[taxName].itemsSubtotal += itemSubtotal;
+                        }
+                    }
+                });
+            }
+            // If no tax_types, the product is tax exempt (no tax calculation)
+        });
+        
+        // Calculate service charge (propina) if enabled - applies before exclusive taxes per DR law
+        const applyServiceCharge = document.getElementById('apply-service-charge')?.checked || false;
+        const serviceChargeRate = 0.10; // 10%
+        const serviceCharge = applyServiceCharge ? subtotal * serviceChargeRate : 0;
+        
+        // Calculate exclusive taxes on tax base (subtotal + service charge for DR compliance)
+        const taxBase = subtotal + serviceCharge;
+        Object.keys(exclusiveTaxes).forEach(taxName => {
+            const taxInfo = exclusiveTaxes[taxName];
+            // Apply tax proportionally to items that have this tax type
+            const proportion = taxInfo.itemsSubtotal / subtotal;
+            taxInfo.amount = taxBase * proportion * taxInfo.rate;
+        });
+        
+        // Combine all taxes for breakdown and total calculation
+        const taxBreakdown = { ...inclusiveTaxes, ...exclusiveTaxes };
+        const totalInclusiveTax = Object.values(inclusiveTaxes).reduce((sum, tax) => sum + tax.amount, 0);
+        const totalExclusiveTax = Object.values(exclusiveTaxes).reduce((sum, tax) => sum + tax.amount, 0);
+        const totalTax = totalInclusiveTax + totalExclusiveTax;
+        
+        const total = subtotal + serviceCharge + totalExclusiveTax;
+        
+        // For backward compatibility, provide a single tax rate (average)
+        const averageTaxRate = subtotal > 0 ? totalTax / subtotal : 0;
+        
+        console.log('[POS] Tax calculation:', {
+            subtotal,
+            serviceCharge,
+            taxBase,
+            inclusiveTaxes,
+            exclusiveTaxes,
+            totalTax,
+            total
+        });
+        
+        return { 
+            subtotal, 
+            tax: totalTax, 
+            serviceCharge, 
+            total, 
+            taxRate: averageTaxRate, 
+            applyServiceCharge,
+            taxBreakdown  // Detailed tax information
+        };
     }
 
     // Setup service worker communication
@@ -827,9 +929,10 @@ async function loadProducts(categoryId) {
         container.innerHTML = '';
         
         products.forEach(product => {
+            const taxTypesJson = JSON.stringify(product.tax_types || []).replace(/'/g, "\\'");
             const productCard = `
                 <div class="col-md-4 col-lg-3 mb-3">
-                    <div class="product-card fade-in-up" onclick="addToCart(${product.id}, '${product.name}', ${product.price})">
+                    <div class="product-card fade-in-up" onclick="addToCart(${product.id}, '${product.name}', ${product.price}, ${taxTypesJson})">
                         <div class="card-body">
                             <div class="product-name">${product.name}</div>
                             <div class="product-price">RD$ ${product.price.toFixed(2)}</div>
@@ -949,8 +1052,8 @@ function populateTaxTypeDropdown() {
 
 
 // Add product to cart (using CartManager)
-function addToCart(productId, productName, price) {
-    cartManager.addItem(productId, productName, price);
+function addToCart(productId, productName, price, taxTypes = []) {
+    cartManager.addItem(productId, productName, price, taxTypes);
 }
 
 // Update cart display
@@ -997,19 +1100,45 @@ function updateCartDisplay() {
     
     document.getElementById('subtotal').textContent = `RD$ ${totals.subtotal.toFixed(2)}`;
     document.getElementById('tax').textContent = `RD$ ${totals.tax.toFixed(2)}`;
+    
+    // Update service charge display
+    const serviceChargeRow = document.getElementById('service-charge-row');
+    const serviceChargeElement = document.getElementById('service-charge');
+    if (totals.applyServiceCharge && totals.serviceCharge > 0) {
+        serviceChargeRow.style.display = 'flex';
+        serviceChargeElement.textContent = `RD$ ${totals.serviceCharge.toFixed(2)}`;
+    } else {
+        serviceChargeRow.style.display = 'none';
+    }
+    
     document.getElementById('total').textContent = `RD$ ${totals.total.toFixed(2)}`;
     
-    // Update tax label based on selected type
-    const taxRate = totals.taxRate || getCurrentTaxRate();
+    // Update tax label based on actual tax breakdown
     const taxLabel = document.getElementById('tax-label');
-    if (taxLabel) {
-        if (taxRate === 0) {
+    const taxRow = document.getElementById('tax-row');
+    
+    if (taxLabel && taxRow) {
+        const taxBreakdown = totals.taxBreakdown || {};
+        const taxTypes = Object.keys(taxBreakdown);
+        
+        if (totals.tax === 0 || taxTypes.length === 0) {
+            // No taxes applied - show "Sin impuestos"
             taxLabel.textContent = 'Sin impuestos';
-            document.getElementById('tax-row').style.display = 'none';
+            taxRow.style.display = 'none';
+        } else if (taxTypes.length === 1) {
+            // Single tax type - show specific type with percentage
+            const taxType = taxTypes[0];
+            const percentage = Math.round(taxBreakdown[taxType].rate * 100);
+            taxLabel.textContent = `${taxType} (${percentage}%)`;
+            taxRow.style.display = 'flex';
         } else {
-            const percentage = Math.round(taxRate * 100);
-            taxLabel.textContent = `ITBIS (${percentage}%)`;
-            document.getElementById('tax-row').style.display = 'flex';
+            // Multiple tax types - show "Impuestos" with average percentage
+            const averagePercentage = Math.round(totals.taxRate * 100);
+            taxLabel.textContent = `Impuestos (${averagePercentage}% prom.)`;
+            taxRow.style.display = 'flex';
+            
+            // Add a tooltip or detailed breakdown in console for debugging
+            console.log('[POS] Tax breakdown:', taxBreakdown);
         }
     }
     
@@ -1037,7 +1166,13 @@ function clearCart() {
     cartManager.clear();
     document.getElementById('table-select').value = '';
     document.getElementById('ncf-type-select').value = 'consumo';
+    document.getElementById('apply-service-charge').checked = false; // Reset service charge
     toggleClientInfo(); // Reset client info section
+}
+
+// Update totals when service charge checkbox changes
+function updateTotals() {
+    updateCartDisplay();
 }
 
 // Show notification to user
@@ -1185,7 +1320,8 @@ function processSale() {
             ncf_type: ncfType,
             tax_rate: taxType.rate,
             tax_type_id: taxType.id,
-            tax_is_inclusive: taxType.is_inclusive
+            tax_is_inclusive: taxType.is_inclusive,
+            apply_service_charge: document.getElementById('apply-service-charge').checked
         };
         
         // Add cash payment details if paying with cash
