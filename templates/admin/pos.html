@@ -929,10 +929,10 @@ async function loadProducts(categoryId) {
         container.innerHTML = '';
         
         products.forEach(product => {
-            const taxTypesJson = JSON.stringify(product.tax_types || []).replace(/'/g, "\\'");
+            const taxTypesBase64 = btoa(JSON.stringify(product.tax_types || []));
             const productCard = `
                 <div class="col-md-4 col-lg-3 mb-3">
-                    <div class="product-card fade-in-up" onclick="addToCart(${product.id}, '${product.name}', ${product.price}, ${taxTypesJson})">
+                    <div class="product-card fade-in-up" onclick="addToCart(${product.id}, '${product.name.replace(/'/g, "\\'")}', ${product.price}, '${taxTypesBase64}')"
                         <div class="card-body">
                             <div class="product-name">${product.name}</div>
                             <div class="product-price">RD$ ${product.price.toFixed(2)}</div>
@@ -1053,27 +1053,67 @@ function populateTaxTypeDropdown() {
 
 // Add product to cart (using CartManager)
 function addToCart(productId, productName, price, taxTypes = []) {
+    console.log('[CART DEBUG] 🛒 Intentando añadir producto al carrito:', {
+        productId: productId,
+        productName: productName,
+        productPrice: price,
+        productTaxTypes: taxTypes,
+        taxTypesType: typeof taxTypes,
+        timestamp: new Date().toISOString()
+    });
+
     try {
-        // Handle both array and JSON string inputs for tax_types
+        // Handle both array, JSON string, and base64 encoded inputs for tax_types
         let parsedTaxTypes = taxTypes;
         if (typeof taxTypes === 'string') {
+            console.log('[CART DEBUG] 🔄 Parseando tax_types desde string:', taxTypes);
             try {
-                parsedTaxTypes = JSON.parse(taxTypes);
+                // Try to decode as base64 first
+                const decodedTaxTypes = atob(taxTypes);
+                parsedTaxTypes = JSON.parse(decodedTaxTypes);
+                console.log('[CART DEBUG] ✅ Tax_types decodificados desde base64:', parsedTaxTypes);
             } catch (e) {
-                console.warn('[POS] Failed to parse tax_types, using empty array:', e);
-                parsedTaxTypes = [];
+                console.log('[CART DEBUG] 🔄 No es base64, intentando JSON directo...');
+                try {
+                    parsedTaxTypes = JSON.parse(taxTypes);
+                    console.log('[CART DEBUG] ✅ Tax_types parseados como JSON directo:', parsedTaxTypes);
+                } catch (e2) {
+                    console.warn('[CART DEBUG] ⚠️ Failed to parse tax_types, using empty array:', e2);
+                    parsedTaxTypes = [];
+                }
             }
         }
         
         // Ensure it's an array
         if (!Array.isArray(parsedTaxTypes)) {
+            console.log('[CART DEBUG] 🔄 Convirtiendo tax_types a array:', parsedTaxTypes);
             parsedTaxTypes = [];
         }
+
+        console.log('[CART DEBUG] 📊 Estado del carrito antes de añadir:');
+        const cartItemsBefore = cartManager.getItems();
+        console.log('[CART DEBUG] 📊 Items en carrito:', cartItemsBefore.length, cartItemsBefore);
+
+        console.log('[CART DEBUG] ➕ Llamando cartManager.addItem con:', {
+            productId, productName, price, parsedTaxTypes
+        });
         
         cartManager.addItem(productId, productName, price, parsedTaxTypes);
+
+        console.log('[CART DEBUG] 📊 Estado del carrito después de añadir:');
+        const cartItemsAfter = cartManager.getItems();
+        console.log('[CART DEBUG] 📊 Items en carrito:', cartItemsAfter.length, cartItemsAfter);
+
+        console.log('[CART DEBUG] 🎉 Producto añadido exitosamente:', productName);
         
     } catch (error) {
-        console.error('[POS] Error adding product to cart:', error);
+        console.error('[CART DEBUG] ❌ Error adding product to cart:', {
+            error: error,
+            errorMessage: error.message,
+            errorStack: error.stack,
+            productId: productId,
+            productName: productName
+        });
         showNotification(`Error agregando producto al carrito: ${error.message}`, 'error');
     }
 }
@@ -2390,8 +2430,12 @@ async function initializePOS() {
     
     // Check if we're editing an existing sale
     {% if edit_sale_data %}
-    const editSaleData = {{ edit_sale_data | tojson }};
-    await loadSaleForEditing(editSaleData);
+    try {
+        const editSaleData = {{ edit_sale_data | tojson }};
+        await loadSaleForEditing(editSaleData);
+    } catch (error) {
+        console.error('[POS] Error loading edit sale data:', error);
+    }
     {% endif %}
     
     // Load products for the first category (default)
@@ -3372,12 +3416,16 @@ function fillCustomerInfo() {
 // Handle automatic cash opening modal when flag is set
 {% if show_cash_opening_modal %}
 document.addEventListener('DOMContentLoaded', function() {
-    // Show cash opening modal after page load
-    setTimeout(() => {
-        {% if cash_register %}
-        showOpenCashModal('{{ cash_register.name }}');
-        {% endif %}
-    }, 500); // Small delay to ensure page is fully loaded
+    try {
+        // Show cash opening modal after page load
+        setTimeout(() => {
+            {% if cash_register %}
+            showOpenCashModal('{{ cash_register.name }}');
+            {% endif %}
+        }, 500); // Small delay to ensure page is fully loaded
+    } catch (error) {
+        console.error('[POS] Error showing cash opening modal:', error);
+    }
 });
 {% endif %}
 </script>
