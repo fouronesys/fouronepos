@@ -1,0 +1,63 @@
+# Excluir archivos sensibles y datos de desarrollo del contenedor Docker
+
+# Archivos de recibos reales (contienen datos sensibles)
+static/receipts/
+static/receipts_output/
+
+# Archivos de desarrollo y temporales
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.coverage
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Archivos de entorno local
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Dependencias de Node.js (no necesarias en el contenedor de producción)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos de Git
+.git/
+.gitignore
+
+# Archivos de documentación de desarrollo
+*.md
+!CAPROVER_DEPLOYMENT.md
+
+# Assets attachados que pueden contener datos sensibles
+attached_assets/
+
+# Archivos de base de datos local
+*.db
+*.sqlite
+*.sqlite3
+
+# Archivos de backup y temporales
+*.bak
+*.tmp
+temp/
+tmp/
+
+# Android build (si no se necesita en producción)
+android-apk/
