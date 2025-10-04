@@ -1645,6 +1645,7 @@ function assignToTable() {
         }
         clearCart();
         loadTables(); // Refresh table list
+        loadPendingOrders(); // Update pending orders counter
     })
     .catch(error => {
         console.error('[DEBUG ASSIGN] Full error object:', error);
