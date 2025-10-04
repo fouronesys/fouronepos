@@ -1010,13 +1010,30 @@ async function loadProducts(categoryId) {
         
         products.forEach(product => {
             const taxTypesBase64 = btoa(JSON.stringify(product.tax_types || []));
+            
+            // Determine stock status
+            let stockBadge = '';
+            let isDisabled = false;
+            let cardClass = 'product-card fade-in-up';
+            
+            if (product.stock <= 0) {
+                stockBadge = '<span class="badge bg-danger">Agotado</span>';
+                isDisabled = true;
+                cardClass += ' product-disabled';
+            } else if (product.stock <= 5) {
+                stockBadge = `<span class="badge bg-warning text-dark">Stock: ${product.stock} ⚠️</span>`;
+            } else {
+                stockBadge = `<span class="badge bg-success">Stock: ${product.stock} ✓</span>`;
+            }
+            
             const productCard = `
                 <div class="col-md-4 col-lg-3 mb-3">
-                    <div class="product-card fade-in-up" onclick="addToCart(${product.id}, '${product.name.replace(/'/g, "\\'")}', ${product.price}, '${taxTypesBase64}')"
+                    <div class="${cardClass}" ${isDisabled ? '' : `onclick="addToCart(${product.id}, '${product.name.replace(/'/g, "\\'")}', ${product.price}, '${taxTypesBase64}')"`}
+                        style="${isDisabled ? 'opacity: 0.5; cursor: not-allowed;' : ''}">
                         <div class="card-body">
                             <div class="product-name">${product.name}</div>
                             <div class="product-price">RD$ ${product.price.toFixed(2)}</div>
-                            <small class="opacity-75">Stock: ${product.stock}</small>
+                            <div class="mt-2">${stockBadge}</div>
                         </div>
                     </div>
                 </div>
