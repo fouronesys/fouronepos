@@ -313,8 +313,8 @@ def add_sale_item(sale_id):
             return jsonify({'error': 'Venta no encontrada'}), 404
         
         # CRITICAL: Re-check sale status after acquiring lock (prevents post-finalization mutations)
-        if sale.status != 'pending':
-            return jsonify({'error': 'Solo se pueden modificar ventas pendientes'}), 400
+        if sale.status not in ['pending', 'tab_open']:
+            return jsonify({'error': 'Solo se pueden modificar ventas pendientes o tabs abiertos'}), 400
         
         # Lock product to ensure consistent stock validation
         product = db.session.query(models.Product).filter_by(id=data['product_id']).with_for_update().first()
@@ -903,9 +903,9 @@ def remove_sale_item(sale_id, item_id):
             if not sale_item:
                 raise ValueError('Producto no encontrado en la venta')
             
-            # Only allow removing items from pending sales
-            if sale.status != 'pending':
-                raise ValueError('Solo se pueden modificar ventas pendientes')
+            # Only allow removing items from pending sales or open tabs
+            if sale.status not in ['pending', 'tab_open']:
+                raise ValueError('Solo se pueden modificar ventas pendientes o tabs abiertos')
             
             # Remove item and update totals
             item_total = sale_item.total_price
@@ -954,9 +954,9 @@ def update_item_quantity(sale_id, item_id):
             if not sale_item:
                 raise ValueError('Producto no encontrado en la venta')
             
-            # Only allow modifying pending sales
-            if sale.status != 'pending':
-                raise ValueError('Solo se pueden modificar ventas pendientes')
+            # Only allow modifying pending sales or open tabs
+            if sale.status not in ['pending', 'tab_open']:
+                raise ValueError('Solo se pueden modificar ventas pendientes o tabs abiertos')
             
             # Check stock availability
             product = sale_item.product
@@ -1083,7 +1083,7 @@ def update_kitchen_status(sale_id):
         if not sale:
             return jsonify({'error': 'Venta no encontrada'}), 404
         
-        # Only allow updating order status for pending sales
+        # Only allow updating order status for pending sales (tabs don't use kitchen workflow)
         if sale.status != 'pending':
             return jsonify({'error': 'Solo se puede actualizar el estado de pedidos pendientes'}), 400
         
@@ -2968,93 +2968,6 @@ def get_tab_details(tab_id):
     except Exception as e:
         logger.error(f"Error fetching tab details: {e}")
         return jsonify({'error': 'Error al obtener detalles del tab', 'details': str(e)}), 500
-
-
-@bp.route('/tabs/<int:tab_id>/add-item', methods=['POST'])
-def add_item_to_tab(tab_id):
-    """Add an item to an existing tab with stock validation"""
-    user = require_login()
-    if not isinstance(user, models.User):
-        return user
-    
-    csrf_error = validate_csrf_token()
-    if csrf_error:
-        return csrf_error
-    
-    try:
-        tab = models.Sale.query.get(tab_id)
-        
-        if not tab:
-            return jsonify({'error': 'Tab no encontrado'}), 404
-        
-        if tab.status != 'tab_open':
-            return jsonify({'error': 'Este tab no está abierto'}), 400
-        
-        data = request.get_json()
-        product_id = data.get('product_id')
-        quantity = data.get('quantity', 1)
-        
-        if not product_id or quantity < 1:
-            return jsonify({'error': 'Producto y cantidad son requeridos'}), 400
-        
-        # Get product with lock for update to prevent race conditions
-        product = models.Product.query.with_for_update().get(product_id)
-        
-        if not product:
-            return jsonify({'error': 'Producto no encontrado'}), 404
-        
-        if not product.active:
-            return jsonify({'error': 'Producto no está activo'}), 400
-        
-        # Validate stock for inventoried products
-        if product.product_type == 'inventariable':
-            if product.stock < quantity:
-                return jsonify({
-                    'error': f'Stock insuficiente. Disponible: {product.stock}',
-                    'available_stock': product.stock
-                }), 400
-            
-            # Reduce stock
-            product.stock -= quantity
-        
-        # Calculate tax for this product
-        product_tax_amount = 0
-        for pt in product.product_taxes:
-            if pt.tax_type.is_inclusive:
-                base_price = product.price / (1 + pt.tax_type.rate)
-                product_tax_amount += (product.price - base_price) * quantity
-            else:
-                product_tax_amount += product.price * pt.tax_type.rate * quantity
-        
-        # Create sale item
-        sale_item = models.SaleItem(
-            sale_id=tab.id,
-            product_id=product.id,
-            quantity=quantity,
-            unit_price=product.price,
-            total_price=product.price * quantity,
-            tax_amount=round(product_tax_amount, 2)
-        )
-        
-        db.session.add(sale_item)
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': f'{product.name} agregado al tab',
-            'item': {
-                'id': sale_item.id,
-                'product_name': product.name,
-                'quantity': quantity,
-                'unit_price': product.price,
-                'total_price': sale_item.total_price
-            }
-        })
-        
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error adding item to tab: {e}")
-        return jsonify({'error': 'Error al agregar item al tab', 'details': str(e)}), 500
 
 
 @bp.route('/tabs/<int:tab_id>/close', methods=['POST'])

@@ -17,11 +17,16 @@
             <div class="card">
                 <div class="card-header">
                     <div class="d-flex justify-content-between align-items-center">
+                        {% if is_tab %}
+                        <h5><i class="bi bi-receipt-cutoff"></i> Tab Abierto</h5>
+                        <span class="badge bg-info">{{ current_sale.customer_name }}</span>
+                        {% else %}
                         <h5><i class="bi bi-clipboard-check"></i> Pedido Actual</h5>
                         {% if current_sale %}
                         <span class="badge bg-warning">En Progreso</span>
                         {% else %}
                         <span class="badge bg-success">Nueva Mesa</span>
+                        {% endif %}
                         {% endif %}
                     </div>
                 </div>
@@ -69,22 +74,34 @@
                     <div class="row mt-3">
                         <div class="col-md-6">
                             <div class="d-grid gap-2">
+                                {% if not is_tab %}
                                 <button class="btn btn-info btn-touch" onclick="sendToKitchen()">
                                     <i class="bi bi-send"></i> Enviar a Cocina
                                 </button>
+                                {% endif %}
                                 <button class="btn btn-danger btn-touch" onclick="cancelTable()">
-                                    <i class="bi bi-x-circle"></i> Cancelar Pedido
+                                    <i class="bi bi-x-circle"></i> Cancelar {{ 'Tab' if is_tab else 'Pedido' }}
                                 </button>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="card bg-light">
                                 <div class="card-body text-center">
-                                    <h6>Total del Pedido</h6>
+                                    <h6>Total {{ 'del Tab' if is_tab else 'del Pedido' }}</h6>
+                                    {% if is_tab %}
+                                    <h4 class="text-primary" id="tab-total">RD$ {{ "%.2f"|format(current_sale.sale_items|sum(attribute='total_price')) }}</h4>
+                                    {% else %}
                                     <h4 class="text-primary">RD$ {{ "%.2f"|format(current_sale.total) }}</h4>
+                                    {% endif %}
+                                    {% if is_tab %}
+                                    <button class="btn btn-info btn-touch w-100" onclick="closeTab()">
+                                        <i class="bi bi-cash-stack"></i> Cerrar Tab y Cobrar
+                                    </button>
+                                    {% else %}
                                     <button class="btn btn-success btn-touch w-100" onclick="closeTable()">
                                         <i class="bi bi-check-circle"></i> Cerrar Mesa
                                     </button>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
@@ -140,6 +157,8 @@
 <script>
 let currentSale = {% if current_sale %}{{ current_sale.id }}{% else %}null{% endif %};
 const tableId = {{ table.id }};
+const isTab = {% if is_tab %}true{% else %}false{% endif %};
+const csrfToken = "{{ csrf_token() }}";
 
 // Load products for category
 function loadWaiterProducts(categoryId) {
@@ -222,7 +241,7 @@ async function addProductToOrder(productId, productName, price) {
         }
     }
     
-    // Add item to sale
+    // Add item to sale (works for both regular sales and tabs)
     try {
         const response = await fetch(`/api/sales/${currentSale}/items`, {
             method: 'POST',
@@ -235,14 +254,17 @@ async function addProductToOrder(productId, productName, price) {
             })
         });
         
+        const data = await response.json();
+        
         if (response.ok) {
             // Reload page to show updated order
             location.reload();
         } else {
-            alert('Error agregando producto');
+            alert(data.error || 'Error agregando producto');
         }
     } catch (error) {
         alert('Error de conexión');
+        console.error('Add product error:', error);
     }
 }
 
@@ -553,6 +575,41 @@ async function removeItem(itemId) {
         } catch (error) {
             alert('Error de conexión');
             console.error('Remove item error:', error);
+        }
+    }
+}
+
+// Close tab and prepare for payment
+async function closeTab() {
+    if (!currentSale) {
+        alert('No hay tab abierto');
+        return;
+    }
+    
+    if (confirm('¿Confirmas cerrar el tab y enviar a caja para cobrar?')) {
+        try {
+            const response = await fetch(`/api/tabs/${currentSale}/close`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    csrf_token: csrfToken
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                alert(`Tab cerrado. Total: RD$ ${data.total.toFixed(2)}\n\nEnvía al cliente a caja para pagar.`);
+                window.location.href = "{{ url_for('waiter.tables') }}";
+            } else {
+                alert(data.error || 'Error cerrando tab');
+            }
+        } catch (error) {
+            alert('Error de conexión');
+            console.error('Close tab error:', error);
         }
     }
 }
