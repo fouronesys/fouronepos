@@ -279,7 +279,7 @@ def create_category():
     
     # Validate CSRF token
     if not validate_csrf_token():
-        return redirect(url_for('inventory.products'))
+        return redirect(url_for('admin.products'))
     
     try:
         name = request.form['name'].strip()
@@ -287,13 +287,13 @@ def create_category():
         
         if not name:
             flash('El nombre de la categoría es obligatorio', 'error')
-            return redirect(url_for('inventory.products'))
+            return redirect(url_for('admin.products'))
         
         # Check if name already exists
         existing_category = models.Category.query.filter_by(name=name, active=True).first()
         if existing_category:
             flash('Ya existe una categoría con ese nombre', 'error')
-            return redirect(url_for('inventory.products'))
+            return redirect(url_for('admin.products'))
         
         new_category = models.Category()
         new_category.name = name
@@ -309,7 +309,7 @@ def create_category():
         db.session.rollback()
         flash(f'Error al crear categoría: {str(e)}', 'error')
     
-    return redirect(url_for('inventory.products'))
+    return redirect(url_for('admin.products'))
 
 @bp.route('/categories/<int:category_id>/edit', methods=['POST'])
 def edit_category(category_id):
@@ -319,7 +319,7 @@ def edit_category(category_id):
     
     # Validate CSRF token
     if not validate_csrf_token():
-        return redirect(url_for('inventory.products'))
+        return redirect(url_for('admin.products'))
     
     try:
         category = models.Category.query.get_or_404(category_id)
@@ -329,7 +329,7 @@ def edit_category(category_id):
         
         if not name:
             flash('El nombre de la categoría es obligatorio', 'error')
-            return redirect(url_for('inventory.products'))
+            return redirect(url_for('admin.products'))
         
         # Check if name already exists (excluding current category)
         existing_category = models.Category.query.filter(
@@ -339,7 +339,7 @@ def edit_category(category_id):
         ).first()
         if existing_category:
             flash('Ya existe una categoría con ese nombre', 'error')
-            return redirect(url_for('inventory.products'))
+            return redirect(url_for('admin.products'))
         
         category.name = name
         category.description = description
@@ -352,7 +352,7 @@ def edit_category(category_id):
         db.session.rollback()
         flash(f'Error al actualizar categoría: {str(e)}', 'error')
     
-    return redirect(url_for('inventory.products'))
+    return redirect(url_for('admin.products'))
 
 @bp.route('/categories/<int:category_id>/delete', methods=['POST'])
 def delete_category(category_id):
@@ -362,7 +362,7 @@ def delete_category(category_id):
     
     # Validate CSRF token
     if not validate_csrf_token():
-        return redirect(url_for('inventory.products'))
+        return redirect(url_for('admin.products'))
     
     try:
         category = models.Category.query.get_or_404(category_id)
@@ -371,7 +371,7 @@ def delete_category(category_id):
         products_count = models.Product.query.filter_by(category_id=category_id, active=True).count()
         if products_count > 0:
             flash(f'No se puede eliminar la categoría porque tiene {products_count} productos asociados', 'error')
-            return redirect(url_for('inventory.products'))
+            return redirect(url_for('admin.products'))
         
         category.active = False
         db.session.commit()
@@ -382,7 +382,7 @@ def delete_category(category_id):
         db.session.rollback()
         flash(f'Error al eliminar categoría: {str(e)}', 'error')
     
-    return redirect(url_for('inventory.products'))
+    return redirect(url_for('admin.products'))
 
 
 # Table Management Routes  

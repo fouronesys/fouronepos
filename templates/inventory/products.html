@@ -10,50 +10,9 @@
             <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary me-2">
                 <i class="bi bi-arrow-left"></i> Volver
             </a>
-            <button class="btn btn-success btn-touch me-2" data-bs-toggle="modal" data-bs-target="#categoryModal" onclick="newCategory()">
-                <i class="bi bi-tags"></i> Nueva Categoría
-            </button>
             <button class="btn btn-primary btn-touch" data-bs-toggle="modal" data-bs-target="#productModal" onclick="newProduct()">
                 <i class="bi bi-plus-circle"></i> Nuevo Producto
             </button>
-        </div>
-    </div>
-
-    <!-- Categories Section -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5><i class="bi bi-tags"></i> Categorías</h5>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                {% for category in categories %}
-                <div class="col-md-3 mb-2">
-                    <div class="card border-success">
-                        <div class="card-body p-2">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h6 class="card-title mb-1">{{ category.name }}</h6>
-                                    <small class="text-muted">{{ category.description or 'Sin descripción' }}</small>
-                                </div>
-                                <div class="btn-group-vertical">
-                                    <button class="btn btn-sm btn-outline-primary" onclick="editCategory({{ category.id }}, '{{ category.name }}', '{{ category.description or '' }}')">
-                                        <i class="bi bi-pencil"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteCategory({{ category.id }}, '{{ category.name }}')">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-                {% if not categories %}
-                <div class="col-12">
-                    <p class="text-muted text-center">No hay categorías creadas. Crea una categoría antes de añadir productos.</p>
-                </div>
-                {% endif %}
-            </div>
         </div>
     </div>
 
@@ -284,35 +243,6 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-primary" onclick="saveStockAdjustment()">Ajustar</button>
             </div>
-        </div>
-    </div>
-</div>
-
-<!-- Category Modal -->
-<div class="modal fade" id="categoryModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="categoryModalTitle">Nueva Categoría</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form id="categoryForm" method="POST">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="categoryName" class="form-label">Nombre de la Categoría *</label>
-                        <input type="text" class="form-control" id="categoryName" name="name" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="categoryDescription" class="form-label">Descripción</label>
-                        <textarea class="form-control" id="categoryDescription" name="description" rows="3"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success">Guardar Categoría</button>
-                </div>
-            </form>
         </div>
     </div>
 </div>
@@ -573,40 +503,6 @@ function saveStockAdjustment() {
 function viewProductHistory(productId) {
     // Here you would implement the product history view
     alert('Historial del producto ' + productId);
-}
-
-// Category functions
-function newCategory() {
-    document.getElementById('categoryModalTitle').textContent = 'Nueva Categoría';
-    document.getElementById('categoryForm').reset();
-    document.getElementById('categoryForm').action = '{{ url_for("admin.create_category") }}';
-}
-
-function editCategory(categoryId, categoryName, categoryDescription) {
-    document.getElementById('categoryModalTitle').textContent = 'Editar Categoría';
-    document.getElementById('categoryName').value = categoryName;
-    document.getElementById('categoryDescription').value = categoryDescription || '';
-    document.getElementById('categoryForm').action = '{{ url_for("admin.edit_category", category_id=0) }}'.replace('0', categoryId);
-    
-    var modal = new bootstrap.Modal(document.getElementById('categoryModal'));
-    modal.show();
-}
-
-function deleteCategory(categoryId, categoryName) {
-    if (confirm('¿Estás seguro de que deseas eliminar la categoría "' + categoryName + '"?')) {
-        var form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '{{ url_for("admin.delete_category", category_id=0) }}'.replace('0', categoryId);
-        
-        var csrfInput = document.createElement('input');
-        csrfInput.type = 'hidden';
-        csrfInput.name = 'csrf_token';
-        csrfInput.value = '{{ csrf_token() }}';
-        form.appendChild(csrfInput);
-        
-        document.body.appendChild(form);
-        form.submit();
-    }
 }
 </script>
 {% endblock %}
