@@ -46,16 +46,17 @@ Optimizar el sistema POS para operación eficiente de bar, eliminando funcionali
 - `GET /api/tabs/active` - Listar todos los tabs abiertos
   - Retorna: Lista de tabs con totales parciales y tiempo abierto
   
-- `POST /api/tabs/{tab_id}/add-item` - Agregar item a tab existente
-  - Parámetros: `product_id`, `quantity`
-  - Valida stock antes de agregar
-  
 - `GET /api/tabs/{tab_id}` - Obtener detalles de tab específico
   - Retorna: Items, subtotal, impuestos, total actual
   
 - `POST /api/tabs/{tab_id}/close` - Cerrar tab y preparar para pago
   - Convierte tab a Sale pendiente
   - Retorna: `sale_id` para finalizar
+
+**NOTA:** Los tabs NO tienen endpoints dedicados para agregar/quitar/modificar items. En su lugar, reutilizan los endpoints existentes de sales:
+- Agregar item: `POST /api/sales/{id}/items` (funciona con status='pending' O 'tab_open')
+- Quitar item: `DELETE /api/sales/{id}/items/{item_id}` (funciona con status='pending' O 'tab_open')
+- Modificar cantidad: `PUT /api/sales/{id}/items/{item_id}/quantity` (funciona con status='pending' O 'tab_open')
 
 #### Lógica de Negocio
 1. Tab es una venta con `status='tab_open'` (nuevo estado)
@@ -212,9 +213,9 @@ class SaleStatus(enum.Enum):
 ### Tabs
 - `POST /api/tabs/open` - Abrir tab
 - `GET /api/tabs/active` - Listar tabs abiertos  
-- `POST /api/tabs/{id}/add-item` - Agregar a tab
 - `GET /api/tabs/{id}` - Ver tab
 - `POST /api/tabs/{id}/close` - Cerrar tab
+- **Item Management:** Usa endpoints existentes de sales (POST/DELETE/PUT /api/sales/{id}/items)
 
 ### División de Cuenta
 - `POST /api/sales/{id}/split` - Dividir venta
@@ -236,10 +237,12 @@ class SaleStatus(enum.Enum):
    - ✅ Validación en add item
    - ✅ UI mostrando disponibilidad
 
-2. 🔄 **Sistema de Tabs** (crítico para bar) - **EN PROGRESO**
-   - Modelo y endpoints
-   - Lógica de tab abierto
-   - UI meseros y cajeros
+2. ✅ **Sistema de Tabs** (crítico para bar) - **COMPLETADO**
+   - ✅ Modelo actualizado (parent_sale_id, split_type, nuevos status)
+   - ✅ Endpoints de tabs (open, active, get, close)
+   - ✅ Validaciones actualizadas para permitir modificar items en tabs
+   - ✅ UI meseros (abrir tab, agregar items, cerrar tab)
+   - ✅ Tabs reutilizan endpoints de sales (sin duplicación)
 
 3. ⏳ **División de cuenta** (funcionalidad clave) - **PENDIENTE**
    - Endpoint split

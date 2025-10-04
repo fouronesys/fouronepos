@@ -31,7 +31,53 @@ Implementación completa de validación de stock en tiempo real según PLAN_MEJO
 - Alertas visuales para productos con poco stock
 - Productos agotados se deshabilitan automáticamente evitando errores al pagar
 
-**Pendiente: FASE 2 (Sistema de Tabs), FASE 3 (División de Cuenta), FASE 4 (Simplificar Flujo Meseros)**
+**FASE 2: Sistema de Tabs - COMPLETADA** (Oct 4, 2025)
+
+Implementación completa de sistema de tabs según PLAN_MEJORAS_BAR.md:
+
+*Backend - Migraciones:*
+- Agregados campos parent_sale_id (FK a sales) y split_type a tabla Sales
+- Nuevos status disponibles: 'tab_open' (tab activo) y 'split_parent' (venta dividida)
+- Migración ejecutada: migrate_tabs_and_splits.py
+
+*Backend - Endpoints API:*
+- POST /api/tabs/open: Crear nuevo tab para mesa/cliente con validación
+- GET /api/tabs/active: Listar todos los tabs abiertos con detalles y totales
+- GET /api/tabs/{id}: Obtener detalles específicos de un tab
+- POST /api/tabs/{id}/close: Cerrar tab y convertir a venta pendiente para cobro
+
+*Backend - Item Management:*
+- POST /api/sales/{id}/items: Actualizado para permitir status 'pending' O 'tab_open'
+- DELETE /api/sales/{id}/items/{item_id}: Actualizado para permitir 'pending' O 'tab_open'
+- PUT /api/sales/{id}/items/{item_id}/quantity: Actualizado para permitir 'pending' O 'tab_open'
+- Tabs reutilizan endpoints existentes de sales (no duplicación)
+
+*Backend - Restricciones:*
+- Endpoints de cocina (send-to-kitchen, kitchen-status) restringidos solo a 'pending'
+- Tabs NO van a cocina según plan, bypass completo de workflow de preparación
+- Finalización de venta solo permite 'pending' (tabs deben cerrarse primero)
+
+*Frontend - Waiter UI:*
+- templates/waiter/tables.html: Botón "Abrir Tab" con modal para customer_name
+- templates/waiter/table_detail.html: Vista diferenciada para tabs vs órdenes regulares
+- Badge visual "Tab Abierto" en azul cuando status='tab_open'
+- Botón "Cerrar Tab y Cobrar" convierte tab a pending para que cajero cobre
+- Botón "Enviar a Cocina" oculto para tabs (no aplica)
+
+*Archivos Actualizados:*
+- models.py: Campos parent_sale_id y split_type agregados
+- routes/api.py: Endpoints de tabs, validaciones actualizadas
+- routes/waiter.py: Búsqueda actualizada para incluir 'tab_open'
+- templates/waiter/tables.html: UI de apertura de tabs
+- templates/waiter/table_detail.html: UI de manejo de tabs activos
+
+*Beneficios Logrados:*
+- Meseros pueden mantener cuentas abiertas mientras clientes consumen
+- Agregar items a tab sin cerrar venta permite flujo natural de bar
+- Cierre de tab genera venta pending lista para cajero cobrar y asignar NCF
+- Validación de stock funciona igual en tabs y ventas regulares
+
+**Pendiente: FASE 3 (División de Cuenta), FASE 4 (Simplificar Flujo Meseros)**
 
 # User Preferences
 
