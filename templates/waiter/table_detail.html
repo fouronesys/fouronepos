@@ -150,11 +150,28 @@ function loadWaiterProducts(categoryId) {
             container.innerHTML = '';
             
             products.forEach(product => {
+                // Determine stock status
+                let stockBadge = '';
+                let isDisabled = false;
+                let cardStyle = '';
+                
+                if (product.stock <= 0) {
+                    stockBadge = '<span class="badge bg-danger">Agotado</span>';
+                    isDisabled = true;
+                    cardStyle = 'opacity: 0.5; cursor: not-allowed;';
+                } else if (product.stock <= 5) {
+                    stockBadge = `<span class="badge bg-warning text-dark">Stock: ${product.stock} ⚠️</span>`;
+                } else {
+                    stockBadge = `<span class="badge bg-success">Stock: ${product.stock} ✓</span>`;
+                }
+                
                 const productCard = `
-                    <div class="card mb-2 product-card" onclick="addProductToOrder(${product.id}, '${product.name}', ${product.price})">
+                    <div class="card mb-2 product-card" ${isDisabled ? '' : `onclick="addProductToOrder(${product.id}, '${product.name}', ${product.price})"`}
+                         style="${cardStyle}">
                         <div class="card-body text-center py-3">
                             <h6 class="card-title mb-1">${product.name}</h6>
                             <p class="card-text text-primary fw-bold">RD$ ${product.price.toFixed(2)}</p>
+                            <div class="mt-2">${stockBadge}</div>
                         </div>
                     </div>
                 `;
