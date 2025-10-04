@@ -1,5 +1,5 @@
 // Service Worker para Four One POS - Enhanced Offline Support
-const CACHE_VERSION = 'v4-tax-fix';
+const CACHE_VERSION = 'v5-pos-fix-1759597895';
 const STATIC_CACHE = `fourone-static-${CACHE_VERSION}`;
 const API_CACHE = `fourone-api-${CACHE_VERSION}`;
 const OFFLINE_QUEUE = `fourone-queue-${CACHE_VERSION}`;
@@ -26,7 +26,7 @@ const apiEndpoints = [
 
 // Install Service Worker
 self.addEventListener('install', function(event) {
-  console.log('[SW] Installing service worker v4-tax-fix');
+  console.log('[SW] Installing service worker v5-pos-fix-1759597895');
   self.skipWaiting();
   
   event.waitUntil(
@@ -44,7 +44,7 @@ self.addEventListener('install', function(event) {
 
 // Activate Service Worker
 self.addEventListener('activate', function(event) {
-  console.log('[SW] Activating service worker v4-tax-fix');
+  console.log('[SW] Activating service worker v5-pos-fix-1759597895');
   self.clients.claim();
   
   event.waitUntil(
