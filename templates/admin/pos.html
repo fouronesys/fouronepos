@@ -2563,6 +2563,12 @@ async function initializePOS() {
     
     console.log('[POS] POS system initialized successfully');
     showNotification('Sistema POS iniciado - Modo offline disponible', 'success');
+    
+    // Set up automatic refresh of pending orders counter every 15 seconds
+    setInterval(() => {
+        loadPendingOrders();
+        console.log('[POS] Auto-refreshing pending orders counter');
+    }, 15000); // 15 seconds
 }
 
 // Check cash register status and update UI accordingly
