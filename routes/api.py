@@ -760,7 +760,12 @@ def finalize_sale(sale_id):
                 'payment_method': sale.payment_method,
                 'subtotal': sale.subtotal,
                 'tax_amount': sale.tax_amount,
+                'service_charge_amount': sale.service_charge_amount,
                 'total': sale.total,
+                'customer_name': sale.customer_name,
+                'customer_rnc': sale.customer_rnc,
+                'cash_received': sale.cash_received,
+                'change_amount': sale.change_amount,
                 'items': [{
                     'product_name': item.product.name,
                     'quantity': item.quantity,
