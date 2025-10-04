@@ -1773,13 +1773,7 @@ function showOrdersSection() {
 // Load pending orders from API
 async function loadPendingOrders() {
     try {
-        const response = await fetch('/api/pending-orders');
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
+        const data = await apiRequest('/api/pending-orders');
         const orders = data.orders || [];
         
         // Update order count in tab - with null check
