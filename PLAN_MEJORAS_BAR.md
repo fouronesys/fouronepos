@@ -244,10 +244,11 @@ class SaleStatus(enum.Enum):
    - ✅ UI meseros (abrir tab, agregar items, cerrar tab)
    - ✅ Tabs reutilizan endpoints de sales (sin duplicación)
 
-3. ⏳ **División de cuenta** (funcionalidad clave) - **PENDIENTE**
-   - Endpoint split
-   - Lógica de división
-   - UI de división
+3. ✅ **División de cuenta** (funcionalidad clave) - **COMPLETADO**
+   - ✅ Endpoint POST /api/sales/{sale_id}/split
+   - ✅ Lógica de división (equal, by_items, custom)
+   - ✅ UI de división con modal interactivo
+   - ✅ Validaciones y preview de divisiones
 
 4. ⏳ **Simplificar flujo meseros** (limpieza final) - **PENDIENTE**
    - Remover estados cocina

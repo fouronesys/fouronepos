@@ -3024,3 +3024,334 @@ def close_tab(tab_id):
         db.session.rollback()
         logger.error(f"Error closing tab: {e}")
         return jsonify({'error': 'Error al cerrar tab', 'details': str(e)}), 500
+
+
+# ================================
+# BILL SPLITTING ENDPOINT
+# ================================
+
+@bp.route('/sales/<int:sale_id>/split', methods=['POST'])
+def split_sale(sale_id):
+    """Split a sale into multiple separate sales
+    
+    Supports three split types:
+    - equal: Split total equally among N people
+    - by_items: Assign specific items to each person
+    - custom: Custom split percentages or amounts
+    """
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
+    
+    data = request.get_json()
+    split_type = data.get('split_type')
+    
+    if split_type not in ['equal', 'by_items', 'custom']:
+        return jsonify({'error': 'split_type debe ser: equal, by_items, o custom'}), 400
+    
+    try:
+        # Lock the sale to prevent concurrent modifications
+        sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
+        
+        if not sale:
+            return jsonify({'error': 'Venta no encontrada'}), 404
+        
+        # Validate sale can be split
+        if sale.status not in ['pending', 'tab_open']:
+            return jsonify({'error': 'Solo se pueden dividir ventas pendientes o tabs abiertos'}), 400
+        
+        # Prevent splitting an already split sale
+        if sale.status == 'split_parent':
+            return jsonify({'error': 'Esta venta ya fue dividida'}), 400
+        
+        # Validate sale has items
+        if not sale.sale_items:
+            return jsonify({'error': 'No se puede dividir una venta sin productos'}), 400
+        
+        # Process split based on type
+        new_sales = []
+        
+        if split_type == 'equal':
+            # Equal split: divide total equally among N people
+            num_people = data.get('num_people')
+            if not num_people or num_people < 2:
+                return jsonify({'error': 'num_people debe ser >= 2 para división equitativa'}), 400
+            
+            new_sales = _split_equal(sale, num_people, user)
+            
+        elif split_type == 'by_items':
+            # By items: assign specific items to each person
+            splits = data.get('splits')
+            if not splits or len(splits) < 2:
+                return jsonify({'error': 'Debe proporcionar al menos 2 divisiones en splits'}), 400
+            
+            new_sales = _split_by_items(sale, splits, user)
+            
+        elif split_type == 'custom':
+            # Custom split: percentages or fixed amounts
+            splits = data.get('splits')
+            if not splits or len(splits) < 2:
+                return jsonify({'error': 'Debe proporcionar al menos 2 divisiones en splits'}), 400
+            
+            new_sales = _split_custom(sale, splits, user)
+        
+        # Mark original sale as split parent
+        sale.status = 'split_parent'
+        sale.split_type = split_type
+        
+        # Commit all changes
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Venta dividida exitosamente en {len(new_sales)} partes',
+            'original_sale_id': sale.id,
+            'new_sale_ids': [s.id for s in new_sales],
+            'split_type': split_type,
+            'splits': [{
+                'sale_id': s.id,
+                'customer_name': s.customer_name,
+                'subtotal': s.subtotal,
+                'tax_amount': s.tax_amount,
+                'total': s.total,
+                'items_count': len(s.sale_items)
+            } for s in new_sales]
+        })
+        
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error splitting sale: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Error al dividir venta', 'details': str(e)}), 500
+
+
+def _split_equal(original_sale, num_people, user):
+    """Split sale equally among N people"""
+    new_sales = []
+    
+    # Calculate totals from original sale
+    total_amount = original_sale.total
+    amount_per_person = round(total_amount / num_people, 2)
+    
+    # Handle rounding differences
+    remainder = round(total_amount - (amount_per_person * num_people), 2)
+    
+    for i in range(num_people):
+        # Create new sale using attribute assignment
+        new_sale = models.Sale()
+        new_sale.user_id = user.id
+        new_sale.table_id = original_sale.table_id
+        new_sale.customer_name = f"{original_sale.customer_name or 'Cliente'} - Parte {i+1}/{num_people}"
+        new_sale.description = f"División equitativa de venta #{original_sale.id}"
+        new_sale.parent_sale_id = original_sale.id
+        new_sale.split_type = 'equal'
+        new_sale.status = 'pending'
+        new_sale.payment_method = 'cash'
+        new_sale.tax_mode = original_sale.tax_mode
+        new_sale.cash_register_id = original_sale.cash_register_id
+        
+        # For equal split, we distribute the total proportionally
+        # First person gets the remainder to handle rounding
+        if i == 0:
+            new_sale.total = round(amount_per_person + remainder, 2)
+        else:
+            new_sale.total = amount_per_person
+        
+        # Calculate proportional subtotal and tax
+        proportion = new_sale.total / total_amount
+        new_sale.subtotal = round(original_sale.subtotal * proportion, 2)
+        new_sale.tax_amount = round(original_sale.tax_amount * proportion, 2)
+        
+        db.session.add(new_sale)
+        db.session.flush()  # Get the ID
+        
+        # Copy all items with proportional quantities
+        for original_item in original_sale.sale_items:
+            new_item = models.SaleItem()
+            new_item.sale_id = new_sale.id
+            new_item.product_id = original_item.product_id
+            new_item.quantity = original_item.quantity  # Same items for everyone
+            new_item.unit_price = round(original_item.unit_price / num_people, 2)
+            new_item.total_price = round(original_item.total_price / num_people, 2)
+            new_item.tax_rate = original_item.tax_rate
+            new_item.is_tax_included = original_item.is_tax_included
+            db.session.add(new_item)
+        
+        new_sales.append(new_sale)
+    
+    return new_sales
+
+
+def _split_by_items(original_sale, splits, user):
+    """Split sale by assigning specific items to each person"""
+    new_sales = []
+    
+    # Validate that all items are assigned exactly once
+    original_item_ids = {item.id for item in original_sale.sale_items}
+    assigned_item_ids = set()
+    
+    for split in splits:
+        item_ids = split.get('items', [])
+        for item_id in item_ids:
+            if item_id in assigned_item_ids:
+                raise ValueError(f'Item {item_id} asignado más de una vez')
+            if item_id not in original_item_ids:
+                raise ValueError(f'Item {item_id} no pertenece a esta venta')
+            assigned_item_ids.add(item_id)
+    
+    # Check if all items are assigned
+    unassigned_items = original_item_ids - assigned_item_ids
+    if unassigned_items:
+        raise ValueError(f'Items sin asignar: {list(unassigned_items)}')
+    
+    # Create a new sale for each split
+    for i, split in enumerate(splits):
+        customer_name = split.get('customer_name', f'Cliente {i+1}')
+        item_ids = split.get('items', [])
+        
+        if not item_ids:
+            raise ValueError(f'División {i+1} no tiene items asignados')
+        
+        # Create new sale using attribute assignment
+        new_sale = models.Sale()
+        new_sale.user_id = user.id
+        new_sale.table_id = original_sale.table_id
+        new_sale.customer_name = customer_name
+        new_sale.description = f"División por items de venta #{original_sale.id}"
+        new_sale.parent_sale_id = original_sale.id
+        new_sale.split_type = 'by_items'
+        new_sale.status = 'pending'
+        new_sale.payment_method = 'cash'
+        new_sale.tax_mode = original_sale.tax_mode
+        new_sale.cash_register_id = original_sale.cash_register_id
+        
+        db.session.add(new_sale)
+        db.session.flush()  # Get the ID
+        
+        # Copy assigned items
+        split_subtotal = 0
+        split_tax_included = 0
+        split_tax_added = 0
+        
+        for item_id in item_ids:
+            original_item = next((item for item in original_sale.sale_items if item.id == item_id), None)
+            if not original_item:
+                raise ValueError(f'Item {item_id} no encontrado')
+            
+            new_item = models.SaleItem()
+            new_item.sale_id = new_sale.id
+            new_item.product_id = original_item.product_id
+            new_item.quantity = original_item.quantity
+            new_item.unit_price = original_item.unit_price
+            new_item.total_price = original_item.total_price
+            new_item.tax_rate = original_item.tax_rate
+            new_item.is_tax_included = original_item.is_tax_included
+            db.session.add(new_item)
+            
+            # Calculate totals based on tax configuration
+            rate = original_item.tax_rate if original_item.tax_rate is not None else 0
+            is_included = original_item.is_tax_included
+            
+            if is_included and rate > 0:
+                # Tax included in price
+                base_amount = original_item.total_price / (1 + rate)
+                tax_amount = original_item.total_price - base_amount
+                split_subtotal += base_amount
+                split_tax_included += tax_amount
+            else:
+                # Tax added to price or no tax
+                split_subtotal += original_item.total_price
+                if rate > 0:
+                    tax_amount = original_item.total_price * rate
+                    split_tax_added += tax_amount
+        
+        # Set totals for this split sale
+        new_sale.subtotal = round(split_subtotal, 2)
+        new_sale.tax_amount = round(split_tax_included + split_tax_added, 2)
+        new_sale.total = round(split_subtotal + split_tax_added, 2)
+        
+        new_sales.append(new_sale)
+    
+    return new_sales
+
+
+def _split_custom(original_sale, splits, user):
+    """Split sale with custom percentages or amounts"""
+    new_sales = []
+    
+    # Validate splits
+    total_percentage = sum(split.get('percentage', 0) for split in splits)
+    total_fixed_amount = sum(split.get('amount', 0) for split in splits)
+    
+    # Determine split mode: percentage or fixed amount
+    use_percentage = any('percentage' in split for split in splits)
+    use_fixed = any('amount' in split for split in splits)
+    
+    if use_percentage and use_fixed:
+        raise ValueError('No se puede mezclar porcentajes y montos fijos en división personalizada')
+    
+    if use_percentage:
+        if abs(total_percentage - 100) > 0.01:  # Allow small floating point differences
+            raise ValueError(f'Los porcentajes deben sumar 100%. Total actual: {total_percentage}%')
+    
+    if use_fixed:
+        if abs(total_fixed_amount - original_sale.total) > 0.01:
+            raise ValueError(f'Los montos fijos deben sumar el total de la venta (RD$ {original_sale.total}). Total actual: RD$ {total_fixed_amount}')
+    
+    # Create sales based on splits
+    for i, split in enumerate(splits):
+        customer_name = split.get('customer_name', f'Cliente {i+1}')
+        
+        # Create new sale using attribute assignment
+        new_sale = models.Sale()
+        new_sale.user_id = user.id
+        new_sale.table_id = original_sale.table_id
+        new_sale.customer_name = customer_name
+        new_sale.description = f"División personalizada de venta #{original_sale.id}"
+        new_sale.parent_sale_id = original_sale.id
+        new_sale.split_type = 'custom'
+        new_sale.status = 'pending'
+        new_sale.payment_method = 'cash'
+        new_sale.tax_mode = original_sale.tax_mode
+        new_sale.cash_register_id = original_sale.cash_register_id
+        
+        # Calculate totals based on percentage or fixed amount
+        if use_percentage:
+            percentage = split.get('percentage', 0) / 100
+            new_sale.total = round(original_sale.total * percentage, 2)
+            new_sale.subtotal = round(original_sale.subtotal * percentage, 2)
+            new_sale.tax_amount = round(original_sale.tax_amount * percentage, 2)
+        else:  # use_fixed
+            amount = split.get('amount', 0)
+            proportion = amount / original_sale.total
+            new_sale.total = round(amount, 2)
+            new_sale.subtotal = round(original_sale.subtotal * proportion, 2)
+            new_sale.tax_amount = round(original_sale.tax_amount * proportion, 2)
+        
+        db.session.add(new_sale)
+        db.session.flush()
+        
+        # Copy all items proportionally
+        proportion = new_sale.total / original_sale.total
+        for original_item in original_sale.sale_items:
+            new_item = models.SaleItem()
+            new_item.sale_id = new_sale.id
+            new_item.product_id = original_item.product_id
+            new_item.quantity = original_item.quantity
+            new_item.unit_price = round(original_item.unit_price * proportion, 2)
+            new_item.total_price = round(original_item.total_price * proportion, 2)
+            new_item.tax_rate = original_item.tax_rate
+            new_item.is_tax_included = original_item.is_tax_included
+            db.session.add(new_item)
+        
+        new_sales.append(new_sale)
+    
+    return new_sales

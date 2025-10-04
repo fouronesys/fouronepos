@@ -79,6 +79,9 @@
                                     <i class="bi bi-send"></i> Enviar a Cocina
                                 </button>
                                 {% endif %}
+                                <button class="btn btn-warning btn-touch" onclick="showSplitBillModal()">
+                                    <i class="bi bi-scissors"></i> Dividir Cuenta
+                                </button>
                                 <button class="btn btn-danger btn-touch" onclick="cancelTable()">
                                     <i class="bi bi-x-circle"></i> Cancelar {{ 'Tab' if is_tab else 'Pedido' }}
                                 </button>
@@ -94,11 +97,11 @@
                                     <h4 class="text-primary">RD$ {{ "%.2f"|format(current_sale.total) }}</h4>
                                     {% endif %}
                                     {% if is_tab %}
-                                    <button class="btn btn-info btn-touch w-100" onclick="closeTab()">
+                                    <button class="btn btn-info btn-touch w-100 mt-2" onclick="closeTab()">
                                         <i class="bi bi-cash-stack"></i> Cerrar Tab y Cobrar
                                     </button>
                                     {% else %}
-                                    <button class="btn btn-success btn-touch w-100" onclick="closeTable()">
+                                    <button class="btn btn-success btn-touch w-100 mt-2" onclick="closeTable()">
                                         <i class="bi bi-check-circle"></i> Cerrar Mesa
                                     </button>
                                     {% endif %}
@@ -147,6 +150,100 @@
                         {% endfor %}
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Split Bill Modal -->
+<div class="modal fade" id="splitBillModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-scissors me-2"></i>Dividir Cuenta</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Split Type Selection -->
+                <div class="mb-4">
+                    <label class="form-label fw-bold">Tipo de División</label>
+                    <div class="btn-group w-100" role="group">
+                        <input type="radio" class="btn-check" name="splitType" id="splitTypeEqual" value="equal" checked>
+                        <label class="btn btn-outline-primary" for="splitTypeEqual">
+                            <i class="bi bi-pie-chart"></i> Equitativa
+                        </label>
+                        
+                        <input type="radio" class="btn-check" name="splitType" id="splitTypeItems" value="by_items">
+                        <label class="btn btn-outline-primary" for="splitTypeItems">
+                            <i class="bi bi-list-check"></i> Por Items
+                        </label>
+                        
+                        <input type="radio" class="btn-check" name="splitType" id="splitTypeCustom" value="custom">
+                        <label class="btn btn-outline-primary" for="splitTypeCustom">
+                            <i class="bi bi-sliders"></i> Personalizada
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Equal Split Options -->
+                <div id="equalSplitOptions" class="split-options">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Divide el total de la cuenta equitativamente entre todas las personas.
+                    </div>
+                    <div class="mb-3">
+                        <label for="numPeople" class="form-label">Número de Personas</label>
+                        <input type="number" class="form-control form-control-lg" id="numPeople" min="2" max="10" value="2">
+                    </div>
+                    <div id="equalSplitPreview" class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title">Vista Previa</h6>
+                            <p class="mb-0">Cada persona pagará: <strong id="amountPerPerson">RD$ 0.00</strong></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- By Items Split Options -->
+                <div id="byItemsSplitOptions" class="split-options d-none">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Asigna items específicos a cada persona. Todos los items deben ser asignados.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Número de Divisiones</label>
+                        <input type="number" class="form-control" id="numSplits" min="2" max="5" value="2" onchange="generateItemSplits()">
+                    </div>
+                    <div id="itemSplitsContainer"></div>
+                </div>
+
+                <!-- Custom Split Options -->
+                <div id="customSplitOptions" class="split-options d-none">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Define porcentajes o montos específicos para cada persona.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Método de División</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="customMethod" id="customMethodPercent" value="percentage" checked>
+                            <label class="btn btn-outline-secondary" for="customMethodPercent">Porcentajes</label>
+                            
+                            <input type="radio" class="btn-check" name="customMethod" id="customMethodAmount" value="amount">
+                            <label class="btn btn-outline-secondary" for="customMethodAmount">Montos Fijos</label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Número de Divisiones</label>
+                        <input type="number" class="form-control" id="numCustomSplits" min="2" max="5" value="2" onchange="generateCustomSplits()">
+                    </div>
+                    <div id="customSplitsContainer"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="confirmSplitBill()">
+                    <i class="bi bi-check-circle me-2"></i>Dividir Cuenta
+                </button>
             </div>
         </div>
     </div>
@@ -332,8 +429,320 @@ async function sendToKitchen() {
 }
 
 // Split bill functionality
-function splitBill() {
-    alert('Funcionalidad de dividir cuenta - por implementar');
+let splitBillModal;
+let saleItems = {% if current_sale and current_sale.sale_items %}{{ current_sale.sale_items | tojson }}{% else %}[]{% endif %};
+
+function showSplitBillModal() {
+    if (!currentSale) {
+        alert('No hay pedido para dividir');
+        return;
+    }
+    
+    if (!saleItems || saleItems.length === 0) {
+        alert('No hay items en el pedido para dividir');
+        return;
+    }
+    
+    // Initialize modal
+    splitBillModal = new bootstrap.Modal(document.getElementById('splitBillModal'));
+    
+    // Setup event listeners for split type changes
+    document.querySelectorAll('input[name="splitType"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            switchSplitType(this.value);
+        });
+    });
+    
+    // Setup event listeners for custom method changes
+    document.querySelectorAll('input[name="customMethod"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            generateCustomSplits();
+        });
+    });
+    
+    // Setup event listener for numPeople changes
+    document.getElementById('numPeople').addEventListener('input', updateEqualSplitPreview);
+    
+    // Initialize with equal split
+    switchSplitType('equal');
+    updateEqualSplitPreview();
+    
+    splitBillModal.show();
+}
+
+function switchSplitType(type) {
+    // Hide all option sections
+    document.querySelectorAll('.split-options').forEach(div => {
+        div.classList.add('d-none');
+    });
+    
+    // Show selected option section
+    if (type === 'equal') {
+        document.getElementById('equalSplitOptions').classList.remove('d-none');
+        updateEqualSplitPreview();
+    } else if (type === 'by_items') {
+        document.getElementById('byItemsSplitOptions').classList.remove('d-none');
+        generateItemSplits();
+    } else if (type === 'custom') {
+        document.getElementById('customSplitOptions').classList.remove('d-none');
+        generateCustomSplits();
+    }
+}
+
+function updateEqualSplitPreview() {
+    const numPeople = parseInt(document.getElementById('numPeople').value) || 2;
+    const total = getSaleTotal();
+    const amountPerPerson = total / numPeople;
+    
+    document.getElementById('amountPerPerson').textContent = `RD$ ${amountPerPerson.toFixed(2)}`;
+}
+
+function getSaleTotal() {
+    {% if is_tab %}
+    // For tabs, calculate from items
+    return {% if current_sale %}{{ current_sale.sale_items|sum(attribute='total_price') }}{% else %}0{% endif %};
+    {% else %}
+    // For regular sales, use total
+    return {{ current_sale.total if current_sale else 0 }};
+    {% endif %}
+}
+
+function generateItemSplits() {
+    const numSplits = parseInt(document.getElementById('numSplits').value) || 2;
+    const container = document.getElementById('itemSplitsContainer');
+    container.innerHTML = '';
+    
+    for (let i = 0; i < numSplits; i++) {
+        const splitDiv = document.createElement('div');
+        splitDiv.className = 'card mb-3';
+        splitDiv.innerHTML = `
+            <div class="card-header">
+                <strong>División ${i + 1}</strong>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <label class="form-label">Nombre del Cliente</label>
+                    <input type="text" class="form-control split-customer-name" placeholder="Cliente ${i + 1}" data-split-index="${i}">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Items Asignados</label>
+                    <div class="form-check-list split-items-list" data-split-index="${i}">
+                        ${generateItemCheckboxes(i)}
+                    </div>
+                </div>
+                <div class="split-total text-end">
+                    <strong>Total: <span id="split-${i}-total">RD$ 0.00</span></strong>
+                </div>
+            </div>
+        `;
+        container.appendChild(splitDiv);
+    }
+    
+    // Add event listeners to checkboxes
+    document.querySelectorAll('.item-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', updateItemSplitTotals);
+    });
+}
+
+function generateItemCheckboxes(splitIndex) {
+    if (!saleItems || saleItems.length === 0) {
+        return '<p class="text-muted">No hay items disponibles</p>';
+    }
+    
+    return saleItems.map(item => `
+        <div class="form-check">
+            <input class="form-check-input item-checkbox" type="checkbox" 
+                   id="item-${item.id}-split-${splitIndex}" 
+                   value="${item.id}" 
+                   data-split-index="${splitIndex}"
+                   data-item-price="${item.total_price}">
+            <label class="form-check-label" for="item-${item.id}-split-${splitIndex}">
+                ${item.product.name} (x${item.quantity}) - RD$ ${item.total_price.toFixed(2)}
+            </label>
+        </div>
+    `).join('');
+}
+
+function updateItemSplitTotals() {
+    const numSplits = parseInt(document.getElementById('numSplits').value) || 2;
+    
+    for (let i = 0; i < numSplits; i++) {
+        let total = 0;
+        document.querySelectorAll(`.item-checkbox[data-split-index="${i}"]:checked`).forEach(checkbox => {
+            total += parseFloat(checkbox.dataset.itemPrice);
+        });
+        
+        const totalElement = document.getElementById(`split-${i}-total`);
+        if (totalElement) {
+            totalElement.textContent = `RD$ ${total.toFixed(2)}`;
+        }
+    }
+}
+
+function generateCustomSplits() {
+    const numSplits = parseInt(document.getElementById('numCustomSplits').value) || 2;
+    const method = document.querySelector('input[name="customMethod"]:checked')?.value || 'percentage';
+    const container = document.getElementById('customSplitsContainer');
+    const total = getSaleTotal();
+    
+    container.innerHTML = '';
+    
+    for (let i = 0; i < numSplits; i++) {
+        const splitDiv = document.createElement('div');
+        splitDiv.className = 'card mb-2';
+        splitDiv.innerHTML = `
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label">Nombre del Cliente</label>
+                        <input type="text" class="form-control custom-customer-name" placeholder="Cliente ${i + 1}" data-split-index="${i}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">${method === 'percentage' ? 'Porcentaje (%)' : 'Monto (RD$)'}</label>
+                        <input type="number" class="form-control custom-split-value" 
+                               data-split-index="${i}" 
+                               min="0" 
+                               ${method === 'percentage' ? 'max="100"' : ''}
+                               step="${method === 'percentage' ? '0.1' : '0.01'}"
+                               placeholder="${method === 'percentage' ? '50' : total / numSplits}">
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(splitDiv);
+    }
+}
+
+async function confirmSplitBill() {
+    const splitType = document.querySelector('input[name="splitType"]:checked').value;
+    
+    let requestData = {
+        split_type: splitType,
+        csrf_token: csrfToken
+    };
+    
+    try {
+        if (splitType === 'equal') {
+            const numPeople = parseInt(document.getElementById('numPeople').value);
+            if (numPeople < 2) {
+                alert('El número de personas debe ser al menos 2');
+                return;
+            }
+            requestData.num_people = numPeople;
+            
+        } else if (splitType === 'by_items') {
+            const numSplits = parseInt(document.getElementById('numSplits').value);
+            const splits = [];
+            
+            for (let i = 0; i < numSplits; i++) {
+                const customerName = document.querySelector(`.split-customer-name[data-split-index="${i}"]`)?.value || `Cliente ${i + 1}`;
+                const checkedItems = Array.from(document.querySelectorAll(`.item-checkbox[data-split-index="${i}"]:checked`))
+                    .map(cb => parseInt(cb.value));
+                
+                if (checkedItems.length === 0) {
+                    alert(`La división ${i + 1} no tiene items asignados`);
+                    return;
+                }
+                
+                splits.push({
+                    customer_name: customerName,
+                    items: checkedItems
+                });
+            }
+            
+            // Validate all items are assigned exactly once
+            const allItemIds = saleItems.map(item => item.id);
+            const assignedIds = splits.flatMap(s => s.items);
+            
+            if (assignedIds.length !== allItemIds.length) {
+                alert('Todos los items deben ser asignados a una división');
+                return;
+            }
+            
+            requestData.splits = splits;
+            
+        } else if (splitType === 'custom') {
+            const numSplits = parseInt(document.getElementById('numCustomSplits').value);
+            const method = document.querySelector('input[name="customMethod"]:checked').value;
+            const splits = [];
+            const total = getSaleTotal();
+            
+            for (let i = 0; i < numSplits; i++) {
+                const customerName = document.querySelector(`.custom-customer-name[data-split-index="${i}"]`)?.value || `Cliente ${i + 1}`;
+                const value = parseFloat(document.querySelector(`.custom-split-value[data-split-index="${i}"]`)?.value);
+                
+                if (!value || value <= 0) {
+                    alert(`Debe especificar un valor válido para la división ${i + 1}`);
+                    return;
+                }
+                
+                const split = { customer_name: customerName };
+                
+                if (method === 'percentage') {
+                    split.percentage = value;
+                } else {
+                    split.amount = value;
+                }
+                
+                splits.push(split);
+            }
+            
+            // Validate totals
+            if (method === 'percentage') {
+                const totalPercent = splits.reduce((sum, s) => sum + s.percentage, 0);
+                if (Math.abs(totalPercent - 100) > 0.01) {
+                    alert(`Los porcentajes deben sumar 100%. Total actual: ${totalPercent.toFixed(2)}%`);
+                    return;
+                }
+            } else {
+                const totalAmount = splits.reduce((sum, s) => sum + s.amount, 0);
+                if (Math.abs(totalAmount - total) > 0.01) {
+                    alert(`Los montos deben sumar el total (RD$ ${total.toFixed(2)}). Total actual: RD$ ${totalAmount.toFixed(2)}`);
+                    return;
+                }
+            }
+            
+            requestData.splits = splits;
+        }
+        
+        // Confirm with user
+        if (!confirm(`¿Confirma dividir esta cuenta en ${splitType === 'equal' ? requestData.num_people : requestData.splits.length} partes?`)) {
+            return;
+        }
+        
+        // Make API request
+        const response = await fetch(`/api/sales/${currentSale}/split`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            splitBillModal.hide();
+            
+            // Show success message
+            let message = `✅ Cuenta dividida exitosamente en ${result.splits.length} partes:\n\n`;
+            result.splits.forEach((split, i) => {
+                message += `${i + 1}. ${split.customer_name}: RD$ ${split.total.toFixed(2)} (${split.items_count} items)\n`;
+            });
+            message += `\nLas ventas han sido creadas y están listas para ser facturadas por el cajero.`;
+            
+            alert(message);
+            
+            // Redirect back to tables
+            window.location.href = "{{ url_for('waiter.tables') }}";
+        } else {
+            alert(`Error dividiendo cuenta: ${result.error || 'Error desconocido'}`);
+        }
+        
+    } catch (error) {
+        console.error('Error splitting bill:', error);
+        alert('Error de conexión al dividir cuenta');
+    }
 }
 
 // Send table to cashier for finalization
