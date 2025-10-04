@@ -1016,11 +1016,14 @@ async function loadProducts(categoryId) {
             let isDisabled = false;
             let cardClass = 'product-card fade-in-up';
             
-            if (product.stock <= 0) {
+            if (product.product_type === 'consumible') {
+                stockBadge = '<span class="badge bg-info">Disponible</span>';
+                isDisabled = false;
+            } else if (product.stock <= 0) {
                 stockBadge = '<span class="badge bg-danger">Agotado</span>';
                 isDisabled = true;
                 cardClass += ' product-disabled';
-            } else if (product.stock <= 5) {
+            } else if (product.stock <= product.min_stock) {
                 stockBadge = `<span class="badge bg-warning text-dark">Stock: ${product.stock} ⚠️</span>`;
             } else {
                 stockBadge = `<span class="badge bg-success">Stock: ${product.stock} ✓</span>`;

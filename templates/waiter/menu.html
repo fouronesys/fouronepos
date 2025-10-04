@@ -55,11 +55,13 @@ function loadMenuProducts(categoryId) {
                 let cardStyle = '';
                 let cardClass = 'card h-100';
                 
-                if (product.stock <= 0) {
+                if (product.product_type === 'consumible') {
+                    stockBadge = '<span class="badge bg-info">Disponible</span>';
+                } else if (product.stock <= 0) {
                     stockBadge = '<span class="badge bg-danger">❌ Agotado</span>';
                     cardStyle = 'opacity: 0.6;';
                     cardClass += ' border-danger';
-                } else if (product.stock <= 5) {
+                } else if (product.stock <= product.min_stock) {
                     stockBadge = `<span class="badge bg-warning text-dark">⚠️ Stock: ${product.stock}</span>`;
                 } else {
                     stockBadge = `<span class="badge bg-success">✅ Stock: ${product.stock}</span>`;
