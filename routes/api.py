@@ -211,6 +211,16 @@ def create_sale():
         sale.tax_mode = models.TaxMode.PRODUCT_BASED
         print(f"[DEBUG CREATE_SALE] tax_mode set to: {sale.tax_mode}, value: {sale.tax_mode.value}")
         
+        # Store customer information if provided (for table orders)
+        customer_name = data.get('customer_name')
+        customer_rnc = data.get('customer_rnc')
+        if customer_name:
+            sale.customer_name = customer_name.strip()
+            print(f"[DEBUG CREATE_SALE] Customer name set to: {sale.customer_name}")
+        if customer_rnc:
+            sale.customer_rnc = customer_rnc.strip()
+            print(f"[DEBUG CREATE_SALE] Customer RNC set to: {sale.customer_rnc}")
+        
         # Only assign cash register if user has one (cashiers/admins)
         cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
         if cash_register:

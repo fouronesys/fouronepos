@@ -1561,11 +1561,29 @@ function assignToTable() {
     
     const description = document.getElementById('order-description').value.trim() || '';
     
+    // Get customer information if provided
+    const customerName = document.getElementById('client-name').value.trim() || '';
+    const customerRnc = document.getElementById('client-rnc').value.trim() || '';
+    
     // Disable button during processing
     const assignButton = document.getElementById('assign-table');
     const originalText = assignButton.innerHTML;
     assignButton.disabled = true;
     assignButton.innerHTML = '<i class="bi bi-spinner-border me-2"></i> Asignando...';
+    
+    // Prepare sale data
+    const saleData = {
+        table_id: tableId,
+        description: description
+    };
+    
+    // Add customer information if provided
+    if (customerName) {
+        saleData.customer_name = customerName;
+    }
+    if (customerRnc) {
+        saleData.customer_rnc = customerRnc;
+    }
     
     // Create sale first
     fetch('/api/sales', {
@@ -1575,10 +1593,7 @@ function assignToTable() {
             'X-CSRFToken': csrfToken
         },
         credentials: 'same-origin',
-        body: JSON.stringify({
-            table_id: tableId,
-            description: description
-        })
+        body: JSON.stringify(saleData)
     })
     .then(response => response.json())
     .then(sale => {

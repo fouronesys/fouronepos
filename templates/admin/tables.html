@@ -207,9 +207,22 @@
             <form id="billingForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
+                    <!-- Customer Information Display (readonly, from order) -->
+                    <div id="customerInfoDisplay" class="alert alert-info" style="display: none;">
+                        <h6 class="alert-heading"><i class="bi bi-person-circle"></i> Información del Cliente</h6>
+                        <p class="mb-1"><strong>Nombre:</strong> <span id="displayCustomerName"></span></p>
+                        <p class="mb-0"><strong>RNC/Cédula:</strong> <span id="displayCustomerRnc"></span></p>
+                        <small class="text-muted">Esta información fue registrada al crear la orden</small>
+                    </div>
+                    
+                    <!-- Order Summary -->
+                    <div class="alert alert-secondary mb-3">
+                        <p class="mb-1"><strong>Total a cobrar:</strong> <span id="displayTotal" class="fs-5 text-primary">RD$ 0.00</span></p>
+                    </div>
+                    
                     <div class="mb-3">
-                        <label for="paymentMethod" class="form-label">Método de Pago</label>
-                        <select class="form-control" id="paymentMethod" name="payment_method" required>
+                        <label for="paymentMethod" class="form-label"><strong>Método de Pago</strong></label>
+                        <select class="form-control" id="paymentMethod" name="payment_method" required onchange="toggleCashFields()">
                             <option value="">Selecciona método</option>
                             <option value="cash">Efectivo</option>
                             <option value="card">Tarjeta</option>
@@ -217,36 +230,23 @@
                         </select>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="ncfType" class="form-label">Tipo de Comprobante</label>
-                        <select class="form-control" id="ncfType" name="ncf_type" required>
-                            <option value="">Selecciona tipo</option>
-                            <option value="consumo">Consumo</option>
-                            <option value="credito_fiscal">Crédito Fiscal</option>
-                            <option value="gubernamental">Gubernamental</option>
-                        </select>
-                    </div>
-                    
-                    <div id="customerFields" style="display: none;">
+                    <!-- Cash Payment Fields -->
+                    <div id="cashFields" style="display: none;">
                         <div class="mb-3">
-                            <label for="customerName" class="form-label">Nombre del Cliente</label>
-                            <input type="text" class="form-control" id="customerName" name="customer_name">
+                            <label for="cashReceived" class="form-label"><strong>Efectivo Recibido</strong></label>
+                            <input type="number" class="form-control" id="cashReceived" name="cash_received" step="0.01" min="0" placeholder="0.00" oninput="calculateChange()">
                         </div>
                         
-                        <div class="mb-3">
-                            <label for="customerRnc" class="form-label">RNC/Cédula</label>
-                            <input type="text" class="form-control" id="customerRnc" name="customer_rnc">
+                        <div class="alert alert-success">
+                            <p class="mb-0"><strong>Cambio a devolver:</strong> <span id="displayChange" class="fs-5">RD$ 0.00</span></p>
                         </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="description" class="form-label">Descripción (Opcional)</label>
-                        <textarea class="form-control" id="description" name="description" rows="2"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" onclick="processBilling()">Procesar Factura</button>
+                    <button type="button" class="btn btn-primary" onclick="processBilling()">
+                        <i class="bi bi-check-circle"></i> Procesar Factura
+                    </button>
                 </div>
             </form>
         </div>
@@ -297,58 +297,107 @@ function deleteTable(tableId, tableNumber) {
 }
 
 // Order management functions
-function billOrder(saleId) {
+let currentOrderTotal = 0;
+
+async function billOrder(saleId) {
     currentSaleId = saleId;
-    const modal = new bootstrap.Modal(document.getElementById('billingModal'));
-    modal.show();
+    
+    try {
+        // Load sale details first
+        const response = await fetch(`/api/sales/${saleId}/table-details`);
+        if (!response.ok) {
+            throw new Error('No se pudo cargar la información de la venta');
+        }
+        
+        const sale = await response.json();
+        
+        // Store total for change calculation
+        currentOrderTotal = sale.total;
+        
+        // Display customer information if available
+        const customerInfoDisplay = document.getElementById('customerInfoDisplay');
+        if (sale.customer_name || sale.customer_rnc) {
+            document.getElementById('displayCustomerName').textContent = sale.customer_name || 'No especificado';
+            document.getElementById('displayCustomerRnc').textContent = sale.customer_rnc || 'No especificado';
+            customerInfoDisplay.style.display = 'block';
+        } else {
+            customerInfoDisplay.style.display = 'none';
+        }
+        
+        // Display total
+        document.getElementById('displayTotal').textContent = `RD$ ${sale.total.toFixed(2)}`;
+        
+        // Reset form
+        document.getElementById('billingForm').reset();
+        document.getElementById('cashFields').style.display = 'none';
+        document.getElementById('displayChange').textContent = 'RD$ 0.00';
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('billingModal'));
+        modal.show();
+        
+    } catch (error) {
+        alert('Error cargando información de la orden: ' + error.message);
+        console.error('Error loading sale for billing:', error);
+    }
 }
 
-// Show/hide customer fields based on NCF type
-document.getElementById('ncfType').addEventListener('change', function() {
-    const customerFields = document.getElementById('customerFields');
-    const ncfType = this.value;
+// Show/hide cash payment fields
+function toggleCashFields() {
+    const paymentMethod = document.getElementById('paymentMethod').value;
+    const cashFields = document.getElementById('cashFields');
     
-    if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
-        customerFields.style.display = 'block';
-        document.getElementById('customerName').required = true;
-        document.getElementById('customerRnc').required = true;
+    if (paymentMethod === 'cash') {
+        cashFields.style.display = 'block';
+        document.getElementById('cashReceived').required = true;
     } else {
-        customerFields.style.display = 'none';
-        document.getElementById('customerName').required = false;
-        document.getElementById('customerRnc').required = false;
+        cashFields.style.display = 'none';
+        document.getElementById('cashReceived').required = false;
     }
-});
+}
+
+// Calculate change when cash received is entered
+function calculateChange() {
+    const cashReceived = parseFloat(document.getElementById('cashReceived').value) || 0;
+    const change = cashReceived - currentOrderTotal;
+    
+    document.getElementById('displayChange').textContent = `RD$ ${Math.max(0, change).toFixed(2)}`;
+}
 
 async function processBilling() {
     if (!currentSaleId) return;
     
-    const form = document.getElementById('billingForm');
-    const formData = new FormData(form);
-    
-    const billingData = {
-        payment_method: document.getElementById('paymentMethod').value,
-        ncf_type: document.getElementById('ncfType').value,
-        customer_name: document.getElementById('customerName').value,
-        customer_rnc: document.getElementById('customerRnc').value,
-        description: document.getElementById('description').value
-    };
+    const paymentMethod = document.getElementById('paymentMethod').value;
     
     // Validate required fields
-    if (!billingData.payment_method || !billingData.ncf_type) {
-        alert('Por favor completa todos los campos requeridos.');
+    if (!paymentMethod) {
+        alert('Por favor selecciona un método de pago.');
         return;
     }
     
-    // Validate customer info for fiscal receipts
-    if (['credito_fiscal', 'gubernamental'].includes(billingData.ncf_type)) {
-        if (!billingData.customer_name || !billingData.customer_rnc) {
-            alert('Los comprobantes fiscales y gubernamentales requieren información del cliente.');
+    // Validate cash payment
+    if (paymentMethod === 'cash') {
+        const cashReceived = parseFloat(document.getElementById('cashReceived').value) || 0;
+        if (cashReceived < currentOrderTotal) {
+            alert('El efectivo recibido debe ser mayor o igual al total.');
             return;
         }
     }
     
     try {
-        // Process the sale via API with CSRF token
+        // Prepare billing data
+        const billingData = {
+            payment_method: paymentMethod
+        };
+        
+        // Add cash payment details if applicable
+        if (paymentMethod === 'cash') {
+            const cashReceived = parseFloat(document.getElementById('cashReceived').value);
+            billingData.cash_received = cashReceived;
+            billingData.change_amount = cashReceived - currentOrderTotal;
+        }
+        
+        // Get CSRF token
         const csrfToken = getCsrfToken();
         if (!csrfToken) {
             alert('Error: Token de seguridad no disponible. Por favor recarga la página.');
@@ -357,6 +406,7 @@ async function processBilling() {
         
         billingData.csrf_token = csrfToken;
         
+        // Process the sale
         const response = await fetch(`/api/sales/${currentSaleId}/table-finalize`, {
             method: 'POST',
             headers: {
