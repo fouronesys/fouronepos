@@ -139,12 +139,35 @@ def create_product():
     data = request.get_json()
     
     try:
+        # Validate required fields
+        if not data.get('name'):
+            return jsonify({'error': 'El nombre del producto es obligatorio'}), 400
+        
+        category_id = data.get('category_id')
+        if not category_id:
+            return jsonify({'error': 'Debe seleccionar una categoría'}), 400
+        
+        # Validate category exists
+        category = models.Category.query.get(category_id)
+        if not category or not category.active:
+            return jsonify({'error': 'La categoría seleccionada no es válida'}), 400
+        
+        # Validate numeric values
+        try:
+            cost = float(data.get('cost', 0))
+            price = float(data.get('price', 0))
+        except (ValueError, TypeError):
+            return jsonify({'error': 'El costo y precio deben ser números válidos'}), 400
+        
+        if cost < 0 or price < 0:
+            return jsonify({'error': 'El costo y precio no pueden ser negativos'}), 400
+        
         product = models.Product()
-        product.name = data['name']
-        product.description = data.get('description', '')
-        product.category_id = data['category_id']
-        product.cost = float(data['cost'])
-        product.price = float(data['price'])
+        product.name = data['name'].strip()
+        product.description = data.get('description', '').strip()
+        product.category_id = category_id
+        product.cost = cost
+        product.price = price
         # Keep legacy fields for backward compatibility but use defaults
         product.tax_rate = 0.18  # Default ITBIS rate for legacy compatibility
         product.is_tax_included = False  # Default to exclusive for legacy compatibility

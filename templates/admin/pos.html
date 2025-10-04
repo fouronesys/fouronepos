@@ -2254,6 +2254,23 @@ async function finalizeBillingOrder(order) {
         
         showNotification(`Orden #${order.id} facturada exitosamente - NCF: ${response.ncf || 'N/A'}`, 'success');
         
+        // Print receipt automatically (consistent with direct sales)
+        if (response.id) {
+            const saleData = {
+                sale_id: response.id,
+                table_id: order.table_id || null
+            };
+            printReceipt(saleData).then(printed => {
+                if (printed) {
+                    console.log('[Billing] Receipt printed successfully after order finalization');
+                } else {
+                    console.log('[Billing] Receipt printing failed, but order was processed');
+                }
+            }).catch(error => {
+                console.error('[Billing] Receipt printing error:', error);
+            });
+        }
+        
     } catch (error) {
         console.error('[Billing] Error finalizing order:', error);
         showNotification(`Error facturando la orden: ${error.message}`, 'error');

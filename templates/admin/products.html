@@ -189,6 +189,14 @@
                         <label for="productDescription" class="form-label">Descripción</label>
                         <textarea class="form-control" id="productDescription" name="description" rows="3"></textarea>
                     </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="productActive" name="active" checked>
+                            <label class="form-check-label" for="productActive">
+                                Producto Activo
+                            </label>
+                        </div>
+                    </div>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 </div>
                 <div class="modal-footer">
@@ -309,16 +317,23 @@ document.getElementById('productForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
     const formData = new FormData(this);
+    const categoryId = formData.get('category_id');
+    
+    if (!categoryId || categoryId === '') {
+        alert('Por favor selecciona una categoría');
+        return;
+    }
+    
     const data = {
         name: formData.get('name'),
         description: formData.get('description'),
-        category_id: formData.get('category_id'),
-        cost: formData.get('cost'),
-        price: formData.get('price'),
-        tax_rate: formData.get('tax_rate') || 0.18,
+        category_id: parseInt(categoryId),
+        cost: parseFloat(formData.get('cost')),
+        price: parseFloat(formData.get('price')),
+        tax_rate: parseFloat(formData.get('tax_rate')) || 0.18,
         product_type: formData.get('product_type') || 'inventariable',
-        stock: formData.get('product_type') === 'consumible' ? 0 : formData.get('stock'),
-        min_stock: formData.get('product_type') === 'consumible' ? 0 : formData.get('min_stock'),
+        stock: formData.get('product_type') === 'consumible' ? 0 : parseInt(formData.get('stock')) || 0,
+        min_stock: formData.get('product_type') === 'consumible' ? 0 : parseInt(formData.get('min_stock')) || 5,
         active: formData.get('active') === 'on',
         csrf_token: formData.get('csrf_token')
     };
@@ -334,7 +349,7 @@ document.getElementById('productForm').addEventListener('submit', function(e) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            location.reload(); // Reload page to show new product
+            location.reload();
         } else {
             alert('Error: ' + (data.error || 'No se pudo guardar el producto'));
         }
