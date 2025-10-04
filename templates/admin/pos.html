@@ -2490,79 +2490,86 @@ async function loadSaleForEditing(saleData) {
 
 // Initialize POS System
 async function initializePOS() {
-    console.log('[POS] Initializing POS system...');
-    
-    // Initialize managers
-    cartManager = new CartManager();
-    connectionManager = new ConnectionManager();
-    deviceDetector = new DeviceDetector();
-    
-    // Initialize payment system (globally available)
-    window.paymentSystem = new PaymentSystem('{{ csrf_token() }}', cartManager);
-    window.paymentSystem.initializePaymentMethod();
-    
-    // Log device information for debugging
-    deviceDetector.logDeviceInfo();
-    
-    // Register service worker
-    await registerServiceWorker();
-    
-    // Load initial cart state
-    updateCartDisplay();
-    
-    // Check if we're editing an existing sale
-    {% if edit_sale_data %}
     try {
-        const editSaleData = {{ edit_sale_data | tojson }};
-        console.log('[POS] Edit sale data received:', editSaleData);
-        if (editSaleData && editSaleData.id) {
-            await loadSaleForEditing(editSaleData);
-        } else {
-            console.error('[POS] Invalid edit sale data:', editSaleData);
+        console.log('[POS] Initializing POS system...');
+        
+        // Initialize managers
+        cartManager = new CartManager();
+        connectionManager = new ConnectionManager();
+        deviceDetector = new DeviceDetector();
+        
+        // Initialize payment system (globally available)
+        window.paymentSystem = new PaymentSystem('{{ csrf_token() }}', cartManager);
+        window.paymentSystem.initializePaymentMethod();
+        
+        // Log device information for debugging
+        deviceDetector.logDeviceInfo();
+        
+        // Register service worker
+        await registerServiceWorker();
+        
+        // Load initial cart state
+        updateCartDisplay();
+        
+        // Check if we're editing an existing sale
+        {% if edit_sale_data %}
+        try {
+            const editSaleData = {{ edit_sale_data | tojson }};
+            console.log('[POS] Edit sale data received:', editSaleData);
+            if (editSaleData && editSaleData.id) {
+                await loadSaleForEditing(editSaleData);
+            } else {
+                console.error('[POS] Invalid edit sale data:', editSaleData);
+            }
+        } catch (error) {
+            console.error('[POS] Error loading edit sale data:', error);
         }
+        {% endif %}
+        
+        // Load products for the first category (default)
+        const firstCategory = document.querySelector('[data-bs-toggle="pill"]');
+        if (firstCategory) {
+            const categoryId = firstCategory.getAttribute('data-bs-target').replace('#category-', '');
+            loadProducts(categoryId);
+        } else {
+            // Fallback: load products for category 1 if no tabs found
+            loadProducts(1);
+        }
+        
+        // Load available tables
+        console.log('[POS] About to load tables...');
+        loadTables();
+        
+        // Load customers for dropdown
+        console.log('[POS] About to load customers...');
+        await loadCustomers();
+        
+        // Load pending orders count
+        console.log('[POS] About to load pending orders...');
+        await loadPendingOrders();
+        
+        // Load tax types from API
+        console.log('[POS] About to load tax types...');
+        await loadTaxTypes();
+        
+        // Check cash register status and show opening modal if needed
+        console.log('[POS] About to check cash register status...');
+        await checkCashRegisterStatus();
+        
+        console.log('[POS] POS system initialized successfully');
+        showNotification('Sistema POS iniciado - Modo offline disponible', 'success');
+        
+        // Set up automatic refresh of pending orders counter every 15 seconds
+        setInterval(() => {
+            loadPendingOrders();
+            console.log('[POS] Auto-refreshing pending orders counter');
+        }, 15000); // 15 seconds
+        
     } catch (error) {
-        console.error('[POS] Error loading edit sale data:', error);
+        console.error('[POS] CRITICAL ERROR during initialization:', error);
+        console.error('[POS] Error stack:', error.stack);
+        showNotification('Error crítico inicializando el sistema POS. Por favor recarga la página.', 'error');
     }
-    {% endif %}
-    
-    // Load products for the first category (default)
-    const firstCategory = document.querySelector('[data-bs-toggle="pill"]');
-    if (firstCategory) {
-        const categoryId = firstCategory.getAttribute('data-bs-target').replace('#category-', '');
-        loadProducts(categoryId);
-    } else {
-        // Fallback: load products for category 1 if no tabs found
-        loadProducts(1);
-    }
-    
-    // Load available tables
-    console.log('[POS] About to load tables...');
-    loadTables();
-    
-    // Load customers for dropdown
-    console.log('[POS] About to load customers...');
-    await loadCustomers();
-    
-    // Load pending orders count
-    console.log('[POS] About to load pending orders...');
-    loadPendingOrders();
-    
-    // Load tax types from API
-    console.log('[POS] About to load tax types...');
-    await loadTaxTypes();
-    
-    // Check cash register status and show opening modal if needed
-    console.log('[POS] About to check cash register status...');
-    await checkCashRegisterStatus();
-    
-    console.log('[POS] POS system initialized successfully');
-    showNotification('Sistema POS iniciado - Modo offline disponible', 'success');
-    
-    // Set up automatic refresh of pending orders counter every 15 seconds
-    setInterval(() => {
-        loadPendingOrders();
-        console.log('[POS] Auto-refreshing pending orders counter');
-    }, 15000); // 15 seconds
 }
 
 // Check cash register status and update UI accordingly
