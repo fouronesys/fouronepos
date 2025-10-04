@@ -461,9 +461,10 @@ def finalize_sale(sale_id):
     cash_received = data.get('cash_received')
     change_amount = data.get('change_amount')
     
-    # Handle "sin_comprobante" case - treat as consumo type
-    if ncf_type_raw == 'sin_comprobante':
-        ncf_type = 'consumo'
+    # Handle "sin_comprobante" case - no NCF should be generated
+    skip_ncf = (ncf_type_raw == 'sin_comprobante')
+    if skip_ncf:
+        ncf_type = None  # No NCF will be generated
     else:
         ncf_type = ncf_type_raw
     
@@ -576,52 +577,67 @@ def finalize_sale(sale_id):
         else:
             print(f"[DEBUG FINALIZE] Sale already has cash register: {sale.cash_register_id}")
         
-        # Get NCF sequence - now global and independent of cash registers
-        print(f"[DEBUG FINALIZE] Looking for active global NCF sequences for type {ncf_type}")
+        # NCF generation logic - only if not skipping NCF
+        ncf_number = None
+        ncf_sequence = None
         
-        # Search for active NCF sequence of the required type (with row-level lock for thread safety)
-        # Order by ID for deterministic selection and validate uniqueness
-        active_sequences = db.session.query(models.NCFSequence).filter_by(
-            ncf_type=models.NCFType(ncf_type.upper()),
-            active=True
-        ).order_by(models.NCFSequence.id).with_for_update().all()
-        
-        if len(active_sequences) > 1:
-            sequence_ids = [str(seq.id) for seq in active_sequences]
-            error_msg = f'Error de configuración: múltiples secuencias NCF activas para tipo {ncf_type} (IDs: {", ".join(sequence_ids)}). Solo debe haber una secuencia activa por tipo. Contacte al administrador.'
-            print(f"[ERROR FINALIZE] {error_msg}")
-            raise ValueError(error_msg)
-        
-        ncf_sequence = active_sequences[0] if active_sequences else None
-        
-        if ncf_sequence:
-            print(f"[DEBUG FINALIZE] Found global NCF sequence: {ncf_sequence.id} (serie: {ncf_sequence.serie})")
-        else:
-            print(f"[DEBUG FINALIZE] No active NCF sequence found for type {ncf_type}")
+        if skip_ncf:
+            print(f"[DEBUG FINALIZE] Skipping NCF generation (Sin Comprobante selected)")
+        elif ncf_type:
+            # Get NCF sequence - now global and independent of cash registers
+            print(f"[DEBUG FINALIZE] Looking for active global NCF sequences for type {ncf_type}")
             
-            # Get all available sequences for debugging
-            all_sequences = db.session.query(models.NCFSequence).filter_by(active=True).all()
-            print(f"[DEBUG FINALIZE] Available NCF sequences:")
-            for seq in all_sequences:
-                print(f"  - ID: {seq.id}, Type: {seq.ncf_type}, Serie: {seq.serie}, Active: {seq.active}")
+            # Search for active NCF sequence of the required type (with row-level lock for thread safety)
+            # Order by ID for deterministic selection and validate uniqueness
+            active_sequences = db.session.query(models.NCFSequence).filter_by(
+                ncf_type=models.NCFType(ncf_type.upper()),
+                active=True
+            ).order_by(models.NCFSequence.id).with_for_update().all()
             
-            available_types = [str(s.ncf_type.value) for s in all_sequences]
-            if available_types:
-                error_msg = f'No hay secuencia NCF activa para tipo {ncf_type}. Tipos disponibles: {", ".join(set(available_types))}'
+            if len(active_sequences) > 1:
+                sequence_ids = [str(seq.id) for seq in active_sequences]
+                error_msg = f'Error de configuración: múltiples secuencias NCF activas para tipo {ncf_type} (IDs: {", ".join(sequence_ids)}). Solo debe haber una secuencia activa por tipo. Contacte al administrador.'
+                print(f"[ERROR FINALIZE] {error_msg}")
+                raise ValueError(error_msg)
+            
+            ncf_sequence = active_sequences[0] if active_sequences else None
+            
+            if ncf_sequence:
+                print(f"[DEBUG FINALIZE] Found global NCF sequence: {ncf_sequence.id} (serie: {ncf_sequence.serie})")
             else:
-                error_msg = 'Sistema de facturación no configurado: no hay secuencias NCF activas. Contacte al administrador para configurar las secuencias fiscales.'
+                print(f"[DEBUG FINALIZE] No active NCF sequence found for type {ncf_type}")
+                
+                # Get all available sequences for debugging
+                all_sequences = db.session.query(models.NCFSequence).filter_by(active=True).all()
+                print(f"[DEBUG FINALIZE] Available NCF sequences:")
+                for seq in all_sequences:
+                    print(f"  - ID: {seq.id}, Type: {seq.ncf_type}, Serie: {seq.serie}, Active: {seq.active}")
+                
+                available_types = [str(s.ncf_type.value) for s in all_sequences]
+                if available_types:
+                    error_msg = f'No hay secuencia NCF activa para tipo {ncf_type}. Tipos disponibles: {", ".join(set(available_types))}'
+                else:
+                    error_msg = 'Sistema de facturación no configurado: no hay secuencias NCF activas. Contacte al administrador para configurar las secuencias fiscales.'
+                
+                print(f"[ERROR FINALIZE] {error_msg}")
+                raise ValueError(error_msg)
             
-            print(f"[ERROR FINALIZE] {error_msg}")
-            raise ValueError(error_msg)
+            # Check if sequence is exhausted (treat end_number as inclusive)
+            print(f"[DEBUG FINALIZE] NCF sequence status: current={ncf_sequence.current_number}, end={ncf_sequence.end_number}")
+            if ncf_sequence.current_number > ncf_sequence.end_number:
+                error_msg = f'Secuencia NCF agotada. Actual: {ncf_sequence.current_number}, Límite: {ncf_sequence.end_number}'
+                print(f"[ERROR FINALIZE] {error_msg}")
+                raise ValueError(error_msg)
+            
+            # Generate NCF number using current number
+            ncf_number = f"{ncf_sequence.serie}{ncf_sequence.current_number:08d}"
+            print(f"[DEBUG FINALIZE] Generated NCF: {ncf_number}")
+            
+            # Increment counter for next use
+            ncf_sequence.current_number += 1
+            print(f"[DEBUG FINALIZE] NCF sequence incremented to: {ncf_sequence.current_number}")
         
-        # Check if sequence is exhausted (treat end_number as inclusive)
-        print(f"[DEBUG FINALIZE] NCF sequence status: current={ncf_sequence.current_number}, end={ncf_sequence.end_number}")
-        if ncf_sequence.current_number > ncf_sequence.end_number:
-            error_msg = f'Secuencia NCF agotada. Actual: {ncf_sequence.current_number}, Límite: {ncf_sequence.end_number}'
-            print(f"[ERROR FINALIZE] {error_msg}")
-            raise ValueError(error_msg)
-        
-        # Enforce cash session requirement BEFORE NCF generation
+        # Enforce cash session requirement BEFORE finalization
         if payment_method == 'cash':
             # Check if user has an open cash session for cash payments
             if not sale.cash_register_id:
@@ -642,16 +658,8 @@ def finalize_sale(sale_id):
             
             print(f"[DEBUG FINALIZE] Cash payment validated with open session: {open_session.id}")
         
-        # Generate NCF number using current number
-        ncf_number = f"{ncf_sequence.serie}{ncf_sequence.current_number:08d}"
-        print(f"[DEBUG FINALIZE] Generated NCF: {ncf_number}")
-        
-        # Increment counter for next use
-        ncf_sequence.current_number += 1
-        print(f"[DEBUG FINALIZE] NCF sequence incremented to: {ncf_sequence.current_number}")
-        
         # Update sale with NCF and finalize (atomic state transition from pending to completed)
-        sale.ncf_sequence_id = ncf_sequence.id
+        sale.ncf_sequence_id = ncf_sequence.id if ncf_sequence else None
         sale.ncf = ncf_number
         sale.payment_method = payment_method
         sale.status = 'completed'
