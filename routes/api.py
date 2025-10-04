@@ -2040,23 +2040,11 @@ def finalize_table_sale(sale_id):
     try:
         # data already available from CSRF validation above
         
-        # Validate required fields
+        # Validate required fields - only payment_method is required now
         payment_method = data.get('payment_method')
-        ncf_type_str = data.get('ncf_type')
         
-        if not payment_method or not ncf_type_str:
-            return jsonify({'error': 'Método de pago y tipo de NCF son requeridos'}), 400
-        
-        # Map string to NCF enum
-        ncf_type_mapping = {
-            'consumo': models.NCFType.CONSUMO,
-            'credito_fiscal': models.NCFType.CREDITO_FISCAL,
-            'gubernamental': models.NCFType.GUBERNAMENTAL
-        }
-        
-        ncf_type = ncf_type_mapping.get(ncf_type_str)
-        if not ncf_type:
-            return jsonify({'error': f'Tipo de NCF inválido: {ncf_type_str}'}), 400
+        if not payment_method:
+            return jsonify({'error': 'Método de pago es requerido'}), 400
         
         sale = models.Sale.query.get_or_404(sale_id)
         
@@ -2064,11 +2052,19 @@ def finalize_table_sale(sale_id):
         if sale.status != 'pending':
             return jsonify({'error': f'Esta venta ya está {sale.status}'}), 400
         
+        # Determine NCF type automatically based on customer info already in the sale
+        # If customer_rnc exists in sale, it's credito_fiscal, otherwise consumo
+        if sale.customer_rnc and sale.customer_rnc.strip():
+            ncf_type = models.NCFType.CREDITO_FISCAL
+            ncf_type_str = 'credito_fiscal'
+        else:
+            ncf_type = models.NCFType.CONSUMO
+            ncf_type_str = 'consumo'
+        
         # Update sale with billing information
         sale.payment_method = payment_method
-        sale.customer_name = data.get('customer_name', '')
-        sale.customer_rnc = data.get('customer_rnc', '')
-        sale.description = data.get('description', sale.description or '')
+        # Keep existing customer info - don't override from request
+        # sale.customer_name and sale.customer_rnc remain as they were set when creating the order
         
         # Store cash payment details if provided
         cash_received = data.get('cash_received')
