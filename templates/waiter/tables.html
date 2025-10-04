@@ -43,12 +43,18 @@
                     
                     <p><i class="bi bi-people"></i> {{ table.capacity }} personas</p>
                     
-                    <!-- Order Information -->
+                    <!-- Tab/Order Information -->
                     {% if has_order %}
                     <div class="mb-3 p-2 bg-light rounded">
+                        {% if table_data.is_tab %}
+                        <h6 class="text-info mb-1">
+                            <i class="bi bi-receipt-cutoff"></i> Tab Abierto
+                        </h6>
+                        {% else %}
                         <h6 class="text-primary mb-1">
                             <i class="bi bi-receipt"></i> Orden Activa
                         </h6>
+                        {% endif %}
                         <p class="mb-1">
                             <strong>{{ order_items_count }}</strong> 
                             {% if order_items_count == 1 %}producto{% else %}productos{% endif %}
@@ -62,6 +68,8 @@
                     <div class="mb-3">
                         {% if table.status.value == 'available' and not has_order %}
                         <span class="badge bg-success fs-6">Disponible</span>
+                        {% elif table_data.is_tab %}
+                        <span class="badge bg-info fs-6">Tab Abierto</span>
                         {% elif has_order %}
                         <span class="badge bg-primary fs-6">Con Orden</span>
                         {% elif table.status.value == 'occupied' %}
@@ -73,9 +81,18 @@
                     
                     <div class="d-grid gap-2">
                         {% if table.status.value == 'available' and not has_order %}
+                        <button onclick="openTabModal({{ table.id }}, '{{ table.number }}')" 
+                                class="btn btn-info btn-touch">
+                            <i class="bi bi-receipt-cutoff"></i> Abrir Tab
+                        </button>
                         <a href="{{ url_for('waiter.table_detail', table_id=table.id) }}" 
-                           class="btn btn-primary btn-touch">
-                            <i class="bi bi-play-circle"></i> Abrir Mesa
+                           class="btn btn-outline-primary btn-touch">
+                            <i class="bi bi-play-circle"></i> Orden Rápida
+                        </a>
+                        {% elif table_data.is_tab %}
+                        <a href="{{ url_for('waiter.table_detail', table_id=table.id) }}" 
+                           class="btn btn-info btn-touch">
+                            <i class="bi bi-pencil"></i> Gestionar Tab
                         </a>
                         {% elif has_order %}
                         <a href="{{ url_for('waiter.table_detail', table_id=table.id) }}" 
@@ -95,4 +112,96 @@
         {% endfor %}
     </div>
 </div>
+
+<!-- Modal para Abrir Tab -->
+<div class="modal fade" id="openTabModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Abrir Tab - Mesa <span id="modalTableNumber"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="openTabForm">
+                    <div class="mb-3">
+                        <label for="customerName" class="form-label">Nombre del Cliente</label>
+                        <input type="text" class="form-control" id="customerName" 
+                               placeholder="Ej: Juan Pérez" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="tabDescription" class="form-label">Descripción (opcional)</label>
+                        <input type="text" class="form-control" id="tabDescription" 
+                               placeholder="Ej: Grupo de amigos">
+                    </div>
+                    <input type="hidden" id="selectedTableId">
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-info" onclick="submitOpenTab()">
+                    <i class="bi bi-receipt-cutoff"></i> Abrir Tab
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const csrfToken = "{{ csrf_token() }}";
+let openTabModalInstance;
+
+document.addEventListener('DOMContentLoaded', function() {
+    openTabModalInstance = new bootstrap.Modal(document.getElementById('openTabModal'));
+});
+
+function openTabModal(tableId, tableNumber) {
+    document.getElementById('selectedTableId').value = tableId;
+    document.getElementById('modalTableNumber').textContent = tableNumber;
+    document.getElementById('customerName').value = '';
+    document.getElementById('tabDescription').value = '';
+    openTabModalInstance.show();
+}
+
+async function submitOpenTab() {
+    const tableId = document.getElementById('selectedTableId').value;
+    const customerName = document.getElementById('customerName').value.trim();
+    const description = document.getElementById('tabDescription').value.trim();
+    
+    if (!customerName) {
+        alert('Por favor ingrese el nombre del cliente');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/tabs/open', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                table_id: parseInt(tableId),
+                customer_name: customerName,
+                description: description,
+                csrf_token: csrfToken
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            openTabModalInstance.hide();
+            window.location.href = `/waiter/table/${tableId}`;
+        } else {
+            alert(data.error || 'Error al abrir tab');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error de conexión al abrir tab');
+    }
+}
+</script>
 {% endblock %}

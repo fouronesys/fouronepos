@@ -29,17 +29,21 @@ def tables():
     # Enrich tables with sale information
     enriched_tables = []
     for table in tables:
-        # Get current pending sale for this table
+        # Get current tab or pending sale for this table
         current_sale = models.Sale.query.filter_by(
-            table_id=table.id, 
-            status='pending'
+            table_id=table.id
+        ).filter(
+            models.Sale.status.in_(['pending', 'tab_open'])
         ).first()
+        
+        is_tab = current_sale and current_sale.status == 'tab_open'
         
         table_data = {
             'table': table,
             'current_sale': current_sale,
             'has_order': current_sale is not None,
-            'order_total': current_sale.total if current_sale else 0,
+            'is_tab': is_tab,
+            'order_total': current_sale.total if current_sale and not is_tab else sum(item.total_price for item in current_sale.sale_items) if current_sale else 0,
             'order_items_count': len(current_sale.sale_items) if current_sale else 0
         }
         enriched_tables.append(table_data)
@@ -55,18 +59,22 @@ def table_detail(table_id):
     
     table = models.Table.query.get_or_404(table_id)
     
-    # Get current active sale for this table
+    # Get current active tab or pending sale for this table
     current_sale = models.Sale.query.filter_by(
-        table_id=table_id, 
-        status='pending'
+        table_id=table_id
+    ).filter(
+        models.Sale.status.in_(['pending', 'tab_open'])
     ).first()
     
     # Get products by category
     categories = models.Category.query.filter_by(active=True).all()
     
+    is_tab = current_sale and current_sale.status == 'tab_open'
+    
     return render_template('waiter/table_detail.html', 
                          table=table, 
                          current_sale=current_sale,
+                         is_tab=is_tab,
                          categories=categories)
 
 
