@@ -11,6 +11,28 @@ Key features include fiscal compliance with NCF sequences, inventory management 
 
 # Recent Changes
 
+**October 04, 2025**: Simplified Table Billing Workflow with Automatic Customer Data Flow
+- **STREAMLINED BILLING MODAL**: Redesigned table order billing to only request payment information
+  - Billing modal now displays customer information (name and RNC/Cédula) as read-only data from the order
+  - Removed redundant NCF type selection from billing - automatically determined by backend based on customer RNC presence
+  - Modal only requests payment method (cash, card, transfer) and cash amount if applicable
+  - Implemented automatic change calculation when cash payment is used
+  - Enhanced user experience with cleaner, faster billing workflow
+- **CUSTOMER DATA PERSISTENCE**: Customer information captured at order creation flows through entire process
+  - Modified POS order creation to send and store customer_name and customer_rnc when assigning orders to tables
+  - Backend `/api/sales` endpoint now accepts and persists customer information during order creation
+  - Customer data remains with the order throughout its lifecycle, no re-entry needed at billing time
+- **AUTOMATIC NCF TYPE DETERMINATION**: Intelligent fiscal receipt type selection
+  - Backend `/api/sales/<id>/table-finalize` endpoint automatically determines NCF type based on stored customer data
+  - If customer_rnc exists in order → generates crédito fiscal receipt
+  - If no customer_rnc → generates consumo receipt
+  - Eliminates manual NCF type selection errors and speeds up billing process
+- **IMPROVED UX FLOW**: Simplified the order-to-billing process
+  - Step 1: Create order in POS with customer info (if needed for fiscal receipts)
+  - Step 2: Table management shows orders with customer info already captured
+  - Step 3: Billing only asks for payment method and amount
+  - Result: Faster table turnover and reduced billing errors
+
 **September 14, 2025**: Enhanced POS Customer Selection and Fixed Template Errors
 - **CUSTOMER DROPDOWN ENHANCEMENT**: Added comprehensive customer selection functionality to POS system
   - Created `/api/customers` endpoint to provide customer data with proper authentication and filtering for active customers
