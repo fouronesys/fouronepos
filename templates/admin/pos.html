@@ -2809,30 +2809,6 @@ window.addEventListener('beforeunload', function(e) {
     }
 });
 
-// Cash Register Management Functions
-async function checkCashRegisterStatus() {
-    try {
-        console.log('[Cash] Checking cash register status...');
-        const response = await apiRequest('/api/cash-register/status');
-        
-        if (!response.has_register) {
-            showNotification('No tienes una caja registradora asignada. Contacta al administrador.', 'warning');
-            return;
-        }
-        
-        updateCashStatusUI(response);
-        
-        if (response.has_register && !response.has_open_session) {
-            // Show cash register opening modal
-            showOpenCashModal(response.register_name);
-        }
-        
-    } catch (error) {
-        console.error('[Cash] Error checking cash register status:', error);
-        showNotification('Error verificando estado de caja: ' + (error.message || error), 'error');
-    }
-}
-
 function updateCashStatusUI(status) {
     const statusIndicator = document.getElementById('cash-status-indicator');
     const statusText = document.getElementById('cash-status-text');
