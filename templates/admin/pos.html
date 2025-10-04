@@ -5,9 +5,9 @@
 {% block head %}
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pos-style.css') }}?v=20250912065500">
-<!-- Organized JavaScript Files - Load in order for proper initialization -->
-<script src="{{ url_for('static', filename='js/pos-utils.js') }}?v=1759597895"></script>
-<script src="{{ url_for('static', filename='js/payment-system.js') }}?v=1759597895"></script>
+<!-- Organized JavaScript Files - Load with defer for proper DOM loading -->
+<script defer src="{{ url_for('static', filename='js/pos-utils.js') }}?v={{ timestamp }}"></script>
+<script defer src="{{ url_for('static', filename='js/payment-system.js') }}?v={{ timestamp }}"></script>
 <style>
     /* Billing Modal Styles */
     .billing-summary {
@@ -292,17 +292,7 @@
                         </select>
                     </div>
                     
-                    <!-- Customer Name (Always visible for identification) -->
-                    <div class="config-item">
-                        <label for="client-name" class="config-label">
-                            <i class="bi bi-person"></i>
-                            <span>Nombre del Cliente</span>
-                        </label>
-                        <input type="text" class="modern-input" id="client-name" placeholder="Nombre del cliente (opcional)">
-                        <small class="text-muted" style="font-size: 0.75rem;">Para identificar al cliente en la orden</small>
-                    </div>
-                    
-                    <!-- Fiscal Information (Only for fiscal receipts) -->
+                    <!-- Client Information -->
                     <div id="client-info-section" class="client-info-section" style="display: none;">
                         <div class="config-item">
                             <label for="customer-select" class="config-label">
@@ -313,6 +303,13 @@
                                 <option value="">Seleccione un cliente o ingrese manualmente</option>
                                 <!-- Options will be loaded via JavaScript -->
                             </select>
+                        </div>
+                        <div class="config-item">
+                            <label for="client-name" class="config-label">
+                                <i class="bi bi-person"></i>
+                                <span>Cliente</span>
+                            </label>
+                            <input type="text" class="modern-input" id="client-name" placeholder="Nombre o razón social">
                         </div>
                         <div class="config-item">
                             <label for="client-rnc" class="config-label">
@@ -1397,10 +1394,11 @@ function processSale() {
     
     // Validate client info for fiscal/government invoices
     if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
+        const clientName = document.getElementById('client-name').value.trim();
         const clientRnc = document.getElementById('client-rnc').value.trim();
         
-        if (!clientRnc) {
-            showNotification('Para comprobantes fiscales y gubernamentales debe completar el RNC/cédula del cliente', 'error');
+        if (!clientName || !clientRnc) {
+            showNotification('Para comprobantes fiscales y gubernamentales debe completar el nombre/empresa y RNC/cédula', 'error');
             return;
         }
     }
@@ -1482,14 +1480,9 @@ function processSale() {
             finalizationData.change_amount = cashReceived - total;
         }
         
-        // Always add client name if provided (for identification)
-        const clientName = document.getElementById('client-name').value.trim();
-        if (clientName) {
-            finalizationData.client_name = clientName;
-        }
-        
-        // Add RNC for fiscal/government invoices
+        // Add client info for fiscal/government invoices
         if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
+            finalizationData.client_name = document.getElementById('client-name').value.trim();
             finalizationData.client_rnc = document.getElementById('client-rnc').value.trim();
         }
         
@@ -1652,7 +1645,6 @@ function assignToTable() {
         }
         clearCart();
         loadTables(); // Refresh table list
-        loadPendingOrders(); // Update pending orders counter
     })
     .catch(error => {
         console.error('[DEBUG ASSIGN] Full error object:', error);
@@ -1678,14 +1670,16 @@ function toggleClientInfo() {
     
     if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
         clientInfoSection.style.display = 'block';
-        // Make RNC field required for fiscal receipts
+        // Make fields required
+        document.getElementById('client-name').required = true;
         document.getElementById('client-rnc').required = true;
-        // Client name is always optional but recommended for identification
     } else {
         clientInfoSection.style.display = 'none';
-        // Remove required attribute from RNC
+        // Remove required attribute
+        document.getElementById('client-name').required = false;
         document.getElementById('client-rnc').required = false;
-        // Clear only RNC value (client name stays for identification)
+        // Clear values
+        document.getElementById('client-name').value = '';
         document.getElementById('client-rnc').value = '';
     }
 }
@@ -1773,24 +1767,24 @@ function showOrdersSection() {
 // Load pending orders from API
 async function loadPendingOrders() {
     try {
-        const data = await apiRequest('/api/pending-orders');
+        const response = await fetch('/api/pending-orders');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
         const orders = data.orders || [];
         
-        // Update order count in tab - with null check
-        const countElement = document.getElementById('pending-orders-count');
-        if (countElement) {
-            countElement.textContent = orders.length;
-            console.log('[Orders] Updated pending orders count:', orders.length);
-        } else {
-            console.warn('[Orders] pending-orders-count element not found');
-        }
+        // Update order count in tab
+        document.getElementById('pending-orders-count').textContent = orders.length;
         
         // Display orders
         displayPendingOrders(orders);
         
     } catch (error) {
         console.error('[Orders] Error loading pending orders:', error);
-        // Don't show notification on initial load
+        showNotification('Error cargando órdenes pendientes', 'error');
     }
 }
 
@@ -2490,86 +2484,73 @@ async function loadSaleForEditing(saleData) {
 
 // Initialize POS System
 async function initializePOS() {
+    console.log('[POS] Initializing POS system...');
+    
+    // Initialize managers
+    cartManager = new CartManager();
+    connectionManager = new ConnectionManager();
+    deviceDetector = new DeviceDetector();
+    
+    // Initialize payment system (globally available)
+    window.paymentSystem = new PaymentSystem('{{ csrf_token() }}', cartManager);
+    window.paymentSystem.initializePaymentMethod();
+    
+    // Log device information for debugging
+    deviceDetector.logDeviceInfo();
+    
+    // Register service worker
+    await registerServiceWorker();
+    
+    // Load initial cart state
+    updateCartDisplay();
+    
+    // Check if we're editing an existing sale
+    {% if edit_sale_data %}
     try {
-        console.log('[POS] Initializing POS system...');
-        
-        // Initialize managers
-        cartManager = new CartManager();
-        connectionManager = new ConnectionManager();
-        deviceDetector = new DeviceDetector();
-        
-        // Initialize payment system (globally available)
-        window.paymentSystem = new PaymentSystem('{{ csrf_token() }}', cartManager);
-        window.paymentSystem.initializePaymentMethod();
-        
-        // Log device information for debugging
-        deviceDetector.logDeviceInfo();
-        
-        // Register service worker
-        await registerServiceWorker();
-        
-        // Load initial cart state
-        updateCartDisplay();
-        
-        // Check if we're editing an existing sale
-        {% if edit_sale_data %}
-        try {
-            const editSaleData = {{ edit_sale_data | tojson }};
-            console.log('[POS] Edit sale data received:', editSaleData);
-            if (editSaleData && editSaleData.id) {
-                await loadSaleForEditing(editSaleData);
-            } else {
-                console.error('[POS] Invalid edit sale data:', editSaleData);
-            }
-        } catch (error) {
-            console.error('[POS] Error loading edit sale data:', error);
-        }
-        {% endif %}
-        
-        // Load products for the first category (default)
-        const firstCategory = document.querySelector('[data-bs-toggle="pill"]');
-        if (firstCategory) {
-            const categoryId = firstCategory.getAttribute('data-bs-target').replace('#category-', '');
-            loadProducts(categoryId);
+        const editSaleData = {{ edit_sale_data | tojson }};
+        console.log('[POS] Edit sale data received:', editSaleData);
+        if (editSaleData && editSaleData.id) {
+            await loadSaleForEditing(editSaleData);
         } else {
-            // Fallback: load products for category 1 if no tabs found
-            loadProducts(1);
+            console.error('[POS] Invalid edit sale data:', editSaleData);
         }
-        
-        // Load available tables
-        console.log('[POS] About to load tables...');
-        loadTables();
-        
-        // Load customers for dropdown
-        console.log('[POS] About to load customers...');
-        await loadCustomers();
-        
-        // Load pending orders count
-        console.log('[POS] About to load pending orders...');
-        await loadPendingOrders();
-        
-        // Load tax types from API
-        console.log('[POS] About to load tax types...');
-        await loadTaxTypes();
-        
-        // Check cash register status and show opening modal if needed
-        console.log('[POS] About to check cash register status...');
-        await checkCashRegisterStatus();
-        
-        console.log('[POS] POS system initialized successfully');
-        showNotification('Sistema POS iniciado - Modo offline disponible', 'success');
-        
-        // Set up automatic refresh of pending orders counter every 15 seconds
-        setInterval(() => {
-            loadPendingOrders();
-            console.log('[POS] Auto-refreshing pending orders counter');
-        }, 15000); // 15 seconds
-        
     } catch (error) {
-        console.error('[POS] CRITICAL ERROR during initialization:', error);
-        console.error('[POS] Error stack:', error.stack);
-        showNotification('Error crítico inicializando el sistema POS. Por favor recarga la página.', 'error');
+        console.error('[POS] Error loading edit sale data:', error);
     }
+    {% endif %}
+    
+    // Load products for the first category (default)
+    const firstCategory = document.querySelector('[data-bs-toggle="pill"]');
+    if (firstCategory) {
+        const categoryId = firstCategory.getAttribute('data-bs-target').replace('#category-', '');
+        loadProducts(categoryId);
+    } else {
+        // Fallback: load products for category 1 if no tabs found
+        loadProducts(1);
+    }
+    
+    // Load available tables
+    console.log('[POS] About to load tables...');
+    loadTables();
+    
+    // Load customers for dropdown
+    console.log('[POS] About to load customers...');
+    await loadCustomers();
+    
+    // Load pending orders count
+    console.log('[POS] About to load pending orders...');
+    loadPendingOrders();
+    
+    // Load tax types from API
+    console.log('[POS] About to load tax types...');
+    await loadTaxTypes();
+    
+    // Check cash register status and show opening modal if needed
+    console.log('[POS] About to check cash register status...');
+    await checkCashRegisterStatus();
+    
+    console.log('[POS] POS system initialized successfully');
+    showNotification('Sistema POS iniciado - Modo offline disponible', 'success');
 }
 
 // Check cash register status and update UI accordingly
@@ -2815,6 +2796,30 @@ window.addEventListener('beforeunload', function(e) {
         e.returnValue = 'Tienes productos en el carrito. ¿Estás seguro de que quieres salir?';
     }
 });
+
+// Cash Register Management Functions
+async function checkCashRegisterStatus() {
+    try {
+        console.log('[Cash] Checking cash register status...');
+        const response = await apiRequest('/api/cash-register/status');
+        
+        if (!response.has_register) {
+            showNotification('No tienes una caja registradora asignada. Contacta al administrador.', 'warning');
+            return;
+        }
+        
+        updateCashStatusUI(response);
+        
+        if (response.has_register && !response.has_open_session) {
+            // Show cash register opening modal
+            showOpenCashModal(response.register_name);
+        }
+        
+    } catch (error) {
+        console.error('[Cash] Error checking cash register status:', error);
+        showNotification('Error verificando estado de caja: ' + (error.message || error), 'error');
+    }
+}
 
 function updateCashStatusUI(status) {
     const statusIndicator = document.getElementById('cash-status-indicator');
