@@ -77,7 +77,55 @@ Implementación completa de sistema de tabs según PLAN_MEJORAS_BAR.md:
 - Cierre de tab genera venta pending lista para cajero cobrar y asignar NCF
 - Validación de stock funciona igual en tabs y ventas regulares
 
-**Pendiente: FASE 3 (División de Cuenta), FASE 4 (Simplificar Flujo Meseros)**
+**FASE 3: Sistema de División de Cuenta - COMPLETADA** (Oct 4, 2025)
+
+Implementación completa de división de cuenta según PLAN_MEJORAS_BAR.md:
+
+*Backend - Endpoint API:*
+- POST /api/sales/{sale_id}/split: Endpoint principal de división de cuenta
+- Tres modos de división implementados:
+  - **equal**: División equitativa entre N personas con distribución proporcional
+  - **by_items**: División asignando items específicos a cada persona
+  - **custom**: División personalizada por porcentaje o monto fijo
+
+*Backend - Lógica de División:*
+- Funciones helper: _split_equal, _split_by_items, _split_custom
+- Creación de ventas hijas vinculadas vía parent_sale_id
+- Cálculo proporcional de subtotales e impuestos con manejo de redondeo
+- Validaciones completas: evita doble división, valida totales, verifica asignaciones
+- Manejo de errores con rollback automático
+
+*Backend - Validaciones:*
+- Prevención de división de ventas ya divididas (split_parent status)
+- Verificación de ventas vacías sin items
+- Validación de suma de porcentajes/montos según tipo de división
+- Validación de items asignados en división by_items
+
+*Frontend - UI de División:*
+- Modal interactivo en templates/waiter/table_detail.html
+- Selector de tipo de división con formularios dinámicos
+- División Equitativa: Input para número de personas
+- División por Items: Selector múltiple de items con asignación por persona
+- División Personalizada: Opciones de porcentaje o monto fijo por persona
+- Preview de divisiones con totales calculados
+- Validaciones del lado del cliente
+- Integración completa con API endpoint
+
+*Archivos Actualizados:*
+- routes/api.py: Endpoint /split y funciones helper con asignación de atributos
+- templates/waiter/table_detail.html: Modal de división con JavaScript interactivo
+- models.py: Uso de campos parent_sale_id y split_type existentes
+- PLAN_MEJORAS_BAR.md: Documentación de Fase 3 actualizada
+
+*Beneficios Logrados:*
+- Meseros pueden dividir cuentas de forma flexible según necesidad del cliente
+- División equitativa automática con manejo de redondeo
+- División por items permite asignación precisa de consumos individuales
+- División personalizada soporta casos especiales (uno paga más, etc.)
+- Cada división genera venta independiente lista para cobro y NCF
+- Validaciones previenen errores y garantizan consistencia de totales
+
+**Pendiente: FASE 4 (Simplificar Flujo Meseros)**
 
 # User Preferences
 
