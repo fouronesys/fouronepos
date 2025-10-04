@@ -88,6 +88,31 @@ def get_products():
     } for p in products])
 
 
+@bp.route('/products/<int:product_id>/stock')
+def get_product_stock(product_id):
+    """Get stock information for a specific product"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    product = models.Product.query.filter_by(id=product_id, active=True).first()
+    
+    if not product:
+        return jsonify({'error': 'Producto no encontrado'}), 404
+    
+    is_available = product.stock > 0 if product.product_type == 'inventariable' else True
+    
+    return jsonify({
+        'product_id': product.id,
+        'product_name': product.name,
+        'stock_available': product.stock,
+        'min_stock': product.min_stock,
+        'product_type': product.product_type,
+        'is_available': is_available,
+        'status': 'out_of_stock' if product.stock <= 0 else ('low_stock' if product.stock <= product.min_stock else 'in_stock')
+    })
+
+
 @bp.route('/categories')
 def get_categories():
     user = require_login()
