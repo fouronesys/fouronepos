@@ -216,7 +216,7 @@
                 <h5 class="modal-title" id="categoryModalTitle">Nueva Categoría</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form id="categoryForm" method="POST">
+            <form id="categoryForm" method="POST" action="{{ url_for('admin.create_category') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
                     <div class="mb-3">
@@ -268,8 +268,8 @@ function newCategory() {
 function editCategory(categoryId, categoryName, categoryDescription) {
     document.getElementById('categoryModalTitle').textContent = 'Editar Categoría';
     document.getElementById('categoryName').value = categoryName;
-    document.getElementById('categoryDescription').value = categoryDescription;
-    document.getElementById('categoryForm').action = '{{ url_for("admin.edit_category", category_id=0) }}'.replace('0', categoryId);
+    document.getElementById('categoryDescription').value = categoryDescription || '';
+    document.getElementById('categoryForm').action = '/admin/categories/' + categoryId + '/edit';
     
     var modal = new bootstrap.Modal(document.getElementById('categoryModal'));
     modal.show();
