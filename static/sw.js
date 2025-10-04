@@ -1,5 +1,5 @@
-// Service Worker para Four One POS - Enhanced Offline Support
-const CACHE_VERSION = 'v5-pos-fix-1759597895';
+// Service Worker para Four One POS - Enhanced Offline Support  
+const CACHE_VERSION = 'v6-final-fix-' + Date.now();
 const STATIC_CACHE = `fourone-static-${CACHE_VERSION}`;
 const API_CACHE = `fourone-api-${CACHE_VERSION}`;
 const OFFLINE_QUEUE = `fourone-queue-${CACHE_VERSION}`;
@@ -99,10 +99,14 @@ self.addEventListener('fetch', function(event) {
 async function handleNavigation(request) {
   try {
     const response = await fetch(request);
+    const url = new URL(request.url);
+    
     if (response.ok) {
-      // Cache successful navigation
-      const cache = await caches.open(STATIC_CACHE);
-      cache.put(request, response.clone());
+      // Do NOT cache POS page to always get fresh version with scripts
+      if (!url.pathname.includes('/admin/pos')) {
+        const cache = await caches.open(STATIC_CACHE);
+        cache.put(request, response.clone());
+      }
     }
     return response;
   } catch (error) {
@@ -110,9 +114,9 @@ async function handleNavigation(request) {
     const cachedResponse = await caches.match(request);
     if (cachedResponse) return cachedResponse;
     
-    // Return offline page or cached POS page
+    // Return offline page (but not cached POS page)
     const posPage = await caches.match('/admin/pos');
-    if (posPage) return posPage;
+    if (posPage && !request.url.includes('/admin/pos')) return posPage;
     
     return new Response(`
       <!DOCTYPE html>
