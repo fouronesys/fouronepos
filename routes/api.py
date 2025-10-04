@@ -144,6 +144,38 @@ def get_tax_types():
     } for tax_type in tax_types])
 
 
+@bp.route('/products/<int:product_id>/stock')
+def get_product_stock(product_id):
+    """Get stock availability for a specific product"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    product = models.Product.query.get_or_404(product_id)
+    
+    is_available = True
+    stock_status = 'available'
+    
+    if product.product_type == 'inventariable':
+        if product.stock <= 0:
+            is_available = False
+            stock_status = 'out_of_stock'
+        elif product.stock <= product.min_stock:
+            stock_status = 'low_stock'
+    else:
+        stock_status = 'not_tracked'
+    
+    return jsonify({
+        'product_id': product.id,
+        'product_name': product.name,
+        'stock_available': product.stock,
+        'min_stock': product.min_stock,
+        'product_type': product.product_type,
+        'is_available': is_available,
+        'stock_status': stock_status
+    })
+
+
 @bp.route('/tables/<int:table_id>/status', methods=['PUT'])
 def update_table_status(table_id):
     user = require_login()
