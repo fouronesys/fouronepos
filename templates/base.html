@@ -99,7 +99,7 @@
     {% if session.user_id %}
     <nav class="navbar navbar-expand-lg animate-fade-in">
         <div class="container-fluid">
-            <a class="navbar-brand" href="/">
+            <a class="navbar-brand" href="{{ url_for('admin.dashboard') }}">
                 <img class="logo-dark" src="{{ url_for('static', filename='uploads/logos/logo-white.png') }}" alt="Four One Solutions" height="32">
                 <img class="logo-light" src="{{ url_for('static', filename='uploads/logos/logo-black.png') }}" alt="Four One Solutions" height="32">
                 <span>Four One POS</span>
