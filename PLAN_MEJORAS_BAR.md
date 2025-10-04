@@ -231,22 +231,22 @@ class SaleStatus(enum.Enum):
 
 ## 🎯 Orden de Implementación Sugerido
 
-1. **Stock en tiempo real** (más simple, alto impacto)
-   - Endpoint GET stock
-   - Validación en add item
-   - UI mostrando disponibilidad
+1. ✅ **Stock en tiempo real** (más simple, alto impacto) - **COMPLETADO**
+   - ✅ Endpoint GET stock
+   - ✅ Validación en add item
+   - ✅ UI mostrando disponibilidad
 
-2. **Sistema de Tabs** (crítico para bar)
+2. 🔄 **Sistema de Tabs** (crítico para bar) - **EN PROGRESO**
    - Modelo y endpoints
    - Lógica de tab abierto
    - UI meseros y cajeros
 
-3. **División de cuenta** (funcionalidad clave)
+3. ⏳ **División de cuenta** (funcionalidad clave) - **PENDIENTE**
    - Endpoint split
    - Lógica de división
    - UI de división
 
-4. **Simplificar flujo meseros** (limpieza final)
+4. ⏳ **Simplificar flujo meseros** (limpieza final) - **PENDIENTE**
    - Remover estados cocina
    - Actualizar templates
    - Deprecar endpoints innecesarios

@@ -296,8 +296,11 @@ class Sale(db.Model):
     payment_method: Mapped[str] = mapped_column(String(50), default="cash")
     cash_received: Mapped[float] = mapped_column(Float, nullable=True)  # Amount of cash received
     change_amount: Mapped[float] = mapped_column(Float, nullable=True)  # Change to be given
-    status: Mapped[str] = mapped_column(String(20), default="pending")  # completed, pending, cancelled
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # completed, pending, cancelled, tab_open, split_parent
     order_status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.NOT_SENT)
+    # Tab and split fields
+    parent_sale_id: Mapped[int] = mapped_column(Integer, ForeignKey('sales.id'), nullable=True)
+    split_type: Mapped[str] = mapped_column(String(20), nullable=True)  # equal, by_items, custom
     # Client info for fiscal/government invoices (NCF compliance)
     customer_name: Mapped[str] = mapped_column(String(200), nullable=True)
     customer_rnc: Mapped[str] = mapped_column(String(20), nullable=True) 
@@ -318,6 +321,9 @@ class Sale(db.Model):
     ncf_sequence = relationship("NCFSequence", back_populates="sales")
     sale_items = relationship("SaleItem", back_populates="sale")
     tax_type = relationship("TaxType", foreign_keys=[tax_type_id])
+    # Tab and split relationships
+    parent_sale = relationship("Sale", remote_side=[id], foreign_keys=[parent_sale_id])
+    child_sales = relationship("Sale", foreign_keys=[parent_sale_id], remote_side=[parent_sale_id])
 
     def calculate_totals(self):
         """Calcula totales basado en tax_mode para alineación con módulo de compras"""

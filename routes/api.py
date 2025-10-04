@@ -2798,3 +2798,316 @@ def preview_sale_calculation():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Error en cálculo de preview', 'details': str(e)}), 500
+
+
+# ============================
+# TABS/OPEN ACCOUNTS ENDPOINTS
+# ============================
+
+@bp.route('/tabs/open', methods=['POST'])
+def open_tab():
+    """Open a new tab/open account for a customer or table"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
+    
+    data = request.get_json()
+    customer_name = data.get('customer_name', '').strip()
+    table_id = data.get('table_id')
+    description = data.get('description', '').strip()
+    
+    if not customer_name and not table_id:
+        return jsonify({'error': 'Debe proporcionar nombre de cliente o número de mesa'}), 400
+    
+    try:
+        # If table_id provided, verify table exists and is available
+        table = None
+        if table_id:
+            table = models.Table.query.get(table_id)
+            if not table:
+                return jsonify({'error': 'Mesa no encontrada'}), 404
+            if table.status != models.TableStatus.AVAILABLE:
+                return jsonify({'error': 'Mesa no está disponible'}), 400
+        
+        # Create new sale with tab_open status
+        new_sale = models.Sale(
+            user_id=user.id,
+            table_id=table_id,
+            customer_name=customer_name if customer_name else f"Mesa {table.number if table else table_id}",
+            description=description if description else "Tab abierto",
+            status='tab_open',
+            subtotal=0.0,
+            tax_amount=0.0,
+            total=0.0,
+            payment_method='pending'
+        )
+        
+        db.session.add(new_sale)
+        
+        # Update table status if applicable
+        if table:
+            table.status = models.TableStatus.OCCUPIED
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'tab_id': new_sale.id,
+            'customer_name': new_sale.customer_name,
+            'table_number': table.number if table else None,
+            'created_at': new_sale.created_at.isoformat()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error opening tab: {e}")
+        return jsonify({'error': 'Error al abrir tab', 'details': str(e)}), 500
+
+
+@bp.route('/tabs/active', methods=['GET'])
+def get_active_tabs():
+    """List all active/open tabs"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    try:
+        active_tabs = models.Sale.query.filter_by(status='tab_open').order_by(models.Sale.created_at.desc()).all()
+        
+        tabs_data = []
+        for tab in active_tabs:
+            # Calculate current totals
+            items_count = len(tab.sale_items)
+            current_total = sum(item.total_price for item in tab.sale_items)
+            
+            # Calculate time open
+            time_open = datetime.utcnow() - tab.created_at
+            hours_open = int(time_open.total_seconds() / 3600)
+            minutes_open = int((time_open.total_seconds() % 3600) / 60)
+            
+            tabs_data.append({
+                'id': tab.id,
+                'customer_name': tab.customer_name,
+                'table_number': tab.table.number if tab.table else None,
+                'table_id': tab.table_id,
+                'items_count': items_count,
+                'current_total': round(current_total, 2),
+                'created_at': tab.created_at.isoformat(),
+                'time_open': f"{hours_open}h {minutes_open}m",
+                'waiter_name': tab.user.name
+            })
+        
+        return jsonify({
+            'success': True,
+            'tabs': tabs_data,
+            'count': len(tabs_data)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching active tabs: {e}")
+        return jsonify({'error': 'Error al obtener tabs activos', 'details': str(e)}), 500
+
+
+@bp.route('/tabs/<int:tab_id>', methods=['GET'])
+def get_tab_details(tab_id):
+    """Get details of a specific tab"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    try:
+        tab = models.Sale.query.get(tab_id)
+        
+        if not tab:
+            return jsonify({'error': 'Tab no encontrado'}), 404
+        
+        if tab.status != 'tab_open':
+            return jsonify({'error': 'Este tab no está abierto'}), 400
+        
+        # Get all items in the tab
+        items = []
+        subtotal = 0
+        tax_amount = 0
+        
+        for item in tab.sale_items:
+            item_data = {
+                'id': item.id,
+                'product_id': item.product_id,
+                'product_name': item.product.name,
+                'quantity': item.quantity,
+                'unit_price': item.unit_price,
+                'total_price': item.total_price,
+                'tax_amount': item.tax_amount
+            }
+            items.append(item_data)
+            subtotal += item.total_price - item.tax_amount
+            tax_amount += item.tax_amount
+        
+        total = subtotal + tax_amount
+        
+        return jsonify({
+            'success': True,
+            'tab': {
+                'id': tab.id,
+                'customer_name': tab.customer_name,
+                'table_number': tab.table.number if tab.table else None,
+                'table_id': tab.table_id,
+                'created_at': tab.created_at.isoformat(),
+                'waiter_name': tab.user.name,
+                'items': items,
+                'subtotal': round(subtotal, 2),
+                'tax_amount': round(tax_amount, 2),
+                'total': round(total, 2)
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching tab details: {e}")
+        return jsonify({'error': 'Error al obtener detalles del tab', 'details': str(e)}), 500
+
+
+@bp.route('/tabs/<int:tab_id>/add-item', methods=['POST'])
+def add_item_to_tab(tab_id):
+    """Add an item to an existing tab with stock validation"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
+    
+    try:
+        tab = models.Sale.query.get(tab_id)
+        
+        if not tab:
+            return jsonify({'error': 'Tab no encontrado'}), 404
+        
+        if tab.status != 'tab_open':
+            return jsonify({'error': 'Este tab no está abierto'}), 400
+        
+        data = request.get_json()
+        product_id = data.get('product_id')
+        quantity = data.get('quantity', 1)
+        
+        if not product_id or quantity < 1:
+            return jsonify({'error': 'Producto y cantidad son requeridos'}), 400
+        
+        # Get product with lock for update to prevent race conditions
+        product = models.Product.query.with_for_update().get(product_id)
+        
+        if not product:
+            return jsonify({'error': 'Producto no encontrado'}), 404
+        
+        if not product.active:
+            return jsonify({'error': 'Producto no está activo'}), 400
+        
+        # Validate stock for inventoried products
+        if product.product_type == 'inventariable':
+            if product.stock < quantity:
+                return jsonify({
+                    'error': f'Stock insuficiente. Disponible: {product.stock}',
+                    'available_stock': product.stock
+                }), 400
+            
+            # Reduce stock
+            product.stock -= quantity
+        
+        # Calculate tax for this product
+        product_tax_amount = 0
+        for pt in product.product_taxes:
+            if pt.tax_type.is_inclusive:
+                base_price = product.price / (1 + pt.tax_type.rate)
+                product_tax_amount += (product.price - base_price) * quantity
+            else:
+                product_tax_amount += product.price * pt.tax_type.rate * quantity
+        
+        # Create sale item
+        sale_item = models.SaleItem(
+            sale_id=tab.id,
+            product_id=product.id,
+            quantity=quantity,
+            unit_price=product.price,
+            total_price=product.price * quantity,
+            tax_amount=round(product_tax_amount, 2)
+        )
+        
+        db.session.add(sale_item)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'{product.name} agregado al tab',
+            'item': {
+                'id': sale_item.id,
+                'product_name': product.name,
+                'quantity': quantity,
+                'unit_price': product.price,
+                'total_price': sale_item.total_price
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error adding item to tab: {e}")
+        return jsonify({'error': 'Error al agregar item al tab', 'details': str(e)}), 500
+
+
+@bp.route('/tabs/<int:tab_id>/close', methods=['POST'])
+def close_tab(tab_id):
+    """Close a tab and prepare it for payment"""
+    user = require_login()
+    if not isinstance(user, models.User):
+        return user
+    
+    csrf_error = validate_csrf_token()
+    if csrf_error:
+        return csrf_error
+    
+    try:
+        tab = models.Sale.query.get(tab_id)
+        
+        if not tab:
+            return jsonify({'error': 'Tab no encontrado'}), 404
+        
+        if tab.status != 'tab_open':
+            return jsonify({'error': 'Este tab no está abierto'}), 400
+        
+        if not tab.sale_items:
+            return jsonify({'error': 'No se puede cerrar un tab sin items'}), 400
+        
+        # Calculate totals
+        subtotal = 0
+        tax_amount = 0
+        
+        for item in tab.sale_items:
+            subtotal += item.total_price - item.tax_amount
+            tax_amount += item.tax_amount
+        
+        total = subtotal + tax_amount
+        
+        # Update sale totals and status
+        tab.subtotal = round(subtotal, 2)
+        tab.tax_amount = round(tax_amount, 2)
+        tab.total = round(total, 2)
+        tab.status = 'pending'  # Ready for payment
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Tab cerrado exitosamente',
+            'sale_id': tab.id,
+            'subtotal': tab.subtotal,
+            'tax_amount': tab.tax_amount,
+            'total': tab.total
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error closing tab: {e}")
+        return jsonify({'error': 'Error al cerrar tab', 'details': str(e)}), 500
