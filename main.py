@@ -135,3 +135,8 @@ def add_security_headers(response):
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
     return response
+
+
+# Run the application in development mode
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
