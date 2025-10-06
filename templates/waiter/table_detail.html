@@ -74,11 +74,6 @@
                     <div class="row mt-3">
                         <div class="col-md-6">
                             <div class="d-grid gap-2">
-                                {% if not is_tab %}
-                                <button class="btn btn-info btn-touch" onclick="sendToKitchen()">
-                                    <i class="bi bi-send"></i> Enviar a Cocina
-                                </button>
-                                {% endif %}
                                 <button class="btn btn-warning btn-touch" onclick="showSplitBillModal()">
                                     <i class="bi bi-scissors"></i> Dividir Cuenta
                                 </button>
@@ -362,69 +357,6 @@ async function addProductToOrder(productId, productName, price) {
     } catch (error) {
         alert('Error de conexión');
         console.error('Add product error:', error);
-    }
-}
-
-// Send order to kitchen with durable order status tracking
-async function sendToKitchen() {
-    if (!currentSale) {
-        alert('No hay pedido para enviar a cocina');
-        return;
-    }
-    
-    if (confirm('¿Confirmas enviar este pedido a cocina?')) {
-        try {
-            // Use the proper kitchen workflow API
-            const response = await fetch(`/api/sales/${currentSale}/send-to-kitchen`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            });
-            
-            if (response.ok) {
-                const result = await response.json();
-                
-                // Show success message with order status
-                alert(`✅ ${result.message}\n\n` +
-                      `📋 Estado del Pedido: ${result.order_status}\n` +
-                      `🍽️ Total: RD$ ${result.total.toFixed(2)}\n\n` +
-                      `El pedido ahora está en la cola de la cocina.`);
-                
-                // Update the button to show current order status
-                const kitchenBtn = document.querySelector('[onclick="sendToKitchen()"]');
-                if (kitchenBtn) {
-                    const originalText = kitchenBtn.innerHTML;
-                    kitchenBtn.innerHTML = '<i class="bi bi-check-circle"></i> Enviado a Cocina';
-                    kitchenBtn.disabled = true;
-                    kitchenBtn.classList.remove('btn-info');
-                    kitchenBtn.classList.add('btn-success');
-                    
-                    // Add order status indicator
-                    const statusBadge = document.createElement('div');
-                    statusBadge.className = 'mt-2';
-                    statusBadge.innerHTML = `<span class="badge bg-warning">Estado: ${result.order_status}</span>`;
-                    kitchenBtn.parentNode.appendChild(statusBadge);
-                }
-                
-                // Add order status display to the order section
-                const orderHeader = document.querySelector('.card-header h5');
-                if (orderHeader && !document.getElementById('order-status-badge')) {
-                    const statusBadge = document.createElement('span');
-                    statusBadge.id = 'order-status-badge';
-                    statusBadge.className = 'badge bg-info ms-2';
-                    statusBadge.textContent = `Estado: ${result.order_status}`;
-                    orderHeader.appendChild(statusBadge);
-                }
-                
-            } else {
-                const error = await response.json();
-                alert('Error enviando pedido a cocina: ' + (error.error || 'Error desconocido'));
-            }
-        } catch (error) {
-            alert('Error de conexión enviando pedido a cocina');
-            console.error('Kitchen send error:', error);
-        }
     }
 }
 

@@ -1877,19 +1877,19 @@ function displayPendingOrders(orders) {
 // Utility functions for order status
 function getOrderStatusBadgeClass(status) {
     switch (status) {
-        case 'sent_to_kitchen': return 'bg-info';
-        case 'in_preparation': return 'bg-warning';
-        case 'ready': return 'bg-success';
+        case 'pending': return 'bg-warning';
+        case 'tab_open': return 'bg-info';
+        case 'completed': return 'bg-success';
         default: return 'bg-secondary';
     }
 }
 
 function getOrderStatusText(status) {
     switch (status) {
-        case 'not_sent': return 'No enviado';
-        case 'sent_to_kitchen': return 'En cocina';
-        case 'in_preparation': return 'Preparando';
-        case 'ready': return 'Listo';
+        case 'pending': return 'Pendiente';
+        case 'tab_open': return 'Tab Abierto';
+        case 'completed': return 'Completado';
+        case 'cancelled': return 'Cancelado';
         default: return 'Pendiente';
     }
 }

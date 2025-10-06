@@ -1056,7 +1056,11 @@ def close_table_properly(table_id):
 
 @bp.route('/sales/<int:sale_id>/kitchen-status', methods=['PUT'])
 def update_kitchen_status(sale_id):
-    """Update the kitchen/order status of a sale"""
+    """
+    DEPRECATED: Update the kitchen/order status of a sale
+    This endpoint is deprecated as bars don't use kitchen workflow.
+    Kept for backward compatibility only.
+    """
     user = require_login()
     if not isinstance(user, models.User):
         return user
@@ -1105,7 +1109,11 @@ def update_kitchen_status(sale_id):
 
 @bp.route('/sales/<int:sale_id>/send-to-kitchen', methods=['POST'])
 def send_to_kitchen(sale_id):
-    """Send sale to kitchen - updates order status to sent_to_kitchen"""
+    """
+    DEPRECATED: Send sale to kitchen - updates order status to sent_to_kitchen
+    This endpoint is deprecated as bars don't use kitchen workflow.
+    Kept for backward compatibility only.
+    """
     user = require_login()
     if not isinstance(user, models.User):
         return user
