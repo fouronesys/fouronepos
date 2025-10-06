@@ -125,7 +125,45 @@ Implementación completa de división de cuenta según PLAN_MEJORAS_BAR.md:
 - Cada división genera venta independiente lista para cobro y NCF
 - Validaciones previenen errores y garantizan consistencia de totales
 
-**Pendiente: FASE 4 (Simplificar Flujo Meseros)**
+**FASE 4: Simplificación de Flujo Meseros - COMPLETADA** (Oct 4, 2025)
+
+Implementación completa de simplificación de flujo según PLAN_MEJORAS_BAR.md:
+
+*Eliminación de Workflow de Cocina:*
+- Removido botón "Enviar a Cocina" de template de meseros
+- Eliminada función JavaScript sendToKitchen() 
+- Endpoints de cocina marcados como DEPRECATED en routes/api.py:
+  - /sales/{id}/kitchen-status (PUT)
+  - /sales/{id}/send-to-kitchen (POST)
+
+*Actualización de Templates:*
+- templates/waiter/table_detail.html: Botón y función de cocina eliminados
+- templates/admin/pos.html: Funciones de estado actualizadas para mostrar estados relevantes:
+  - 'pending' → Badge amarillo "Pendiente"
+  - 'tab_open' → Badge azul "Tab Abierto"
+  - 'completed' → Badge verde "Completado"
+  - 'cancelled' → Badge gris "Cancelado"
+
+*Flujo Simplificado:*
+- Mesero crea pedido → Agrega items → Cierra mesa
+- Cajero recibe pedido → Cobra → Asigna NCF → Finaliza
+- Sin pasos intermedios de cocina innecesarios
+- Flujo directo optimizado para operación de bar
+
+*Archivos Actualizados:*
+- templates/waiter/table_detail.html: Referencias a cocina eliminadas
+- templates/admin/pos.html: Estados de cocina reemplazados por estados de bar
+- routes/api.py: Endpoints de cocina marcados como deprecados
+- PLAN_MEJORAS_BAR.md: Documentación de Fase 4 actualizada
+
+*Beneficios Logrados:*
+- Flujo más rápido y directo para meseros
+- Menos clics y pasos innecesarios
+- UI más limpia sin referencias a cocina
+- Código más mantenible con endpoints deprecados claramente marcados
+- Experiencia optimizada para operación de bar
+
+**TODAS LAS FASES COMPLETADAS ✅**
 
 # User Preferences
 

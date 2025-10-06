@@ -250,10 +250,11 @@ class SaleStatus(enum.Enum):
    - ✅ UI de división con modal interactivo
    - ✅ Validaciones y preview de divisiones
 
-4. ⏳ **Simplificar flujo meseros** (limpieza final) - **PENDIENTE**
-   - Remover estados cocina
-   - Actualizar templates
-   - Deprecar endpoints innecesarios
+4. ✅ **Simplificar flujo meseros** (limpieza final) - **COMPLETADO**
+   - ✅ Removidos estados de cocina de templates
+   - ✅ Templates actualizados (meseros y admin)
+   - ✅ Endpoints de cocina marcados como deprecados
+   - ✅ Flujo simplificado: Mesero → Cajero directo
 
 ---
 
