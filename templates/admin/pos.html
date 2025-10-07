@@ -1304,7 +1304,7 @@ function updateItemQuantity(productId, newQuantity) {
 function clearCart() {
     cartManager.clear();
     document.getElementById('table-select').value = '';
-    document.getElementById('ncf-type-select').value = 'consumo';
+    document.getElementById('ncf-type-select').value = 'sin_comprobante';
     document.getElementById('apply-service-charge').checked = false; // Reset service charge
     toggleClientInfo(); // Reset client info section
 }
@@ -1666,14 +1666,16 @@ function assignToTable() {
 
 // Clear cart - removed duplicate function, using CartManager version only
 
-// Toggle client information fields requirement based on NCF type (but always keep visible)
+// Toggle client information fields requirement based on NCF type
 function toggleClientInfo() {
     const ncfType = document.getElementById('ncf-type-select').value;
+    const clientInfoSection = document.getElementById('client-info-section');
     const clientNameField = document.getElementById('client-name');
     const clientRncField = document.getElementById('client-rnc');
     
-    // Always keep fields visible but mark as required only for fiscal/government
+    // Show fields only for fiscal and government invoices
     if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
+        clientInfoSection.style.display = 'block';
         // Make fields required
         clientNameField.required = true;
         clientRncField.required = true;
@@ -1681,13 +1683,13 @@ function toggleClientInfo() {
         clientNameField.placeholder = 'Nombre o razón social (Requerido)';
         clientRncField.placeholder = 'RNC o número de cédula (Requerido)';
     } else {
-        // Remove required attribute but keep visible
+        // Hide fields for sin_comprobante and consumo
+        clientInfoSection.style.display = 'none';
+        // Remove required attribute and clear values
         clientNameField.required = false;
         clientRncField.required = false;
-        // Update placeholder to show it's optional
-        clientNameField.placeholder = 'Nombre o razón social (Opcional)';
-        clientRncField.placeholder = 'RNC o número de cédula (Opcional)';
-        // Don't clear values - let user keep them if they want
+        clientNameField.value = '';
+        clientRncField.value = '';
     }
 }
 
