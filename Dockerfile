@@ -32,9 +32,10 @@ USER app
 EXPOSE 5000
 
 # Variables de entorno predeterminadas
-ENV FLASK_APP=app.py
+ENV FLASK_APP=main.py
 ENV FLASK_ENV=production
 ENV PYTHONPATH=/app
+ENV ENVIRONMENT=production
 
-# Comando de inicio usando gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+# Comando de inicio usando gunicorn con configuración optimizada
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--worker-class", "sync", "--timeout", "120", "--keep-alive", "5", "--access-logfile", "-", "--error-logfile", "-", "main:app"]
