@@ -603,7 +603,7 @@ function getCurrentTaxType() {
     }
     
     // Return first tax type (usually ITBIS)
-    const taxType = globalTaxTypes[0];
+    const taxType = taxTypes[0]; // FIXED: Use taxTypes instead of globalTaxTypes
     console.log('[POS] getCurrentTaxType returning:', taxType);
     return taxType;
 }
@@ -1389,7 +1389,7 @@ function processSale() {
     
     const ncfType = document.getElementById('ncf-type-select').value;
     
-    // Validate client info for fiscal/government invoices
+    // Validate client info for fiscal/government invoices (REQUIRED only for these types)
     if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
         const clientName = document.getElementById('client-name').value.trim();
         const clientRnc = document.getElementById('client-rnc').value.trim();
@@ -1399,6 +1399,7 @@ function processSale() {
             return;
         }
     }
+    // For other types, client info is optional and will be sent if provided
     
     const tableId = document.getElementById('table-select').value || null;
     const description = document.getElementById('order-description').value.trim() || '';
@@ -1477,10 +1478,15 @@ function processSale() {
             finalizationData.change_amount = cashReceived - total;
         }
         
-        // Add client info for fiscal/government invoices
-        if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
-            finalizationData.client_name = document.getElementById('client-name').value.trim();
-            finalizationData.client_rnc = document.getElementById('client-rnc').value.trim();
+        // Add client info if provided (optional for all NCF types, required only for fiscal/government)
+        const clientName = document.getElementById('client-name').value.trim();
+        const clientRnc = document.getElementById('client-rnc').value.trim();
+        
+        if (clientName) {
+            finalizationData.client_name = clientName;
+        }
+        if (clientRnc) {
+            finalizationData.client_rnc = clientRnc;
         }
         
         return fetch(`/api/sales/${sale.id}/finalize`, {
@@ -1660,24 +1666,28 @@ function assignToTable() {
 
 // Clear cart - removed duplicate function, using CartManager version only
 
-// Toggle client information fields based on NCF type
+// Toggle client information fields requirement based on NCF type (but always keep visible)
 function toggleClientInfo() {
     const ncfType = document.getElementById('ncf-type-select').value;
-    const clientInfoSection = document.getElementById('client-info-section');
+    const clientNameField = document.getElementById('client-name');
+    const clientRncField = document.getElementById('client-rnc');
     
+    // Always keep fields visible but mark as required only for fiscal/government
     if (ncfType === 'credito_fiscal' || ncfType === 'gubernamental') {
-        clientInfoSection.style.display = 'block';
         // Make fields required
-        document.getElementById('client-name').required = true;
-        document.getElementById('client-rnc').required = true;
+        clientNameField.required = true;
+        clientRncField.required = true;
+        // Add visual indicator
+        clientNameField.placeholder = 'Nombre o razón social (Requerido)';
+        clientRncField.placeholder = 'RNC o número de cédula (Requerido)';
     } else {
-        clientInfoSection.style.display = 'none';
-        // Remove required attribute
-        document.getElementById('client-name').required = false;
-        document.getElementById('client-rnc').required = false;
-        // Clear values
-        document.getElementById('client-name').value = '';
-        document.getElementById('client-rnc').value = '';
+        // Remove required attribute but keep visible
+        clientNameField.required = false;
+        clientRncField.required = false;
+        // Update placeholder to show it's optional
+        clientNameField.placeholder = 'Nombre o razón social (Opcional)';
+        clientRncField.placeholder = 'RNC o número de cédula (Opcional)';
+        // Don't clear values - let user keep them if they want
     }
 }
 
@@ -2565,6 +2575,9 @@ async function initializePOS() {
     
     // Initialize cash fields based on selected payment method
     toggleCashFields();
+    
+    // Initialize client info fields based on NCF type
+    toggleClientInfo();
     
     console.log('[POS] POS system initialized successfully');
     showNotification('Sistema POS iniciado - Modo offline disponible', 'success');
