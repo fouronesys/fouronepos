@@ -165,6 +165,26 @@ Implementación completa de simplificación de flujo según PLAN_MEJORAS_BAR.md:
 
 **TODAS LAS FASES COMPLETADAS ✅**
 
+**Corrección de Generación de Recibos para Ventas Sin Comprobante** (Oct 7, 2025)
+
+*Problema Identificado:*
+- Los endpoints de recibos (view, PDF, thermal) rechazaban ventas sin NCF asignado
+- Error: "Esta venta no tiene NCF válido para generar recibo fiscal"
+- Impedía generar recibos para ventas con "Sin comprobante" (que correctamente NO tienen NCF)
+
+*Solución Implementada:*
+- Eliminada validación `if not sale.ncf` en 3 endpoints de recibos
+- Agregado comentario explicativo sobre NCF opcional para "sin_comprobante"
+- Los recibos ahora se generan correctamente incluso sin NCF
+
+*Cumplimiento Fiscal Mantenido:*
+- finalize_sale sigue garantizando NCF obligatorio para tipos fiscales (crédito, gubernamental)
+- Solo ventas "sin_comprobante" completadas pueden carecer de NCF
+- Plantillas de recibos ya manejaban correctamente ncf=None
+
+*Archivos Actualizados:*
+- routes/api.py: Validación corregida en endpoints de recibos (líneas 1267-1271, 1314-1318, 1364-1368)
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
