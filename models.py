@@ -323,7 +323,7 @@ class Sale(db.Model):
     tax_type = relationship("TaxType", foreign_keys=[tax_type_id])
     # Tab and split relationships
     parent_sale = relationship("Sale", remote_side=[id], foreign_keys=[parent_sale_id])
-    child_sales = relationship("Sale", foreign_keys=[parent_sale_id], remote_side=[parent_sale_id])
+    child_sales = relationship("Sale", foreign_keys=[parent_sale_id], remote_side=[parent_sale_id], overlaps="parent_sale")
 
     def calculate_totals(self):
         """Calcula totales basado en tax_mode para alineación con módulo de compras"""
