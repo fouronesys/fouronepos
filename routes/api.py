@@ -1261,12 +1261,11 @@ def view_receipt(sale_id):
     # Get sale data
     sale = models.Sale.query.get_or_404(sale_id)
     
-    # FISCAL COMPLIANCE: Only allow receipts for completed sales with NCF
+    # FISCAL COMPLIANCE: Only allow receipts for completed sales
     if sale.status != 'completed':
         return jsonify({'error': 'Solo se pueden generar recibos para ventas completadas'}), 400
     
-    if not sale.ncf:
-        return jsonify({'error': 'Esta venta no tiene NCF válido para generar recibo fiscal'}), 400
+    # NOTE: NCF is optional - sales with "sin_comprobante" won't have NCF but can still generate receipt
     
     # SECURITY: Verify user has access to this sale
     if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
@@ -1308,12 +1307,11 @@ def generate_receipt_pdf(sale_id):
     # Get sale data
     sale = models.Sale.query.get_or_404(sale_id)
     
-    # FISCAL COMPLIANCE: Only allow receipts for completed sales with NCF
+    # FISCAL COMPLIANCE: Only allow receipts for completed sales
     if sale.status != 'completed':
         return jsonify({'error': 'Solo se pueden generar recibos para ventas completadas'}), 400
     
-    if not sale.ncf:
-        return jsonify({'error': 'Esta venta no tiene NCF válido para generar recibo fiscal'}), 400
+    # NOTE: NCF is optional - sales with "sin_comprobante" won't have NCF but can still generate receipt
     
     # SECURITY: Verify user has access to this sale
     if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
@@ -1358,12 +1356,11 @@ def generate_receipt_thermal(sale_id):
     # Get sale data
     sale = models.Sale.query.get_or_404(sale_id)
     
-    # FISCAL COMPLIANCE: Only allow receipts for completed sales with NCF
+    # FISCAL COMPLIANCE: Only allow receipts for completed sales
     if sale.status != 'completed':
         return jsonify({'error': 'Solo se pueden generar recibos para ventas completadas'}), 400
     
-    if not sale.ncf:
-        return jsonify({'error': 'Esta venta no tiene NCF válido para generar recibo fiscal'}), 400
+    # NOTE: NCF is optional - sales with "sin_comprobante" won't have NCF but can still generate receipt
     
     # SECURITY: Verify user has access to this sale
     if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
