@@ -90,6 +90,7 @@ def index():
 
 
 @app.route('/sw.js')
+@limiter.exempt
 def service_worker():
     """Serve service worker from root to control entire app scope"""
     from flask import send_from_directory
@@ -97,6 +98,7 @@ def service_worker():
 
 
 @app.route('/favicon.ico')
+@limiter.exempt
 def favicon():
     """Simple favicon endpoint to prevent 404 errors"""
     from flask import send_from_directory
@@ -105,7 +107,7 @@ def favicon():
 @app.after_request
 def add_cache_headers(response):
     """Add proper cache control headers for static vs dynamic content"""
-    if request.endpoint == 'static':
+    if request.endpoint in ('static', 'favicon', 'service_worker'):
         # Allow caching for static assets in production, but force reload in development
         if os.environ.get("ENVIRONMENT") == "production":
             # Cache static assets for 1 hour in production
@@ -130,7 +132,7 @@ def add_security_headers(response):
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     
     # Only disable caching for dynamic content (not static files)
-    if request.endpoint != 'static':
+    if request.endpoint not in ('static', 'favicon', 'service_worker'):
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
