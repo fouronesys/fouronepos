@@ -648,10 +648,20 @@ def finalize_sale(sale_id):
                     print(f"  - ID: {seq.id}, Type: {seq.ncf_type}, Serie: {seq.serie}, Active: {seq.active}")
                 
                 available_types = [str(s.ncf_type.value) for s in all_sequences]
+                ncf_type_names = {
+                    'CONSUMO': 'Consumo',
+                    'CREDITO_FISCAL': 'Crédito Fiscal',
+                    'GUBERNAMENTAL': 'Gubernamental',
+                    'NOTA_CREDITO': 'Nota de Crédito',
+                    'NOTA_DEBITO': 'Nota de Débito'
+                }
+                ncf_type_display = ncf_type_names.get(ncf_type.upper(), ncf_type)
+                
                 if available_types:
-                    error_msg = f'No hay secuencia NCF activa para tipo {ncf_type}. Tipos disponibles: {", ".join(set(available_types))}'
+                    available_display = [ncf_type_names.get(t, t) for t in set(available_types)]
+                    error_msg = f'No hay secuencia de NCF configurada para comprobantes de tipo "{ncf_type_display}". Por favor, seleccione otro tipo de comprobante o contacte al administrador. Tipos disponibles: {", ".join(available_display)}'
                 else:
-                    error_msg = 'Sistema de facturación no configurado: no hay secuencias NCF activas. Contacte al administrador para configurar las secuencias fiscales.'
+                    error_msg = 'Sistema de facturación no configurado: no hay secuencias NCF activas. Contacte al administrador para configurar las secuencias fiscales antes de procesar ventas.'
                 
                 print(f"[ERROR FINALIZE] {error_msg}")
                 raise ValueError(error_msg)
@@ -659,7 +669,15 @@ def finalize_sale(sale_id):
             # Check if sequence is exhausted (treat end_number as inclusive)
             print(f"[DEBUG FINALIZE] NCF sequence status: current={ncf_sequence.current_number}, end={ncf_sequence.end_number}")
             if ncf_sequence.current_number > ncf_sequence.end_number:
-                error_msg = f'Secuencia NCF agotada. Actual: {ncf_sequence.current_number}, Límite: {ncf_sequence.end_number}'
+                ncf_type_names = {
+                    'CONSUMO': 'Consumo',
+                    'CREDITO_FISCAL': 'Crédito Fiscal',
+                    'GUBERNAMENTAL': 'Gubernamental',
+                    'NOTA_CREDITO': 'Nota de Crédito',
+                    'NOTA_DEBITO': 'Nota de Débito'
+                }
+                ncf_type_display = ncf_type_names.get(ncf_type.upper(), ncf_type)
+                error_msg = f'Secuencia de NCF agotada para comprobantes de tipo "{ncf_type_display}". Por favor, contacte al administrador para configurar una nueva secuencia fiscal. (Límite alcanzado: {ncf_sequence.end_number})'
                 print(f"[ERROR FINALIZE] {error_msg}")
                 raise ValueError(error_msg)
             
