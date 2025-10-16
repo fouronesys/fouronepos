@@ -11,9 +11,47 @@
         </div>
     </div>
 
-    <!-- Tarjeta de Puntuación de Cumplimiento -->
+    <!-- Sistema de Alertas Automáticas -->
+    {% if compliance_score < 80 %}
     <div class="row mb-4">
-        <div class="col-md-6 mx-auto">
+        <div class="col-12">
+            <div class="alert alert-{{ 'danger' if compliance_score < 60 else 'warning' }} alert-dismissible fade show" role="alert">
+                <h4 class="alert-heading">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    {% if compliance_score < 60 %}
+                    ¡ALERTA CRÍTICA! Puntuación de Cumplimiento Fiscal Baja
+                    {% else %}
+                    ¡ATENCIÓN! Puntuación de Cumplimiento Fiscal Necesita Mejoras
+                    {% endif %}
+                </h4>
+                <p>Su puntuación actual es <strong>{{ compliance_score }}%</strong>, lo cual está por debajo del nivel aceptable (80%).</p>
+                <hr>
+                <p class="mb-0">
+                    <strong>Acciones inmediatas requeridas:</strong>
+                </p>
+                <ul class="mb-2">
+                    {% if products_without_taxes > 0 %}
+                    <li>Asignar tipos de impuestos a {{ products_without_taxes }} producto(s) sin configuración fiscal</li>
+                    {% endif %}
+                    {% if products_with_multiple_itbis|length > 0 %}
+                    <li>Corregir {{ products_with_multiple_itbis|length }} producto(s) con múltiples ITBIS</li>
+                    {% endif %}
+                    {% if products_with_mixed_taxes|length > 0 %}
+                    <li>Corregir {{ products_with_mixed_taxes|length }} producto(s) con mezcla de impuestos</li>
+                    {% endif %}
+                </ul>
+                <p class="mb-0">
+                    <strong>⚠️ IMPORTANTE:</strong> No genere reportes DGII 606/607 hasta que la puntuación sea mayor al 95%.
+                </p>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Tarjeta de Puntuación de Cumplimiento con Gráfico -->
+    <div class="row mb-4">
+        <div class="col-md-6">
             <div class="card border-{{ compliance_class }}">
                 <div class="card-body text-center">
                     <h5 class="card-title">Puntuación de Cumplimiento Fiscal</h5>
@@ -26,6 +64,14 @@
                     <small class="text-muted">
                         Basado en la configuración fiscal de {{ total_products }} productos activos
                     </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title text-center">Medidor de Cumplimiento</h5>
+                    <canvas id="complianceGauge" height="200"></canvas>
                 </div>
             </div>
         </div>
@@ -166,15 +212,23 @@
         <div class="col-12">
             <h4 class="mb-3"><i class="bi bi-bar-chart me-2"></i>Distribución de Productos por Tipo de ITBIS</h4>
         </div>
-        <div class="col-md-12">
+        <div class="col-md-6">
             <div class="card">
                 <div class="card-body">
-                    <table class="table table-hover">
+                    <h5 class="card-title text-center mb-4">Gráfico de Distribución</h5>
+                    <canvas id="itbisDistributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <table class="table table-hover mb-0">
                         <thead>
                             <tr>
                                 <th>Tipo de ITBIS</th>
-                                <th class="text-end">Cantidad de Productos</th>
-                                <th class="text-end">Porcentaje</th>
+                                <th class="text-end">Cantidad</th>
+                                <th class="text-end">%</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -198,6 +252,50 @@
                             {% endif %}
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráfico de Problemas Detectados -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3"><i class="bi bi-pie-chart me-2"></i>Análisis de Problemas</h4>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title text-center mb-4">Estado de Configuración</h5>
+                    <canvas id="problemsChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title text-center mb-4">Resumen de Issues</h5>
+                    <div class="d-flex justify-content-around text-center mt-4">
+                        <div>
+                            <h3 class="{% if products_without_taxes > 0 %}text-danger{% else %}text-success{% endif %}">{{ products_without_taxes }}</h3>
+                            <p class="text-muted small mb-0">Sin Tax Types</p>
+                        </div>
+                        <div>
+                            <h3 class="{% if products_with_multiple_itbis|length > 0 %}text-warning{% else %}text-success{% endif %}">{{ products_with_multiple_itbis|length }}</h3>
+                            <p class="text-muted small mb-0">Múltiples ITBIS</p>
+                        </div>
+                        <div>
+                            <h3 class="{% if products_with_mixed_taxes|length > 0 %}text-warning{% else %}text-success{% endif %}">{{ products_with_mixed_taxes|length }}</h3>
+                            <p class="text-muted small mb-0">Mezcla Inc/Exc</p>
+                        </div>
+                    </div>
+                    <div class="progress mt-4" style="height: 25px;">
+                        {% set correct_products = total_products - products_without_taxes - products_with_multiple_itbis|length - products_with_mixed_taxes|length %}
+                        {% if total_products > 0 %}
+                        <div class="progress-bar bg-success" role="progressbar" style="width: {{ (correct_products / total_products * 100)|int }}%">
+                            {{ (correct_products / total_products * 100)|int }}% Correctos
+                        </div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -312,4 +410,174 @@
         </div>
     </div>
 </div>
+
+{% block extra_js %}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+// Colores consistentes
+const chartColors = {
+    success: 'rgba(25, 135, 84, 0.8)',
+    danger: 'rgba(220, 53, 69, 0.8)',
+    warning: 'rgba(255, 193, 7, 0.8)',
+    info: 'rgba(13, 202, 240, 0.8)',
+    primary: 'rgba(13, 110, 253, 0.8)',
+    secondary: 'rgba(108, 117, 125, 0.8)'
+};
+
+// 1. Gráfico de Medidor de Cumplimiento (Gauge)
+const complianceScore = {{ compliance_score }};
+const complianceCtx = document.getElementById('complianceGauge').getContext('2d');
+
+new Chart(complianceCtx, {
+    type: 'doughnut',
+    data: {
+        labels: ['Cumplimiento', 'Faltante'],
+        datasets: [{
+            data: [complianceScore, 100 - complianceScore],
+            backgroundColor: [
+                complianceScore >= 95 ? chartColors.success :
+                complianceScore >= 80 ? chartColors.info :
+                complianceScore >= 60 ? chartColors.warning :
+                chartColors.danger,
+                'rgba(200, 200, 200, 0.2)'
+            ],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '70%',
+        plugins: {
+            legend: {
+                display: false
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return context.label + ': ' + context.parsed + '%';
+                    }
+                }
+            }
+        }
+    }
+});
+
+// 2. Gráfico de Distribución de ITBIS (Doughnut)
+const itbisData = {{ itbis_distribution|tojson }};
+const itbisLabels = Object.keys(itbisData);
+const itbisValues = Object.values(itbisData);
+
+// Colores variados para cada tipo de ITBIS
+const itbisColors = [
+    'rgba(13, 110, 253, 0.8)',   // Azul
+    'rgba(25, 135, 84, 0.8)',    // Verde
+    'rgba(255, 193, 7, 0.8)',    // Amarillo
+    'rgba(220, 53, 69, 0.8)',    // Rojo
+    'rgba(13, 202, 240, 0.8)',   // Cian
+    'rgba(111, 66, 193, 0.8)',   // Morado
+    'rgba(253, 126, 20, 0.8)',   // Naranja
+    'rgba(32, 201, 151, 0.8)'    // Verde agua
+];
+
+const itbisCtx = document.getElementById('itbisDistributionChart').getContext('2d');
+new Chart(itbisCtx, {
+    type: 'doughnut',
+    data: {
+        labels: itbisLabels,
+        datasets: [{
+            data: itbisValues,
+            backgroundColor: itbisColors.slice(0, itbisLabels.length),
+            borderWidth: 2,
+            borderColor: '#fff'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    padding: 10,
+                    font: {
+                        size: 11
+                    }
+                }
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const percentage = ((context.parsed / total) * 100).toFixed(1);
+                        return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
+                    }
+                }
+            }
+        }
+    }
+});
+
+// 3. Gráfico de Problemas (Pie Chart)
+const totalProducts = {{ total_products }};
+const productsWithoutTaxes = {{ products_without_taxes }};
+const productsWithMultipleItbis = {{ products_with_multiple_itbis|length }};
+const productsWithMixedTaxes = {{ products_with_mixed_taxes|length }};
+const correctProducts = totalProducts - productsWithoutTaxes - productsWithMultipleItbis - productsWithMixedTaxes;
+
+const problemsCtx = document.getElementById('problemsChart').getContext('2d');
+new Chart(problemsCtx, {
+    type: 'pie',
+    data: {
+        labels: [
+            'Configuración Correcta',
+            'Sin Tax Types',
+            'Múltiples ITBIS',
+            'Mezcla Inc/Exc'
+        ],
+        datasets: [{
+            data: [
+                correctProducts,
+                productsWithoutTaxes,
+                productsWithMultipleItbis,
+                productsWithMixedTaxes
+            ],
+            backgroundColor: [
+                chartColors.success,
+                chartColors.danger,
+                chartColors.warning,
+                'rgba(255, 152, 0, 0.8)'
+            ],
+            borderWidth: 2,
+            borderColor: '#fff'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    padding: 10,
+                    font: {
+                        size: 11
+                    }
+                }
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
+                        return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
+                    }
+                }
+            }
+        }
+    }
+});
+</script>
 {% endblock %}

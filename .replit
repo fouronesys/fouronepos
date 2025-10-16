@@ -28,16 +28,12 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python -m flask run --host=0.0.0.0 --port=5000"
+args = "gunicorn --bind=0.0.0.0:5000 --reuse-port --workers=2 main:app"
 waitForPort = 5000
 
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 37505
-externalPort = 9000
 
 [[ports]]
 localPort = 37691
