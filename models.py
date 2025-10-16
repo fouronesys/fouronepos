@@ -48,6 +48,12 @@ class TaxMode(enum.Enum):
     TAX_EXEMPT = "tax_exempt"        # Exento de impuestos
 
 
+class TaxCategory(enum.Enum):
+    TAX = "tax"                      # Impuestos fiscales (ITBIS, IVA) - se incluyen en base imponible
+    SERVICE_CHARGE = "service_charge"  # Cargos por servicio (Propina) - cargo adicional, NO es impuesto
+    OTHER = "other"                  # Otros cargos o descuentos
+
+
 class User(db.Model):
     __tablename__ = 'users'
     
@@ -141,6 +147,7 @@ class TaxType(db.Model):
     rate: Mapped[float] = mapped_column(Float, nullable=False)  # e.g., 0.18, 0.10
     is_inclusive: Mapped[bool] = mapped_column(Boolean, default=False)  # True si está incluido en el precio
     is_percentage: Mapped[bool] = mapped_column(Boolean, default=True)  # True para porcentaje, False para monto fijo
+    tax_category: Mapped[TaxCategory] = mapped_column(Enum(TaxCategory, native_enum=False), default=TaxCategory.TAX)  # Categoría: tax, service_charge, other
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)  # Para ordenar en formularios
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

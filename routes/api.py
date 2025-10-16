@@ -351,10 +351,16 @@ def add_sale_item(sale_id):
         product_tax_types = []
         for product_tax in product.product_taxes:
             if product_tax.tax_type.active:
+                # Defensive fallback for tax_category (handles NULL/missing values)
+                tax_category = 'tax'  # Default to 'tax' for fiscal compliance
+                if hasattr(product_tax.tax_type, 'tax_category') and product_tax.tax_type.tax_category:
+                    tax_category = product_tax.tax_type.tax_category.value if hasattr(product_tax.tax_type.tax_category, 'value') else str(product_tax.tax_type.tax_category)
+                
                 product_tax_types.append({
                     'name': product_tax.tax_type.name,
                     'rate': product_tax.tax_type.rate,
-                    'is_inclusive': product_tax.tax_type.is_inclusive
+                    'is_inclusive': product_tax.tax_type.is_inclusive,
+                    'tax_category': tax_category
                 })
         
         # Check if frontend provided specific tax information
@@ -374,8 +380,10 @@ def add_sale_item(sale_id):
         else:
             if product_tax_types:
                 # Use product-specific tax configuration
-                total_tax_rate = sum(tax['rate'] for tax in product_tax_types)
-                has_inclusive_tax = any(tax['is_inclusive'] for tax in product_tax_types)
+                # CRITICAL FIX: Only sum tax_types with category 'tax' (not service_charge)
+                tax_only = [tax for tax in product_tax_types if tax.get('tax_category') == 'tax']
+                total_tax_rate = sum(tax['rate'] for tax in tax_only)
+                has_inclusive_tax = any(tax['is_inclusive'] for tax in tax_only)
             else:
                 # CRITICAL FIX: Default fallback for fiscal compliance (level 3)
                 # If no product_taxes configured, use default ITBIS 18% included

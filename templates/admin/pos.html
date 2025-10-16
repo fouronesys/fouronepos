@@ -798,18 +798,12 @@ class CartManager {
             // If no tax_types, the product is tax exempt (no tax calculation)
         });
         
-        // Calculate service charge (propina) if enabled - applies before exclusive taxes per DR law
-        const applyServiceCharge = document.getElementById('apply-service-charge')?.checked || false;
-        const serviceChargeRate = 0.10; // 10%
-        const serviceCharge = applyServiceCharge ? subtotal * serviceChargeRate : 0;
-        
-        // Calculate exclusive taxes on tax base (subtotal + service charge for DR compliance)
-        const taxBase = subtotal + serviceCharge;
+        // Calculate exclusive taxes on subtotal FIRST (per correct DR fiscal law)
         Object.keys(exclusiveTaxes).forEach(taxName => {
             const taxInfo = exclusiveTaxes[taxName];
             // Apply tax proportionally to items that have this tax type
             const proportion = taxInfo.itemsSubtotal / subtotal;
-            taxInfo.amount = taxBase * proportion * taxInfo.rate;
+            taxInfo.amount = subtotal * proportion * taxInfo.rate;
         });
         
         // Combine all taxes for breakdown and total calculation
@@ -818,18 +812,24 @@ class CartManager {
         const totalExclusiveTax = Object.values(exclusiveTaxes).reduce((sum, tax) => sum + tax.amount, 0);
         const totalTax = totalInclusiveTax + totalExclusiveTax;
         
-        const total = subtotal + serviceCharge + totalExclusiveTax;
+        // CORRECTED: Calculate service charge (propina) on (subtotal + taxes) per Dominican Republic law
+        const applyServiceCharge = document.getElementById('apply-service-charge')?.checked || false;
+        const serviceChargeRate = 0.10; // 10%
+        const baseForServiceCharge = subtotal + totalExclusiveTax; // Base includes subtotal + exclusive taxes
+        const serviceCharge = applyServiceCharge ? baseForServiceCharge * serviceChargeRate : 0;
+        
+        const total = subtotal + totalExclusiveTax + serviceCharge;
         
         // For backward compatibility, provide a single tax rate (average)
         const averageTaxRate = subtotal > 0 ? totalTax / subtotal : 0;
         
         console.log('[POS] Tax calculation:', {
             subtotal,
+            totalTax,
+            baseForServiceCharge,
             serviceCharge,
-            taxBase,
             inclusiveTaxes,
             exclusiveTaxes,
-            totalTax,
             total
         });
         

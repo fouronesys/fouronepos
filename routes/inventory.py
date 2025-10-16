@@ -186,13 +186,10 @@ def create_product():
         db.session.add(product)
         db.session.flush()  # Get product ID before adding tax relationships
         
-        # Handle tax types - products can have multiple tax types
+        # Handle tax types - products MUST have at least one tax type (FISCAL COMPLIANCE)
         tax_type_ids = data.get('tax_type_ids', [])
-        if not tax_type_ids:
-            # Default to ITBIS Exclusivo if no tax types specified
-            default_tax_type = models.TaxType.query.filter_by(name='ITBIS Exclusivo', active=True).first()
-            if default_tax_type:
-                tax_type_ids = [default_tax_type.id]
+        if not tax_type_ids or len(tax_type_ids) == 0:
+            return jsonify({'error': 'Debe seleccionar al menos un tipo de impuesto. Esto es obligatorio para el cumplimiento fiscal.'}), 400
         
         # Add tax type relationships
         for tax_type_id in tax_type_ids:
@@ -265,11 +262,16 @@ def update_product(product_id):
         
         # Update tax types if provided
         if 'tax_type_ids' in data:
+            tax_type_ids = list(set(data.get('tax_type_ids', [])))
+            
+            # VALIDACIÓN OBLIGATORIA: Products MUST have at least one tax type (FISCAL COMPLIANCE)
+            if not tax_type_ids or len(tax_type_ids) == 0:
+                return jsonify({'error': 'Debe seleccionar al menos un tipo de impuesto. Esto es obligatorio para el cumplimiento fiscal.'}), 400
+            
             # Remove existing tax type relationships
             models.ProductTax.query.filter_by(product_id=product.id).delete()
             
             # Add new tax type relationships
-            tax_type_ids = list(set(data.get('tax_type_ids', [])))
             for tax_type_id in tax_type_ids:
                 tax_type = models.TaxType.query.get(tax_type_id)
                 if tax_type and tax_type.active:

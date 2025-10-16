@@ -402,9 +402,9 @@ assert total == 129.80
 2. ✅ Establecer "Consumo" como default → COMPLETADO
 3. ✅ Activar propina 10% por defecto → COMPLETADO
 4. ✅ Mejorar mensajes de error NCF → COMPLETADO
-5. ⏳ Separar impuestos de cargos por servicio
-6. ⏳ Validar que productos DEBEN tener tax type
-7. ⏳ Verificar cálculo de propina según normativa
+5. ✅ Separar impuestos de cargos por servicio → COMPLETADO (16 Oct 2025)
+6. ✅ Validar que productos DEBEN tener tax type → COMPLETADO (16 Oct 2025)
+7. ✅ Verificar cálculo de propina según normativa → COMPLETADO (16 Oct 2025)
 
 ### FASE 2: MEJORAS DE SISTEMA (Corto Plazo)
 1. Auditar y corregir tax types en productos existentes
@@ -435,6 +435,68 @@ assert total == 129.80
 
 ---
 
+## 🎯 RESUMEN DE CORRECCIONES IMPLEMENTADAS - FASE 1
+
+### Cambios Realizados (16 de Octubre, 2025)
+
+#### 1. Separación de Impuestos y Cargos por Servicio ✅
+**Archivo:** `models.py`
+- Agregado nuevo enum `TaxCategory` con valores: `tax`, `service_charge`, `other`
+- Agregado campo `tax_category` a modelo `TaxType`
+- Categorizado "Propina 10%" como `service_charge`
+- Todos los ITBIS categorizados como `tax`
+
+**Archivo:** `routes/api.py` (líneas 354-384)
+- Modificada lógica de suma de impuestos para SOLO sumar tax_types de categoría `tax`
+- Excluye `service_charge` del cálculo de tax_rate
+- Implementado filtrado: `tax_only = [tax for tax in product_tax_types if tax.get('tax_category') == 'tax']`
+
+#### 2. Corrección del Cálculo de Propina ✅
+**Archivo:** `templates/admin/pos.html` (líneas 804-824)
+- **ANTES:** Propina calculada sobre subtotal solamente ❌
+- **AHORA:** Propina calculada sobre (subtotal + impuestos) ✅
+- Cumple normativa dominicana: Base de propina = subtotal + ITBIS
+
+**Ejemplo:**
+```javascript
+// Subtotal: RD$ 300
+// ITBIS 18%: RD$ 54
+// Base para Propina: RD$ 354 (subtotal + impuestos) ← CORRECTO
+// Propina 10%: RD$ 35.40
+// Total Final: RD$ 389.40
+```
+
+#### 3. Validación Obligatoria de Tax Types en Productos ✅
+**Frontend:** `templates/inventory/products.html` (líneas 459-463)
+- Agregada validación que previene guardar productos sin tax_type
+- Mensaje de error claro: "Debe seleccionar al menos un tipo de impuesto"
+
+**Backend:** `routes/inventory.py` (líneas 192-195 y 270-272)
+- Validación en endpoint POST `/api/products`
+- Validación en endpoint PUT `/api/products/<id>`
+- Retorna error 400 si no se proporciona tax_type_ids
+
+### Impacto de los Cambios
+
+#### ✅ Problemas Resueltos:
+1. **Suma incorrecta de múltiples tax types** - Ahora solo suma impuestos fiscales
+2. **Cálculo de propina incorrecto** - Ahora cumple normativa dominicana
+3. **Productos sin tax types** - Ya no es posible crear/actualizar productos sin impuestos
+
+#### ⚠️ Acciones Requeridas para Productos Existentes:
+```sql
+-- Auditar productos sin tax_types
+SELECT p.id, p.name, p.price, p.category_id
+FROM products p
+LEFT JOIN product_taxes pt ON p.id = pt.product_id
+WHERE pt.id IS NULL;
+```
+
+Si hay productos sin tax_types, asignarles manualmente el tipo correcto antes de usarlos.
+
+---
+
 **Documento creado:** 16 de Octubre, 2025  
-**Próxima revisión:** Después de implementar Fase 1  
+**Última actualización:** 16 de Octubre, 2025 - Fase 1 Completada  
+**Próxima revisión:** Después de implementar Fase 2  
 **Responsable:** Equipo de Desarrollo Four One POS

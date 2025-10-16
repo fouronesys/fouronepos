@@ -70,7 +70,35 @@ The system integrates a robust fiscal compliance module for the Dominican Republ
 - Crear tests unitarios para cálculos fiscales
 - Auditar productos existentes sin tax types
 
+### ✅ FASE 1 COMPLETADA (16 Oct 2025) - Correcciones Críticas Fiscales
+
+#### 1. Separación de Impuestos y Cargos por Servicio
+- **Nuevo campo:** `tax_category` agregado a `TaxType` (valores: `tax`, `service_charge`, `other`)
+- **Categorización:** ITBIS = `tax`, Propina = `service_charge`
+- **Lógica corregida:** Solo se suman tax_types de categoría `tax` en cálculos de impuestos
+- **Archivos:** `models.py`, `routes/api.py` (líneas 354-384)
+
+#### 2. Cálculo de Propina Corregido (Normativa Dominicana)
+- **ANTES:** Propina calculada sobre subtotal ❌
+- **AHORA:** Propina calculada sobre (subtotal + impuestos) ✅
+- **Ejemplo:** Subtotal RD$300 + ITBIS RD$54 = Base RD$354 → Propina RD$35.40
+- **Archivo:** `templates/admin/pos.html` (líneas 804-824)
+
+#### 3. Validación Obligatoria de Tax Types en Productos
+- **Frontend:** Validación que impide guardar productos sin tax_type
+- **Backend:** Endpoints POST/PUT retornan error 400 si no hay tax_type_ids
+- **Mensaje:** "Debe seleccionar al menos un tipo de impuesto. Esto es obligatorio para el cumplimiento fiscal."
+- **Archivos:** `templates/inventory/products.html`, `routes/inventory.py`
+
+#### Impacto
+- ✅ Cálculos fiscales correctos (suma solo impuestos, no cargos)
+- ✅ Propina cumple normativa dominicana
+- ✅ Todos los productos nuevos tienen tax_type obligatorio
+
 ### Archivos Modificados
-- `templates/admin/pos.html` - Defaults optimizados
-- `routes/api.py` - Mensajes de error mejorados
-- `tax_types` tabla - Nuevo ITBIS 18% Incluído (id=13)
+- `models.py` - Nuevo enum TaxCategory y campo tax_category en TaxType
+- `templates/admin/pos.html` - Defaults optimizados y cálculo de propina corregido
+- `templates/inventory/products.html` - Validación obligatoria de tax types
+- `routes/api.py` - Mensajes de error mejorados y filtrado de tax_category
+- `routes/inventory.py` - Validación backend de tax types
+- `tax_types` tabla - Campo tax_category agregado, Propina categorizada como service_charge

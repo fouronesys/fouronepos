@@ -451,13 +451,21 @@ async function saveProduct() {
     }
     
     const formData = new FormData(form);
+    const selectedTaxTypes = getSelectedTaxTypes();
+    
+    // VALIDACIÓN OBLIGATORIA: Verificar que al menos un tax type esté seleccionado
+    if (selectedTaxTypes.length === 0) {
+        alert('⚠️ Debe seleccionar al menos un tipo de impuesto para el producto.\n\nEsto es necesario para el cumplimiento fiscal y cálculos correctos de precios.');
+        return;
+    }
+    
     const productData = {
         name: document.getElementById('productName').value.trim(),
         description: document.getElementById('productDescription').value.trim(),
         category_id: parseInt(document.getElementById('productCategory').value),
         cost: parseFloat(document.getElementById('productCost').value || 0),
         price: parseFloat(document.getElementById('productPrice').value || 0),
-        tax_type_ids: getSelectedTaxTypes(),
+        tax_type_ids: selectedTaxTypes,
         product_type: document.getElementById('productType').value,
         stock: document.getElementById('productType').value === 'inventariable' ? parseInt(document.getElementById('productStock').value || 0) : 0,
         min_stock: document.getElementById('productType').value === 'inventariable' ? parseInt(document.getElementById('productMinStock').value || 5) : 0,
