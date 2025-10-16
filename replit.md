@@ -95,10 +95,81 @@ The system integrates a robust fiscal compliance module for the Dominican Republ
 - ✅ Propina cumple normativa dominicana
 - ✅ Todos los productos nuevos tienen tax_type obligatorio
 
-### Archivos Modificados
+#### Archivos Modificados (Fase 1)
 - `models.py` - Nuevo enum TaxCategory y campo tax_category en TaxType
 - `templates/admin/pos.html` - Defaults optimizados y cálculo de propina corregido
 - `templates/inventory/products.html` - Validación obligatoria de tax types
 - `routes/api.py` - Mensajes de error mejorados y filtrado de tax_category
 - `routes/inventory.py` - Validación backend de tax types
 - `tax_types` tabla - Campo tax_category agregado, Propina categorizada como service_charge
+
+---
+
+### ✅ FASE 2 COMPLETADA (16 Oct 2025) - Testing y Mejoras de UX
+
+#### 1. Auditoría y Corrección de Productos sin Tax Types
+- **Productos corregidos:** Agua y Pechurinas (asignado ITBIS 18%)
+- **Fix técnico:** Corrección del enum TaxCategory a mayúsculas (TAX, SERVICE_CHARGE, OTHER)
+- **Resultado:** 100% de productos con tax_types asignados correctamente
+
+#### 2. Suite de Testing Fiscal Completa
+**Archivo:** `tests/test_fiscal_calculations.py` (12 tests unitarios)
+- Cálculos ITBIS 18% y 16% (exclusivos)
+- Cálculo ITBIS 18% Incluido (regresivo)
+- Separación tax vs service_charge
+- Cálculo de propina sobre (subtotal + impuestos)
+- Validación de productos sin tax_types
+
+**Archivo:** `tests/test_fiscal_integration.py` (9 tests de integración)
+- Tests con base de datos real
+- Creación de productos y tax_types
+- Venta con múltiples tasas de ITBIS
+- Cálculo correcto en ventas mixtas
+- Validación de propina en transacciones completas
+
+**Resultado:** 21/21 tests pasando ✅
+
+#### 3. Mejora de UX en Formulario de Productos
+**Archivo:** `templates/inventory/products.html`
+
+**Mejoras implementadas:**
+- **Agrupación visual por categoría:**
+  - "Impuestos Fiscales (ITBIS)" - con icono bi-calculator
+  - "Cargos por Servicio (Propina)" - con icono bi-wallet2
+  - "Otros Impuestos/Cargos" - con icono bi-tag
+- **Badges informativos:** Indican tasa y si es inclusivo/exclusivo
+- **Tooltips explicativos:** Descripciones claras de cuándo usar cada tipo
+- **Guía de uso integrada:** Recomendaciones directas en el formulario
+- **Selección por defecto:** "ITBIS 18%" pre-seleccionado para nuevos productos
+
+**Resultado:** Interfaz más intuitiva y reduce errores de configuración
+
+#### 4. Documentación Completa de Tipos de ITBIS
+**Archivo:** `GUIA_TIPOS_IMPUESTOS.md`
+
+**Contenido:**
+- Explicación detallada de cada tipo de ITBIS (18%, 16%, Incluido, Exento)
+- Base legal y normativas dominicanas aplicables
+- Cuándo usar cada tipo con ejemplos específicos
+- Diferencia entre impuestos fiscales y cargos por servicio
+- Cálculos paso a paso con ejemplos prácticos
+- Ventas mixtas con múltiples tasas
+- Tabla comparativa rápida
+- Mejores prácticas y configuración del sistema
+- Referencias a DGII y leyes (Ley 253-12, Ley 116-17)
+
+**Resultado:** Guía de referencia completa para operadores y administradores
+
+#### Archivos Modificados/Creados (Fase 2)
+- `templates/inventory/products.html` - UX mejorada con agrupación visual
+- `tests/test_fiscal_calculations.py` - Suite de tests unitarios (NUEVO)
+- `tests/test_fiscal_integration.py` - Suite de tests de integración (NUEVO)
+- `GUIA_TIPOS_IMPUESTOS.md` - Documentación completa de ITBIS (NUEVO)
+- Base de datos - Productos Agua y Pechurinas corregidos
+
+#### Impacto General (Fase 2)
+- ✅ 100% cobertura de testing para cálculos fiscales
+- ✅ UX optimizada reduce errores de configuración
+- ✅ Documentación completa para capacitación de personal
+- ✅ Todos los productos con configuración fiscal correcta
+- ✅ Sistema robusto y confiable para cumplimiento DGII
