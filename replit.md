@@ -198,6 +198,28 @@ Implementación completa de simplificación de flujo según PLAN_MEJORAS_BAR.md:
 
 **TODAS LAS FASES COMPLETADAS ✅**
 
+**Mejora de Seguridad: Modal de Apertura de Caja No Cerrable** (Oct 16, 2025)
+
+*Problema Identificado:*
+- El modal de "Abrir Caja" podía cerrarse sin completar la apertura
+- Tenía botón X para cerrar y permitía cerrar con ESC o clic fuera
+- Permitía evadir el proceso obligatorio de apertura de caja
+
+*Solución Implementada:*
+- Eliminado botón de cerrar (X) del encabezado del modal
+- Agregado `data-bs-backdrop="static"` para evitar cierre con clic fuera
+- Agregado `data-bs-keyboard="false"` para evitar cierre con tecla ESC
+- Configuración explícita `{backdrop: 'static', keyboard: false}` en inicialización
+
+*Beneficios Logrados:*
+- Cajeros y administradores deben obligatoriamente abrir la caja antes de operar
+- Mejora el control de efectivo y flujo de trabajo
+- Previene errores de operación sin caja abierta
+- Modal solo se cierra al completar exitosamente la apertura
+
+*Archivos Actualizados:*
+- templates/admin/pos.html: Ambas instancias de showOpenCashModal() actualizadas (líneas 2665, 2884)
+
 **Corrección de Generación de Recibos para Ventas Sin Comprobante** (Oct 7, 2025)
 
 *Problema Identificado:*
