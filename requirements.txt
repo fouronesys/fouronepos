@@ -27,3 +27,4 @@ xlsxwriter>=3.1.9
 # External services
 requests>=2.32.5
 python-escpos>=3.1
+escpos
