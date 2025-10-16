@@ -314,25 +314,175 @@ function updateTaxTypesContainer() {
         return;
     }
     
-    let html = '<div class="row">';
-    taxTypes.forEach((taxType, index) => {
-        const isDefaultSelected = taxType.name === 'ITBIS' || taxType.name === 'ITBIS Exclusivo';
+    // Agrupar tax_types por categoría
+    const impuestos = taxTypes.filter(t => t.name.includes('ITBIS') || t.name.includes('Impuesto'));
+    const cargos = taxTypes.filter(t => t.name.includes('Propina') || t.name.includes('Servicio'));
+    const otros = taxTypes.filter(t => !impuestos.includes(t) && !cargos.includes(t));
+    
+    // Generar HTML con agrupación visual mejorada
+    let html = '';
+    
+    // Sección de Impuestos Fiscales (ITBIS)
+    if (impuestos.length > 0) {
         html += `
-            <div class="col-md-6 mb-2">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" value="${taxType.id}" 
-                           id="taxType${taxType.id}" ${isDefaultSelected ? 'checked' : ''}>
-                    <label class="form-check-label" for="taxType${taxType.id}">
-                        <strong>${taxType.name}</strong> (${(taxType.rate * 100).toFixed(0)}%)
-                        ${taxType.description ? '<br><small class="text-muted">' + taxType.description + '</small>' : ''}
-                    </label>
+            <div class="mb-3">
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-receipt-cutoff text-primary me-2"></i>
+                    <strong>Impuestos Fiscales (ITBIS)</strong>
+                </div>
+                <div class="row">
+        `;
+        
+        impuestos.forEach(taxType => {
+            const isDefaultSelected = taxType.name === 'ITBIS 18%';
+            const tooltipText = getTooltipForTaxType(taxType.name);
+            const iconClass = getTaxTypeIcon(taxType.name);
+            
+            html += `
+                <div class="col-md-6 mb-2">
+                    <div class="form-check p-3 border rounded" style="background: var(--bs-light);">
+                        <input class="form-check-input" type="checkbox" value="${taxType.id}" 
+                               id="taxType${taxType.id}" ${isDefaultSelected ? 'checked' : ''}>
+                        <label class="form-check-label" for="taxType${taxType.id}">
+                            <div class="d-flex align-items-start">
+                                <i class="bi ${iconClass} me-2 text-primary"></i>
+                                <div class="flex-grow-1">
+                                    <strong>${taxType.name}</strong>
+                                    <span class="badge bg-primary ms-1">${(taxType.rate * 100).toFixed(0)}%</span>
+                                    ${taxType.is_inclusive ? '<span class="badge bg-info ms-1">Incluido</span>' : '<span class="badge bg-secondary ms-1">Exclusivo</span>'}
+                                    <br>
+                                    <small class="text-muted">${tooltipText}</small>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
                 </div>
             </div>
         `;
-    });
-    html += '</div>';
+    }
+    
+    // Sección de Cargos por Servicio
+    if (cargos.length > 0) {
+        html += `
+            <div class="mb-3">
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-percent text-success me-2"></i>
+                    <strong>Cargos por Servicio</strong>
+                </div>
+                <div class="row">
+        `;
+        
+        cargos.forEach(taxType => {
+            const tooltipText = getTooltipForTaxType(taxType.name);
+            
+            html += `
+                <div class="col-md-6 mb-2">
+                    <div class="form-check p-3 border rounded" style="background: var(--bs-light);">
+                        <input class="form-check-input" type="checkbox" value="${taxType.id}" 
+                               id="taxType${taxType.id}">
+                        <label class="form-check-label" for="taxType${taxType.id}">
+                            <div class="d-flex align-items-start">
+                                <i class="bi bi-wallet2 me-2 text-success"></i>
+                                <div class="flex-grow-1">
+                                    <strong>${taxType.name}</strong>
+                                    <span class="badge bg-success ms-1">${(taxType.rate * 100).toFixed(0)}%</span>
+                                    <br>
+                                    <small class="text-muted">${tooltipText}</small>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+    }
+    
+    // Sección de Otros (si hay tax_types que no entran en las categorías anteriores)
+    if (otros.length > 0) {
+        html += `
+            <div class="mb-3">
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-tag text-warning me-2"></i>
+                    <strong>Otros Impuestos/Cargos</strong>
+                </div>
+                <div class="row">
+        `;
+        
+        otros.forEach(taxType => {
+            const tooltipText = getTooltipForTaxType(taxType.name);
+            
+            html += `
+                <div class="col-md-6 mb-2">
+                    <div class="form-check p-3 border rounded" style="background: var(--bs-light);">
+                        <input class="form-check-input" type="checkbox" value="${taxType.id}" 
+                               id="taxType${taxType.id}">
+                        <label class="form-check-label" for="taxType${taxType.id}">
+                            <div class="d-flex align-items-start">
+                                <i class="bi bi-tag me-2 text-warning"></i>
+                                <div class="flex-grow-1">
+                                    <strong>${taxType.name}</strong>
+                                    <span class="badge bg-warning ms-1">${(taxType.rate * 100).toFixed(0)}%</span>
+                                    <br>
+                                    <small class="text-muted">${tooltipText}</small>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+    }
+    
+    // Guía de uso
+    html += `
+        <div class="alert alert-info mt-3">
+            <strong><i class="bi bi-info-circle me-2"></i>Guía de Uso:</strong>
+            <ul class="mb-0 mt-2">
+                <li><strong>ITBIS 18%:</strong> Para la mayoría de productos (tasa estándar)</li>
+                <li><strong>ITBIS 16%:</strong> Para lácteos, café, azúcar, cacao (tasa reducida)</li>
+                <li><strong>ITBIS 18% Incluido:</strong> Cuando el precio ya incluye el impuesto</li>
+                <li><strong>ITBIS Exento:</strong> Para productos exentos de impuestos</li>
+                <li><strong>Propina 10%:</strong> Se calcula automáticamente sobre subtotal + impuestos</li>
+            </ul>
+        </div>
+    `;
     
     container.innerHTML = html;
+}
+
+function getTooltipForTaxType(name) {
+    const tooltips = {
+        'ITBIS 18%': 'Tasa estándar para la mayoría de productos. Se agrega al precio base.',
+        'ITBIS 16%': 'Tasa reducida para lácteos, café, azúcar y cacao.',
+        'ITBIS 18% Incluido': 'Usar cuando el precio ya incluye el impuesto (precio final).',
+        'ITBIS Exento': 'Para productos exentos de impuestos (0%).',
+        'Sin Impuesto': 'Para productos sin impuestos aplicables.',
+        'Propina 10%': 'Cargo por servicio según normativa dominicana. Se calcula sobre (subtotal + impuestos).'
+    };
+    return tooltips[name] || 'Tipo de impuesto configurado';
+}
+
+function getTaxTypeIcon(name) {
+    if (name.includes('18%')) return 'bi-calculator';
+    if (name.includes('16%')) return 'bi-calculator-fill';
+    if (name.includes('Exento')) return 'bi-slash-circle';
+    if (name.includes('Incluído')) return 'bi-check-circle';
+    return 'bi-tag';
 }
 
 function getSelectedTaxTypes() {
@@ -375,8 +525,8 @@ function newProduct() {
     document.getElementById('productType').value = 'inventariable';
     document.getElementById('productActive').checked = true;
     
-    // Set default tax type to ITBIS standard
-    const defaultTaxType = taxTypes.find(t => t.name === 'ITBIS');
+    // Set default tax type to ITBIS 18% (tasa estándar)
+    const defaultTaxType = taxTypes.find(t => t.name === 'ITBIS 18%');
     if (defaultTaxType) {
         setSelectedTaxTypes([defaultTaxType.id]);
     }
