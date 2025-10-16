@@ -68,7 +68,7 @@ db.init_app(app)
 
 
 # Import routes after app initialization
-from routes import auth, admin, waiter, api, inventory, dgii, test_api
+from routes import auth, admin, waiter, api, inventory, dgii, test_api, fiscal_audit
 
 
 # Register blueprints
@@ -79,6 +79,7 @@ app.register_blueprint(api.bp)
 app.register_blueprint(inventory.bp)
 app.register_blueprint(dgii.bp)
 app.register_blueprint(test_api.bp)
+app.register_blueprint(fiscal_audit.bp)
 
 
 # Main application routes

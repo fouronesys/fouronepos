@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoría Fiscal Interna{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="bi bi-clipboard-check me-2"></i>Auditoría Fiscal Interna</h2>
+            <p class="text-muted">Monitoreo y verificación de configuración fiscal del sistema</p>
+        </div>
+    </div>
+
+    <!-- Tarjeta de Puntuación de Cumplimiento -->
+    <div class="row mb-4">
+        <div class="col-md-6 mx-auto">
+            <div class="card border-{{ compliance_class }}">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Puntuación de Cumplimiento Fiscal</h5>
+                    <div class="display-1 text-{{ compliance_class }} my-3">
+                        {{ compliance_score }}%
+                    </div>
+                    <p class="card-text">
+                        <span class="badge bg-{{ compliance_class }} fs-5">{{ compliance_level }}</span>
+                    </p>
+                    <small class="text-muted">
+                        Basado en la configuración fiscal de {{ total_products }} productos activos
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estadísticas Generales -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Productos Activos</h6>
+                    <h3 class="card-title">{{ total_products }}</h3>
+                    <i class="bi bi-box-seam fs-2 text-primary float-end"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Tax Types Activos</h6>
+                    <h3 class="card-title">{{ total_tax_types }}</h3>
+                    <i class="bi bi-receipt-cutoff fs-2 text-success float-end"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Sin Tax Types</h6>
+                    <h3 class="card-title {% if products_without_taxes > 0 %}text-danger{% else %}text-success{% endif %}">
+                        {{ products_without_taxes }}
+                    </h3>
+                    <i class="bi bi-exclamation-triangle fs-2 {% if products_without_taxes > 0 %}text-danger{% else %}text-muted{% endif %} float-end"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Configuraciones Incorrectas</h6>
+                    <h3 class="card-title {% if products_with_multiple_itbis|length > 0 or products_with_mixed_taxes|length > 0 %}text-warning{% else %}text-success{% endif %}">
+                        {{ products_with_multiple_itbis|length + products_with_mixed_taxes|length }}
+                    </h3>
+                    <i class="bi bi-gear fs-2 {% if products_with_multiple_itbis|length > 0 or products_with_mixed_taxes|length > 0 %}text-warning{% else %}text-muted{% endif %} float-end"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Problemas Detectados -->
+    {% if products_without_taxes > 0 or products_with_multiple_itbis|length > 0 or products_with_mixed_taxes|length > 0 %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3"><i class="bi bi-exclamation-circle me-2"></i>Problemas Detectados</h4>
+        </div>
+        
+        <!-- Productos sin Tax Types -->
+        {% if products_without_taxes > 0 %}
+        <div class="col-md-12 mb-3">
+            <div class="alert alert-danger" role="alert">
+                <h5 class="alert-heading"><i class="bi bi-x-circle me-2"></i>Productos sin Tax Types</h5>
+                <p>Se encontraron <strong>{{ products_without_taxes }}</strong> producto(s) sin tipos de impuestos asignados. Esto es crítico para el cumplimiento fiscal.</p>
+                <hr>
+                <p class="mb-0">
+                    <strong>Acción requerida:</strong> Asignar tipos de impuestos a todos los productos antes de realizar ventas.
+                    <a href="{{ url_for('fiscal_audit.api_products_without_taxes') }}" class="alert-link">Ver detalles en API</a>
+                </p>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Productos con Múltiples ITBIS -->
+        {% if products_with_multiple_itbis|length > 0 %}
+        <div class="col-md-12 mb-3">
+            <div class="alert alert-warning" role="alert">
+                <h5 class="alert-heading"><i class="bi bi-exclamation-triangle me-2"></i>Productos con Múltiples ITBIS</h5>
+                <p>Se encontraron <strong>{{ products_with_multiple_itbis|length }}</strong> producto(s) con múltiples tipos de ITBIS asignados.</p>
+                <hr>
+                <ul class="mb-2">
+                    {% for product in products_with_multiple_itbis[:5] %}
+                    <li>
+                        <strong>{{ product.name }}</strong>: 
+                        {% for tax in product.tax_types %}
+                            {{ tax.name }} ({{ "%.0f"|format(tax.rate * 100) }}%){% if not loop.last %}, {% endif %}
+                        {% endfor %}
+                    </li>
+                    {% endfor %}
+                    {% if products_with_multiple_itbis|length > 5 %}
+                    <li><em>... y {{ products_with_multiple_itbis|length - 5 }} más</em></li>
+                    {% endif %}
+                </ul>
+                <p class="mb-0">
+                    <strong>Recomendación:</strong> Un producto debe tener solo UN tipo de ITBIS. Corrija estas configuraciones.
+                </p>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Productos con Mezcla de Inclusivos/Exclusivos -->
+        {% if products_with_mixed_taxes|length > 0 %}
+        <div class="col-md-12 mb-3">
+            <div class="alert alert-warning" role="alert">
+                <h5 class="alert-heading"><i class="bi bi-shuffle me-2"></i>Productos con Mezcla de Impuestos Inclusivos y Exclusivos</h5>
+                <p>Se encontraron <strong>{{ products_with_mixed_taxes|length }}</strong> producto(s) con mezcla de impuestos inclusivos y exclusivos.</p>
+                <hr>
+                <ul class="mb-2">
+                    {% for product in products_with_mixed_taxes[:5] %}
+                    <li>
+                        <strong>{{ product.name }}</strong>: 
+                        Inclusivos: {{ product.inclusive|join(', ') }} | 
+                        Exclusivos: {{ product.exclusive|join(', ') }}
+                    </li>
+                    {% endfor %}
+                    {% if products_with_mixed_taxes|length > 5 %}
+                    <li><em>... y {{ products_with_mixed_taxes|length - 5 }} más</em></li>
+                    {% endif %}
+                </ul>
+                <p class="mb-0">
+                    <strong>Recomendación:</strong> Use solo impuestos inclusivos O solo exclusivos, no mezcle ambos tipos.
+                </p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-success" role="alert">
+                <h5 class="alert-heading"><i class="bi bi-check-circle me-2"></i>¡Excelente!</h5>
+                <p class="mb-0">No se detectaron problemas en la configuración fiscal. Todos los productos tienen tax types correctamente asignados.</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Distribución de Productos por Tipo de ITBIS -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3"><i class="bi bi-bar-chart me-2"></i>Distribución de Productos por Tipo de ITBIS</h4>
+        </div>
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Tipo de ITBIS</th>
+                                <th class="text-end">Cantidad de Productos</th>
+                                <th class="text-end">Porcentaje</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for itbis_type, count in itbis_distribution.items() %}
+                            <tr>
+                                <td>{{ itbis_type }}</td>
+                                <td class="text-end">{{ count }}</td>
+                                <td class="text-end">
+                                    {% if total_products > 0 %}
+                                        {{ "%.1f"|format((count / total_products * 100)) }}%
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% if not itbis_distribution %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">No hay datos disponibles</td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tax Types Activos e Inactivos -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <h5 class="mb-3"><i class="bi bi-check-circle me-2 text-success"></i>Tax Types Activos</h5>
+            <div class="card">
+                <div class="card-body">
+                    {% if active_tax_types %}
+                    <ul class="list-group list-group-flush">
+                        {% for tax_type in active_tax_types %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>
+                                <i class="bi bi-{{ 'receipt-cutoff' if tax_type.tax_category.value == 'tax' else 'percent' }} me-2"></i>
+                                {{ tax_type.name }}
+                            </span>
+                            <span>
+                                <span class="badge bg-primary rounded-pill">{{ "%.0f"|format(tax_type.rate * 100) }}%</span>
+                                {% if tax_type.is_inclusive %}
+                                <span class="badge bg-info rounded-pill">Incluido</span>
+                                {% else %}
+                                <span class="badge bg-secondary rounded-pill">Exclusivo</span>
+                                {% endif %}
+                            </span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted">No hay tax types activos</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <h5 class="mb-3"><i class="bi bi-x-circle me-2 text-danger"></i>Tax Types Inactivos</h5>
+            <div class="card">
+                <div class="card-body">
+                    {% if inactive_tax_types %}
+                    <ul class="list-group list-group-flush">
+                        {% for tax_type in inactive_tax_types %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center text-muted">
+                            <span>
+                                <i class="bi bi-{{ 'receipt-cutoff' if tax_type.tax_category.value == 'tax' else 'percent' }} me-2"></i>
+                                {{ tax_type.name }}
+                            </span>
+                            <span class="badge bg-danger rounded-pill">Inactivo</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-success"><i class="bi bi-check-circle me-2"></i>No hay tax types inactivos</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Acciones Recomendadas -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3"><i class="bi bi-clipboard-check me-2"></i>Acciones Recomendadas</h4>
+        </div>
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <ul>
+                        <li><strong>Auditoría Regular:</strong> Revise este dashboard semanalmente para detectar configuraciones incorrectas.</li>
+                        <li><strong>Productos Nuevos:</strong> Asegúrese de que todos los productos nuevos tengan tax types asignados correctamente.</li>
+                        <li><strong>Validaciones:</strong> El sistema ahora bloquea la creación de productos sin tax types o con configuraciones incorrectas.</li>
+                        <li><strong>Capacitación:</strong> Consulte la guía de tipos de impuestos (GUIA_TIPOS_IMPUESTOS.md) para entender cuándo usar cada tipo.</li>
+                        <li><strong>Reportes DGII:</strong> Antes de generar reportes 606/607, verifique que la puntuación de cumplimiento sea mayor a 95%.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- APIs Disponibles -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3"><i class="bi bi-code-square me-2"></i>APIs de Auditoría Disponibles</h4>
+        </div>
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Endpoint</th>
+                                <th>Descripción</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>/fiscal-audit/api/summary</code></td>
+                                <td>Resumen completo de auditoría fiscal en JSON</td>
+                                <td><a href="{{ url_for('fiscal_audit.api_summary') }}" class="btn btn-sm btn-primary" target="_blank">Ver JSON</a></td>
+                            </tr>
+                            <tr>
+                                <td><code>/fiscal-audit/api/products-without-taxes</code></td>
+                                <td>Lista de productos sin tax types asignados</td>
+                                <td><a href="{{ url_for('fiscal_audit.api_products_without_taxes') }}" class="btn btn-sm btn-primary" target="_blank">Ver JSON</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
