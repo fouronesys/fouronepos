@@ -220,6 +220,30 @@ Implementación completa de simplificación de flujo según PLAN_MEJORAS_BAR.md:
 *Archivos Actualizados:*
 - templates/admin/pos.html: Ambas instancias de showOpenCashModal() actualizadas (líneas 2665, 2884)
 
+**Corrección: Tipos de Impuestos Faltantes** (Oct 16, 2025)
+
+*Problema Identificado:*
+- Formulario de productos mostraba "No hay tipos de impuestos disponibles"
+- La tabla tax_types estaba vacía tras la limpieza de base de datos
+- Impedía crear o editar productos correctamente
+
+*Solución Implementada:*
+- Creados 5 tipos de impuestos estándar para República Dominicana:
+  1. ITBIS 18% (tasa estándar)
+  2. ITBIS 16% (tasa reducida para lácteos, café, azúcares, cacao)
+  3. ITBIS Exento (0% para productos exentos)
+  4. Propina 10% (según normativa dominicana)
+  5. Sin Impuesto (para productos sin impuestos)
+
+*Beneficios Logrados:*
+- Formulario de productos funciona correctamente
+- Usuarios pueden seleccionar tipos de impuestos apropiados
+- Sistema cumple con normativa fiscal dominicana
+- Flexibilidad para productos con diferentes tasas impositivas
+
+*Archivos/Tablas Actualizados:*
+- tax_types: 5 registros insertados con tasas correctas
+
 **Corrección de Generación de Recibos para Ventas Sin Comprobante** (Oct 7, 2025)
 
 *Problema Identificado:*
