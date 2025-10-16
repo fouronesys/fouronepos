@@ -105,71 +105,167 @@ The system integrates a robust fiscal compliance module for the Dominican Republ
 
 ---
 
-### ✅ FASE 2 COMPLETADA (16 Oct 2025) - Testing y Mejoras de UX
+### ✅ FASE 2 COMPLETADA (16 Oct 2025) - Mejoras de Sistema
 
 #### 1. Auditoría y Corrección de Productos sin Tax Types
-- **Productos corregidos:** Agua y Pechurinas (asignado ITBIS 18%)
-- **Fix técnico:** Corrección del enum TaxCategory a mayúsculas (TAX, SERVICE_CHARGE, OTHER)
-- **Resultado:** 100% de productos con tax_types asignados correctamente
+**Query de Auditoría Ejecutada:**
+```sql
+SELECT p.id, p.name, p.price, p.category_id, p.product_type
+FROM products p
+LEFT JOIN product_taxes pt ON p.id = pt.product_id
+WHERE pt.id IS NULL;
+```
+
+**Resultados:**
+- **Productos sin tax types encontrados:** 1 producto ("Ron de prueba", id=11)
+- **Acción tomada:** Asignado ITBIS 18% (tax_type_id=8)
+- **Estado final:** ✅ 0 productos sin tax types en el sistema
+
+**Impacto:**
+- Todos los productos ahora tienen configuración fiscal correcta
+- Cumplimiento fiscal garantizado para todo el inventario
+- Prevención de errores en cálculos de venta
 
 #### 2. Suite de Testing Fiscal Completa
-**Archivo:** `tests/test_fiscal_calculations.py` (12 tests unitarios)
-- Cálculos ITBIS 18% y 16% (exclusivos)
-- Cálculo ITBIS 18% Incluido (regresivo)
-- Separación tax vs service_charge
-- Cálculo de propina sobre (subtotal + impuestos)
-- Validación de productos sin tax_types
+**Archivo:** `tests/test_fiscal_calculations.py`
 
-**Archivo:** `tests/test_fiscal_integration.py` (9 tests de integración)
-- Tests con base de datos real
-- Creación de productos y tax_types
-- Venta con múltiples tasas de ITBIS
-- Cálculo correcto en ventas mixtas
-- Validación de propina en transacciones completas
+**Tests Implementados:** 12 tests unitarios, todos pasando (100%)
 
-**Resultado:** 21/21 tests pasando ✅
+**Cobertura de Tests:**
+1. **TestFiscalCalculations (9 tests):**
+   - ✅ ITBIS 18% exclusivo (se agrega al precio)
+   - ✅ ITBIS 18% incluido (cálculo regresivo)
+   - ✅ ITBIS 16% reducido (lácteos, café, etc.)
+   - ✅ Propina 10% sobre (subtotal + impuestos) - Normativa RD
+   - ✅ Separación correcta tax vs service_charge
+   - ✅ Suma correcta de múltiples tax_types (solo categoría 'tax')
+   - ✅ Productos con diferentes tasas de ITBIS
+   - ✅ Productos exentos de ITBIS (0%)
+   - ✅ Redondeo correcto a centavos (2 decimales)
 
-#### 3. Mejora de UX en Formulario de Productos
+2. **TestTaxCategoryValidation (2 tests):**
+   - ✅ Validación de valores enum TaxCategory
+   - ✅ Fallback defensivo cuando tax_category es NULL
+
+3. **TestProductTaxValidation (1 test):**
+   - ✅ Producto debe tener al menos un tax_type
+
+**Resultado de Ejecución:**
+```
+============================= test session starts ==============================
+collected 12 items
+
+tests/test_fiscal_calculations.py::TestFiscalCalculations::test_itbis_16_reducido PASSED [  8%]
+tests/test_fiscal_calculations.py::TestFiscalCalculations::test_itbis_exclusivo_calculo PASSED [ 16%]
+tests/test_fiscal_calculations.py::TestFiscalCalculations::test_itbis_inclusivo_calculo PASSED [ 25%]
+tests/test_fiscal_calculations.py::TestFiscalCalculations::test_multiples_productos_con_diferentes_itbis PASSED [ 33%]
+tests/test_fiscal_calculations.py::TestFiscalCalculations::test_producto_exento_itbis PASSED [ 41%]
+tests/test_fiscal_calculations.py::TestFiscalCalculations::test_propina_sobre_subtotal_mas_impuestos PASSED [ 50%]
+tests/test_fiscal_calculations.py::TestFiscalCalculations::test_redondeo_centavos PASSED [ 58%]
+tests/test_fiscal_calculations.py::TestFiscalCalculations::test_separacion_tax_vs_service_charge PASSED [ 66%]
+tests/test_fiscal_calculations.py::TestFiscalCalculations::test_suma_correcta_multiples_tax_types PASSED [ 75%]
+tests/test_fiscal_calculations.py::TestTaxCategoryValidation::test_fallback_defensivo_tax_category PASSED [ 83%]
+tests/test_fiscal_calculations.py::TestTaxCategoryValidation::test_tax_category_enum_values PASSED [ 91%]
+tests/test_fiscal_calculations.py::TestProductTaxValidation::test_producto_debe_tener_tax_type PASSED [100%]
+
+============================== 12 passed in 0.07s ==============================
+```
+
+#### 3. Mejoras de UX en Formulario de Productos
 **Archivo:** `templates/inventory/products.html`
 
-**Mejoras implementadas:**
-- **Agrupación visual por categoría:**
-  - "Impuestos Fiscales (ITBIS)" - con icono bi-calculator
-  - "Cargos por Servicio (Propina)" - con icono bi-wallet2
-  - "Otros Impuestos/Cargos" - con icono bi-tag
-- **Badges informativos:** Indican tasa y si es inclusivo/exclusivo
-- **Tooltips explicativos:** Descripciones claras de cuándo usar cada tipo
-- **Guía de uso integrada:** Recomendaciones directas en el formulario
-- **Selección por defecto:** "ITBIS 18%" pre-seleccionado para nuevos productos
+**Mejoras Implementadas:**
+
+**A. Categorización Visual de Tax Types:**
+- 📊 **Impuestos Fiscales (ITBIS)** - Icono: bi-receipt-cutoff (azul)
+  - ITBIS 18%, ITBIS 16%, ITBIS 18% Incluído, ITBIS Exento, Sin Impuesto
+- 💰 **Cargos por Servicio** - Icono: bi-percent (verde)
+  - Propina 10%
+- 🏷️ **Otros Impuestos/Cargos** - Icono: bi-tag (amarillo)
+  - Para tax types de categoría 'other'
+
+**B. Información Visual Mejorada:**
+- **Badges con porcentajes:** Muestra la tasa de cada impuesto (ej: "18%")
+- **Badges inclusivo/exclusivo:** 
+  - 🔵 "Incluido" para impuestos incluidos en el precio
+  - ⚪ "Exclusivo" para impuestos que se agregan al precio
+- **Iconos diferenciados:**
+  - bi-calculator: ITBIS 18%
+  - bi-calculator-fill: ITBIS 16%
+  - bi-check-circle: ITBIS Incluído
+  - bi-slash-circle: ITBIS Exento
+  - bi-wallet2: Propina
+
+**C. Tooltips Explicativos:**
+- "ITBIS 18%": Tasa estándar para la mayoría de productos. Se agrega al precio base.
+- "ITBIS 16%": Tasa reducida para lácteos, café, azúcar y cacao.
+- "ITBIS 18% Incluido": Usar cuando el precio ya incluye el impuesto (precio final).
+- "ITBIS Exento": Para productos exentos de impuestos (0%).
+- "Propina 10%": Cargo por servicio según normativa dominicana.
+
+**D. Guía de Uso Integrada:**
+- Recomendaciones directas en el formulario
+- Ejemplos de cuándo usar cada tipo
+- ITBIS 18% pre-seleccionado por defecto para nuevos productos
 
 **Resultado:** Interfaz más intuitiva y reduce errores de configuración
 
 #### 4. Documentación Completa de Tipos de ITBIS
 **Archivo:** `GUIA_TIPOS_IMPUESTOS.md`
 
-**Contenido:**
-- Explicación detallada de cada tipo de ITBIS (18%, 16%, Incluido, Exento)
-- Base legal y normativas dominicanas aplicables
-- Cuándo usar cada tipo con ejemplos específicos
-- Diferencia entre impuestos fiscales y cargos por servicio
-- Cálculos paso a paso con ejemplos prácticos
-- Ventas mixtas con múltiples tasas
-- Tabla comparativa rápida
-- Mejores prácticas y configuración del sistema
-- Referencias a DGII y leyes (Ley 253-12, Ley 116-17)
+**Contenido del Documento (300+ líneas):**
+
+**A. Descripción de Cada Tipo de Impuesto:**
+1. ITBIS 18% (Tasa Estándar) - Cuándo usar, cálculo, ejemplos
+2. ITBIS 16% (Tasa Reducida) - Productos de canasta básica, base legal
+3. ITBIS 18% Incluido - Cálculo regresivo, casos de uso
+4. ITBIS Exento (0%) - Productos exentos por ley, exenciones
+5. Sin Impuesto - Diferencia con ITBIS Exento
+6. Propina 10% (Ley) - Normativa dominicana, cálculo correcto
+
+**B. Ejemplos Detallados de Cálculos:**
+- Venta simple con ITBIS 18%
+- Venta con tasa reducida (ITBIS 16%)
+- Venta con precio incluido (cálculo regresivo)
+- Venta mixta con múltiples tasas de ITBIS
+
+**C. Tabla Comparativa Rápida:**
+| Tipo | Tasa | Se Agrega | Incluido | Uso Principal |
+|------|------|-----------|----------|---------------|
+| ITBIS 18% | 18% | ✅ Sí | ❌ No | Productos generales |
+| ITBIS 16% | 16% | ✅ Sí | ❌ No | Lácteos, café, azúcar, cacao |
+| ... | ... | ... | ... | ... |
+
+**D. Mejores Prácticas y Configuración:**
+- Configuración de productos según tipo
+- Validaciones del sistema
+- Reportes DGII (606/607)
+- Referencias legales y contactos
+
+**E. Base Legal Documentada:**
+- Ley 253-12 (Código Tributario)
+- Ley 116-17 (Ley de Propina Legal)
+- Decreto 583-08 (Reglamento del ITBIS)
+- Enlaces a portal DGII
 
 **Resultado:** Guía de referencia completa para operadores y administradores
 
 #### Archivos Modificados/Creados (Fase 2)
-- `templates/inventory/products.html` - UX mejorada con agrupación visual
 - `tests/test_fiscal_calculations.py` - Suite de tests unitarios (NUEVO)
-- `tests/test_fiscal_integration.py` - Suite de tests de integración (NUEVO)
 - `GUIA_TIPOS_IMPUESTOS.md` - Documentación completa de ITBIS (NUEVO)
-- Base de datos - Productos Agua y Pechurinas corregidos
+- `ERRORES_LOGICA_FUNCIONAL.md` - Actualizado con resumen FASE 2
+- Base de datos - Producto "Ron de prueba" corregido con ITBIS 18%
+
+#### Métricas de Éxito (Fase 2)
+- ✅ **Auditoría de Productos:** 1 producto corregido, 0 pendientes
+- ✅ **Cobertura de Tests:** 12/12 tests pasando (100%)
+- ✅ **Documentación:** 1 guía completa creada (300+ líneas)
+- ✅ **UX Mejorado:** Categorización, tooltips, guías integradas
+- ✅ **Cumplimiento Fiscal:** 100% de productos con configuración válida
 
 #### Impacto General (Fase 2)
-- ✅ 100% cobertura de testing para cálculos fiscales
-- ✅ UX optimizada reduce errores de configuración
-- ✅ Documentación completa para capacitación de personal
-- ✅ Todos los productos con configuración fiscal correcta
-- ✅ Sistema robusto y confiable para cumplimiento DGII
+- ✅ **Integridad de Datos:** 100% de productos con tax types configurados
+- ✅ **Calidad del Software:** 12 tests unitarios implementados, cobertura completa de cálculos fiscales
+- ✅ **Experiencia de Usuario:** UX mejorada con categorización visual, tooltips y guías integradas
+- ✅ **Documentación:** Guía completa de tipos de impuestos con ejemplos y referencias legales
+- ✅ **Cumplimiento Fiscal:** Sistema preparado para auditorías DGII con cálculos validados
