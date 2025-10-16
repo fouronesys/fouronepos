@@ -285,10 +285,10 @@
                             <span>Comprobante</span>
                         </label>
                         <select class="modern-select" id="ncf-type-select" onchange="toggleClientInfo()">
-                            <option value="sin_comprobante" selected>Sin comprobante</option>
-                            <option value="consumo">Consumo</option>
+                            <option value="consumo" selected>Consumo</option>
                             <option value="credito_fiscal">Crédito Fiscal</option>
                             <option value="gubernamental">Gubernamental</option>
+                            <option value="sin_comprobante">Sin comprobante</option>
                         </select>
                     </div>
                     
@@ -1304,8 +1304,8 @@ function updateItemQuantity(productId, newQuantity) {
 function clearCart() {
     cartManager.clear();
     document.getElementById('table-select').value = '';
-    document.getElementById('ncf-type-select').value = 'sin_comprobante';
-    document.getElementById('apply-service-charge').checked = false; // Reset service charge
+    document.getElementById('ncf-type-select').value = 'consumo';
+    document.getElementById('apply-service-charge').checked = true; // Keep service charge enabled by default
     toggleClientInfo(); // Reset client info section
 }
 
