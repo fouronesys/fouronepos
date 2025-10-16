@@ -32,6 +32,101 @@ def require_admin_or_manager():
     return user
 
 
+def validate_tax_types_configuration(tax_type_ids):
+    """
+    Valida la configuración de tax types para un producto según reglas de negocio fiscales.
+    
+    Reglas de validación:
+    1. Debe haber al menos un tax_type
+    2. No se pueden mezclar tax types inclusivos y exclusivos (de categoría TAX)
+    3. Solo se permite un ITBIS (tax type de categoría TAX con tasa > 0)
+    4. Solo tax_types activos se pueden asignar
+    5. Las tasas deben estar en rango válido (0% - 100%)
+    
+    Returns:
+        dict: {'valid': bool, 'error': str or None, 'warnings': list}
+    """
+    if not tax_type_ids or len(tax_type_ids) == 0:
+        return {
+            'valid': False,
+            'error': 'Debe seleccionar al menos un tipo de impuesto. Esto es obligatorio para el cumplimiento fiscal.',
+            'warnings': []
+        }
+    
+    # Obtener tax types de la base de datos
+    tax_types = []
+    for tax_type_id in tax_type_ids:
+        tax_type = models.TaxType.query.get(tax_type_id)
+        if tax_type:
+            tax_types.append(tax_type)
+    
+    if not tax_types:
+        return {
+            'valid': False,
+            'error': 'No se encontraron tipos de impuestos válidos',
+            'warnings': []
+        }
+    
+    warnings = []
+    
+    # Validación 1: Solo tax_types activos
+    inactive_taxes = [tt for tt in tax_types if not tt.active]
+    if inactive_taxes:
+        inactive_names = ', '.join([tt.name for tt in inactive_taxes])
+        return {
+            'valid': False,
+            'error': f'Los siguientes tipos de impuestos están inactivos y no pueden ser asignados: {inactive_names}',
+            'warnings': []
+        }
+    
+    # Validación 2: Tasas en rango válido (0% - 100%)
+    invalid_rates = [tt for tt in tax_types if tt.rate < 0 or tt.rate > 1]
+    if invalid_rates:
+        invalid_names = ', '.join([f"{tt.name} ({tt.rate*100}%)" for tt in invalid_rates])
+        return {
+            'valid': False,
+            'error': f'Las siguientes tasas están fuera del rango válido (0%-100%): {invalid_names}',
+            'warnings': []
+        }
+    
+    # Separar tax_types por categoría
+    fiscal_taxes = [tt for tt in tax_types if tt.tax_category == models.TaxCategory.TAX]
+    service_charges = [tt for tt in tax_types if tt.tax_category == models.TaxCategory.SERVICE_CHARGE]
+    
+    # Validación 3: No mezclar inclusivos y exclusivos (solo en impuestos fiscales)
+    if fiscal_taxes:
+        inclusive_taxes = [tt for tt in fiscal_taxes if tt.is_inclusive]
+        exclusive_taxes = [tt for tt in fiscal_taxes if not tt.is_inclusive]
+        
+        if inclusive_taxes and exclusive_taxes:
+            return {
+                'valid': False,
+                'error': 'No puede mezclar impuestos inclusivos y exclusivos en el mismo producto. Use solo inclusivos O solo exclusivos.',
+                'warnings': []
+            }
+    
+    # Validación 4: Solo un ITBIS por producto (tax_category TAX con tasa > 0) - REGLA ESTRICTA
+    itbis_taxes = [tt for tt in fiscal_taxes if tt.rate > 0]
+    if len(itbis_taxes) > 1:
+        itbis_names = ', '.join([tt.name for tt in itbis_taxes])
+        return {
+            'valid': False,
+            'error': f'No puede asignar múltiples tipos de ITBIS a un producto ({itbis_names}). Un producto debe tener solo UN tipo de ITBIS. Seleccione el tipo de ITBIS correcto según el producto.',
+            'warnings': []
+        }
+    
+    # Advertencia informativa: Producto sin ITBIS (solo exento o sin impuesto)
+    if not itbis_taxes and fiscal_taxes:
+        exento_names = ', '.join([tt.name for tt in fiscal_taxes])
+        warnings.append(f'NOTA: Este producto está configurado como exento de ITBIS ({exento_names}). Verifique que esto sea correcto según la normativa fiscal.')
+    
+    return {
+        'valid': True,
+        'error': None,
+        'warnings': warnings
+    }
+
+
 @bp.route('/products')
 def products():
     user = require_admin_or_manager()
@@ -188,8 +283,12 @@ def create_product():
         
         # Handle tax types - products MUST have at least one tax type (FISCAL COMPLIANCE)
         tax_type_ids = data.get('tax_type_ids', [])
-        if not tax_type_ids or len(tax_type_ids) == 0:
-            return jsonify({'error': 'Debe seleccionar al menos un tipo de impuesto. Esto es obligatorio para el cumplimiento fiscal.'}), 400
+        
+        # Validar configuración de tax types con reglas de negocio estrictas
+        validation_result = validate_tax_types_configuration(tax_type_ids)
+        
+        if not validation_result['valid']:
+            return jsonify({'error': validation_result['error']}), 400
         
         # Add tax type relationships
         for tax_type_id in tax_type_ids:
@@ -264,9 +363,11 @@ def update_product(product_id):
         if 'tax_type_ids' in data:
             tax_type_ids = list(set(data.get('tax_type_ids', [])))
             
-            # VALIDACIÓN OBLIGATORIA: Products MUST have at least one tax type (FISCAL COMPLIANCE)
-            if not tax_type_ids or len(tax_type_ids) == 0:
-                return jsonify({'error': 'Debe seleccionar al menos un tipo de impuesto. Esto es obligatorio para el cumplimiento fiscal.'}), 400
+            # Validar configuración de tax types con reglas de negocio estrictas
+            validation_result = validate_tax_types_configuration(tax_type_ids)
+            
+            if not validation_result['valid']:
+                return jsonify({'error': validation_result['error']}), 400
             
             # Remove existing tax type relationships
             models.ProductTax.query.filter_by(product_id=product.id).delete()
