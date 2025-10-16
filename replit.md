@@ -21,7 +21,9 @@ PostgreSQL is the primary database, managed via SQLAlchemy ORM. Critical entitie
 The system employs session-based authentication with bcrypt for password hashing. Authorization is role-based, ensuring route-level protection, automatic session management, and secure password policies.
 
 ## Fiscal Compliance
-A robust fiscal compliance module for the Dominican Republic is integrated, featuring atomic NCF assignment, sequential NCF generation with range validation, tracking of cancelled NCFs, and support for multiple NCF types (consumo, crédito fiscal, gubernamental). It generates official DGII 606/607 CSV reports for purchases and sales and includes RNC validation utilities. Both fiscal and non-fiscal receipts can be generated. The system correctly handles various tax types (ITBIS 18% exclusive/inclusive, 16% reduced, exent) and service charges (Propina 10%) according to Dominican regulations, ensuring accurate tax calculations and product configurations.
+A robust fiscal compliance module for the Dominican Republic is integrated, featuring atomic NCF assignment, sequential NCF generation with range validation, tracking of cancelled NCFs, and support for multiple NCF types (consumo, crédito fiscal, gubernamental). It generates official DGII 606/607 CSV reports for purchases and sales and includes RNC validation utilities. Both fiscal and non-fiscal receipts can be generated. The system correctly handles various tax types (ITBIS 18% exclusive/inclusive, 16% reduced, exent) and service charges (Propina 10%) ensuring accurate tax calculations and product configurations.
+
+**Service Charge (Propina) Calculation (Updated Oct 16, 2025):** The 10% service charge is calculated from the subtotal only (before ITBIS), applied at POS level as "included", and selected by default. The service charge is NOT included in the tax base for ITBIS calculation. Formula: `Total = Subtotal + Service Charge (10% of Subtotal) + ITBIS (18% of Subtotal)`.
 
 ### Tax Category System (FASE 1-2)
 The system uses a categorization system for tax types with enum `TaxCategory`:

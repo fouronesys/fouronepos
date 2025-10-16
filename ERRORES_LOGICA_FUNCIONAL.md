@@ -197,12 +197,11 @@ Cuando se divide una cuenta (`split_sale`), se crean múltiples ventas independi
 
 ---
 
-### 8. **PROBLEMA: Cálculo de Propina Antes o Después de Impuestos**
+### 8. **PROBLEMA: Cálculo de Propina Antes o Después de Impuestos** ✅ ACTUALIZADO (16 Oct 2025)
 
-**Descripción del Problema:**
-Según la normativa dominicana, la propina legal del 10% se calcula sobre el subtotal + impuestos. El código actual puede no estar calculando en el orden correcto.
+**Estado:** ✅ Modificado según preferencia del usuario
 
-**Normativa RD:**
+**Método Anterior (Normativa Dominicana Tradicional - FASE 1):**
 ```
 Subtotal: RD$ 300
 ITBIS 18%: RD$ 54
@@ -211,28 +210,26 @@ Propina 10%: RD$ 35.40
 Total Final: RD$ 389.40
 ```
 
-**Código Actual (pos.html, línea ~800):**
-```javascript
-// Calculate service charge (propina) if enabled - applies before exclusive taxes per DR law
+**Método Actual (Configuración Personalizada - 16 Oct 2025):**
+```
+Subtotal: RD$ 300
+Propina 10% Incluida: RD$ 30 (10% del subtotal solamente)
+ITBIS 18%: RD$ 54 (18% del subtotal, NO incluye propina en base imponible)
+Total Final: RD$ 384.00
 ```
 
-**Verificar:**
-- ¿Se está calculando sobre subtotal o sobre subtotal+impuestos?
-- ¿El comentario es correcto?
+**Implementación Actual:**
+- ✅ **Frontend (pos.html, línea ~818):** `baseForServiceCharge = subtotal` (propina del subtotal únicamente)
+- ✅ **Backend (api.py, línea ~775):** `tax_base = total_subtotal` (propina NO incluida en base imponible)
+- ✅ **Interfaz:** Checkbox "Propina 10% Incluida" (seleccionada por defecto)
+- ✅ **Cálculo:** `Total = Subtotal + Propina(10% subtotal) + ITBIS(18% subtotal)`
 
-**Impacto:**
-- ❌ Si está mal: Incumplimiento normativa laboral dominicana
-- ❌ Propinas incorrectas afectan a empleados
-
-**Solución Propuesta:**
-1. Verificar normativa actual de DGII/Ministerio de Trabajo
-2. Ajustar cálculo si es necesario:
-   ```javascript
-   const baseForServiceCharge = subtotal + taxAmount;
-   const serviceCharge = baseForServiceCharge * 0.10;
-   const total = baseForServiceCharge + serviceCharge;
-   ```
-3. Agregar tests unitarios para este cálculo
+**Notas Importantes:**
+- ⚠️ **Cambio de Normativa:** Este método NO sigue la normativa laboral dominicana tradicional
+- ✅ La propina se calcula del subtotal antes de impuestos
+- ✅ La propina NO se incluye en la base imponible del ITBIS
+- ✅ La propina se aplica a nivel de POS, no por producto
+- ✅ Este es un método personalizado según preferencia del negocio
 
 ---
 
@@ -451,20 +448,23 @@ assert total == 129.80
 - Excluye `service_charge` del cálculo de tax_rate
 - Implementado filtrado: `tax_only = [tax for tax in product_tax_types if tax.get('tax_category') == 'tax']`
 
-#### 2. Corrección del Cálculo de Propina ✅
-**Archivo:** `templates/admin/pos.html` (líneas 804-824)
-- **ANTES:** Propina calculada sobre subtotal solamente ❌
-- **AHORA:** Propina calculada sobre (subtotal + impuestos) ✅
-- Cumple normativa dominicana: Base de propina = subtotal + ITBIS
+#### 2. Corrección del Cálculo de Propina ✅ ACTUALIZADO (16 Oct 2025)
+**Archivo:** `templates/admin/pos.html` (líneas ~818-824)
 
-**Ejemplo:**
+**Evolución del Método:**
+- **FASE 1 (Inicial):** Propina sobre subtotal solamente ❌
+- **FASE 1 (Corregido):** Propina sobre (subtotal + impuestos) según normativa RD ✅
+- **ACTUAL (16 Oct 2025):** Propina sobre subtotal únicamente - Configuración personalizada ✅
+
+**Método Actual (Configuración Personalizada):**
 ```javascript
 // Subtotal: RD$ 300
-// ITBIS 18%: RD$ 54
-// Base para Propina: RD$ 354 (subtotal + impuestos) ← CORRECTO
-// Propina 10%: RD$ 35.40
-// Total Final: RD$ 389.40
+// Propina 10% Incluida: RD$ 30 (10% del subtotal)
+// ITBIS 18%: RD$ 54 (18% del subtotal, NO incluye propina)
+// Total Final: RD$ 384.00
 ```
+
+**⚠️ Nota:** El método actual NO sigue la normativa laboral dominicana tradicional, es una configuración personalizada según preferencia del negocio.
 
 #### 3. Validación Obligatoria de Tax Types en Productos ✅
 **Frontend:** `templates/inventory/products.html` (líneas 459-463)

@@ -763,13 +763,13 @@ def finalize_sale(sale_id):
                         exclusive_tax_by_rate[rate] = 0
                     exclusive_tax_by_rate[rate] += item.total_price
         
-        # Calculate service charge (propina) BEFORE exclusive taxes per DR law
+        # Calculate service charge (propina) from subtotal only - applied as "included" at POS level
         service_charge_amount = 0
         if apply_service_charge:
             service_charge_amount = round(total_subtotal * service_charge_rate, 2)
         
-        # Calculate exclusive taxes on tax base (subtotal + service charge for DR compliance)
-        tax_base = total_subtotal + service_charge_amount
+        # Calculate exclusive taxes on subtotal ONLY (service charge NOT included in tax base per user preference)
+        tax_base = total_subtotal
         total_tax_added = 0
         
         for rate, rate_subtotal in exclusive_tax_by_rate.items():
@@ -2779,13 +2779,13 @@ def preview_sale_calculation():
                 'item_tax_amount': round(item_tax_amount, 2)
             })
         
-        # Calculate service charge BEFORE exclusive taxes
+        # Calculate service charge from subtotal only - applied as "included" at POS level
         service_charge_amount = 0
         if apply_service_charge:
             service_charge_amount = round(total_subtotal * service_charge_rate, 2)
         
-        # Calculate exclusive taxes on tax base (subtotal + service charge)
-        tax_base = total_subtotal + service_charge_amount
+        # Calculate exclusive taxes on subtotal ONLY (service charge NOT included in tax base per user preference)
+        tax_base = total_subtotal
         total_tax_added = 0
         
         for rate, rate_subtotal in exclusive_tax_by_rate.items():

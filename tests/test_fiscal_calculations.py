@@ -37,18 +37,21 @@ class TestFiscalCalculations(unittest.TestCase):
         self.assertEqual(precio_base, Decimal('100.00'))
         self.assertEqual(itbis, Decimal('18.00'))
     
-    def test_propina_sobre_subtotal_mas_impuestos(self):
-        """Test: Propina 10% calculada sobre (subtotal + impuestos) - NORMATIVA DOMINICANA"""
+    def test_propina_incluida_subtotal_solamente(self):
+        """Test: Propina 10% Incluida - calculada del subtotal únicamente (Configuración Actualizada Oct 2025)"""
         subtotal = Decimal('300.00')
-        itbis = subtotal * self.ITBIS_18  # 54.00
-        base_propina = subtotal + itbis   # 354.00
-        propina = base_propina * self.PROPINA_10  # 35.40
-        total = base_propina + propina    # 389.40
+        propina = subtotal * self.PROPINA_10  # 30.00 (10% del subtotal solamente)
+        itbis = subtotal * self.ITBIS_18      # 54.00 (18% del subtotal, NO incluye propina en base)
+        total = subtotal + propina + itbis    # 384.00
         
+        self.assertEqual(propina, Decimal('30.00'))
         self.assertEqual(itbis, Decimal('54.00'))
-        self.assertEqual(base_propina, Decimal('354.00'))
-        self.assertEqual(propina, Decimal('35.40'))
-        self.assertEqual(total, Decimal('389.40'))
+        self.assertEqual(total, Decimal('384.00'))
+        
+        # Verificar que propina NO se incluye en base de ITBIS
+        base_itbis = subtotal  # Base de ITBIS es solo el subtotal
+        self.assertEqual(base_itbis, Decimal('300.00'))
+        self.assertNotEqual(base_itbis, subtotal + propina)  # NO debe incluir propina
     
     def test_separacion_tax_vs_service_charge(self):
         """Test: Separación correcta entre impuestos fiscales y cargos por servicio"""

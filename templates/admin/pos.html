@@ -361,8 +361,8 @@
                             <input class="form-check-input" type="checkbox" id="apply-service-charge" onchange="updateTotals()" checked>
                             <label class="form-check-label" for="apply-service-charge">
                                 <i class="bi bi-percent me-2"></i>
-                                <strong>Aplicar propina del 10%</strong>
-                                <small class="d-block text-muted">Propina legal según normativa dominicana</small>
+                                <strong>Propina 10% Incluida</strong>
+                                <small class="d-block text-muted">Calculada del subtotal (antes del ITBIS)</small>
                             </label>
                         </div>
                     </div>
@@ -812,10 +812,10 @@ class CartManager {
         const totalExclusiveTax = Object.values(exclusiveTaxes).reduce((sum, tax) => sum + tax.amount, 0);
         const totalTax = totalInclusiveTax + totalExclusiveTax;
         
-        // CORRECTED: Calculate service charge (propina) on (subtotal + taxes) per Dominican Republic law
+        // Calculate service charge (propina) from subtotal ONLY - applied as "included" at POS level
         const applyServiceCharge = document.getElementById('apply-service-charge')?.checked || false;
         const serviceChargeRate = 0.10; // 10%
-        const baseForServiceCharge = subtotal + totalExclusiveTax; // Base includes subtotal + exclusive taxes
+        const baseForServiceCharge = subtotal; // Propina calculated from subtotal only (before ITBIS)
         const serviceCharge = applyServiceCharge ? baseForServiceCharge * serviceChargeRate : 0;
         
         const total = subtotal + totalExclusiveTax + serviceCharge;
