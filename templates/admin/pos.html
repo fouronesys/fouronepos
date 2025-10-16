@@ -2659,7 +2659,7 @@ function hideCashControls() {
 // Show open cash modal
 function showOpenCashModal(registerName) {
     const modalHtml = `
-        <div class="modal fade" id="openCashModal" tabindex="-1" aria-labelledby="openCashModalLabel" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal fade" id="openCashModal" tabindex="-1" aria-labelledby="openCashModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
@@ -2703,8 +2703,11 @@ function showOpenCashModal(registerName) {
     // Add modal to page
     document.body.insertAdjacentHTML('beforeend', modalHtml);
     
-    // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('openCashModal'));
+    // Show modal with strict options
+    const modal = new bootstrap.Modal(document.getElementById('openCashModal'), {
+        backdrop: 'static',
+        keyboard: false
+    });
     modal.show();
 }
 
@@ -2875,14 +2878,13 @@ function updateCashStatusUI(status) {
 
 function showOpenCashModal(registerName) {
     const modalHtml = `
-        <div class="modal fade" id="openCashModal" tabindex="-1" aria-labelledby="openCashModalLabel" aria-hidden="true">
+        <div class="modal fade" id="openCashModal" tabindex="-1" aria-labelledby="openCashModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title" id="openCashModalLabel">
                             <i class="bi bi-unlock me-2"></i>Abrir Caja Registradora
                         </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
                         <div class="alert alert-info">
@@ -2920,7 +2922,7 @@ function showOpenCashModal(registerName) {
     // Add modal to page
     document.body.insertAdjacentHTML('beforeend', modalHtml);
     
-    // Show modal
+    // Show modal with strict options
     const modal = new bootstrap.Modal(document.getElementById('openCashModal'), {
         backdrop: 'static',
         keyboard: false
