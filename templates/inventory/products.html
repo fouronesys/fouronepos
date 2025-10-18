@@ -385,7 +385,7 @@ function updateTaxTypesContainer() {
         `;
         
         impuestos.forEach(taxType => {
-            const isDefaultSelected = taxType.name === 'ITBIS 18%';
+            const isDefaultSelected = taxType.name === 'ITBIS 18% Incluído';
             const tooltipText = getTooltipForTaxType(taxType.name);
             const iconClass = getTaxTypeIcon(taxType.name);
             
