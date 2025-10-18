@@ -26,6 +26,19 @@
     .tax-type-box .text-muted {
         opacity: 0.8;
     }
+    
+    /* Alert styling for dark mode */
+    #taxTypesContainer .alert-info {
+        background-color: rgba(13, 110, 253, 0.1);
+        border-color: rgba(13, 110, 253, 0.2);
+        color: var(--bs-body-color);
+    }
+    
+    [data-bs-theme='dark'] #taxTypesContainer .alert-info {
+        background-color: rgba(13, 110, 253, 0.15);
+        border-color: rgba(13, 110, 253, 0.3);
+        color: var(--bs-body-color);
+    }
 </style>
 
 <div class="container-fluid">
