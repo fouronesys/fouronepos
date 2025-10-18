@@ -220,7 +220,14 @@
                             </div>
                             <div class="mb-3">
                                 <label for="productPrice" class="form-label">Precio de Venta (RD$) *</label>
-                                <input type="number" class="form-control" id="productPrice" step="0.01" min="0" required>
+                                <input type="number" class="form-control" id="productPrice" step="0.01" min="0" required oninput="updateCalculatedPrice()">
+                            </div>
+                            <div class="mb-3">
+                                <label for="calculatedPrice" class="form-label">
+                                    <i class="bi bi-calculator me-1"></i>Precio Final Calculado
+                                </label>
+                                <input type="text" class="form-control" id="calculatedPrice" readonly style="background-color: var(--bs-secondary-bg); font-weight: bold;">
+                                <div class="form-text">Este es el precio que verá el cliente si hay impuestos excluidos (que se suman al precio base)</div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Configuración de Impuestos</label>
@@ -472,6 +479,57 @@ function updateTaxTypesContainer() {
     `;
     
     container.innerHTML = html;
+    
+    // Add event listeners to all tax checkboxes to update calculated price
+    document.querySelectorAll('#taxTypesContainer input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', updateCalculatedPrice);
+    });
+    
+    // Update calculated price initially
+    updateCalculatedPrice();
+}
+
+function updateCalculatedPrice() {
+    const priceInput = document.getElementById('productPrice');
+    const calculatedPriceInput = document.getElementById('calculatedPrice');
+    
+    if (!priceInput || !calculatedPriceInput) return;
+    
+    const basePrice = parseFloat(priceInput.value) || 0;
+    
+    if (basePrice === 0) {
+        calculatedPriceInput.value = 'RD$ 0.00';
+        return;
+    }
+    
+    // Get selected tax types
+    const selectedTaxIds = getSelectedTaxTypes();
+    const selectedTaxes = taxTypes.filter(t => selectedTaxIds.includes(t.id));
+    
+    // Calculate exclusive taxes only (these get added to the price)
+    const exclusiveTaxes = selectedTaxes.filter(t => !t.is_inclusive && t.rate > 0);
+    const totalExclusiveTaxRate = exclusiveTaxes.reduce((sum, tax) => sum + tax.rate, 0);
+    
+    // Calculate inclusive taxes (these are already in the price)
+    const inclusiveTaxes = selectedTaxes.filter(t => t.is_inclusive && t.rate > 0);
+    
+    let calculatedPrice = basePrice;
+    let breakdown = '';
+    
+    if (exclusiveTaxes.length > 0) {
+        // Add exclusive taxes to the base price
+        const taxAmount = basePrice * totalExclusiveTaxRate;
+        calculatedPrice = basePrice + taxAmount;
+        breakdown = ` (Base: RD$ ${basePrice.toFixed(2)} + Impuestos: RD$ ${taxAmount.toFixed(2)})`;
+    } else if (inclusiveTaxes.length > 0) {
+        // Price already includes tax, show breakdown
+        const totalInclusiveRate = inclusiveTaxes.reduce((sum, tax) => sum + tax.rate, 0);
+        const baseAmount = basePrice / (1 + totalInclusiveRate);
+        const taxAmount = basePrice - baseAmount;
+        breakdown = ` (Base: RD$ ${baseAmount.toFixed(2)} + Impuestos: RD$ ${taxAmount.toFixed(2)})`;
+    }
+    
+    calculatedPriceInput.value = `RD$ ${calculatedPrice.toFixed(2)}${breakdown}`;
 }
 
 function getTooltipForTaxType(name) {
