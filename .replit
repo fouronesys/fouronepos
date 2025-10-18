@@ -28,16 +28,12 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "gunicorn --bind=0.0.0.0:5000 --reuse-port --workers=2 main:app"
+args = "gunicorn --bind=0.0.0.0:5000 --reuse-port --workers=1 main:app"
 waitForPort = 5000
 
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 37691
-externalPort = 8099
 
 [[ports]]
 localPort = 37783
@@ -66,6 +62,10 @@ externalPort = 3003
 [[ports]]
 localPort = 42887
 externalPort = 3000
+
+[[ports]]
+localPort = 42991
+externalPort = 8099
 
 [[ports]]
 localPort = 44699

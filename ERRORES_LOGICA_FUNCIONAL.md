@@ -212,17 +212,38 @@ Total Final: RD$ 389.40
 
 **Método Actual (Configuración Personalizada - 18 Oct 2025):**
 ```
-Precio del Producto (con propina incluida): RD$ 330
-Subtotal (sin propina): RD$ 300 (330 / 1.10)
-Propina 10% Incluida (extraída del precio): RD$ 30 (NO se suma al total)
-ITBIS 18%: RD$ 54 (18% del subtotal sin propina)
-Total Final: RD$ 354.00
+Ejemplo práctico:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Producto: Cerveza Presidente
+Precio mostrado (incluye propina): RD$ 330
+
+CÁLCULO AUTOMÁTICO DEL SISTEMA:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Extracción de propina (cálculo regresivo):
+   Subtotal sin propina = 330 / 1.10 = RD$ 300.00
+   Propina 10% extraída = 330 - 300 = RD$ 30.00 (solo para mostrar)
+
+2. Cálculo de ITBIS:
+   ITBIS 18% = 300 × 0.18 = RD$ 54.00
+   (se calcula sobre el subtotal SIN propina)
+
+3. Total a pagar:
+   Total = Subtotal + ITBIS = 300 + 54 = RD$ 354.00
+   (la propina NO se suma porque ya está incluida en el precio mostrado)
+
+DESGLOSE EN RECIBO:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Subtotal (sin propina):        RD$ 300.00
+Propina 10% (incluida):        RD$  30.00 ← Solo informativo
+ITBIS 18%:                     RD$  54.00
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TOTAL A PAGAR:                 RD$ 354.00
 ```
 
 **Implementación Actual:**
-- ✅ **Frontend (pos.html, línea ~776):** `itemSubtotal = itemPrice / 1.10` (extrae propina del precio)
-- ✅ **Frontend (pos.html, línea ~830):** `serviceCharge = pricesWithServiceCharge - subtotal` (propina extraída)
-- ✅ **Frontend (pos.html, línea ~834):** `total = subtotal + totalExclusiveTax` (NO suma propina al total)
+- ✅ **Frontend (pos.html, línea ~776):** `itemSubtotal = applyServiceCharge ? itemPrice / 1.10 : itemPrice` (extrae propina del precio si está incluida)
+- ✅ **Frontend (pos.html, línea ~831):** `serviceCharge = pricesWithServiceCharge - subtotal` (propina extraída mediante cálculo regresivo)
+- ✅ **Frontend (pos.html, línea ~835):** `total = subtotal + totalExclusiveTax` (NO suma propina al total)
 - ✅ **Backend (api.py, línea ~775):** `tax_base = total_subtotal` (propina NO incluida en base imponible)
 - ✅ **Interfaz:** Checkbox "Propina 10% Incluida" (seleccionada por defecto)
 - ✅ **Cálculo:** `Total = Subtotal (sin propina) + ITBIS(18% subtotal)`

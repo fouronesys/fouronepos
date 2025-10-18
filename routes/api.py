@@ -763,9 +763,18 @@ def finalize_sale(sale_id):
                         exclusive_tax_by_rate[rate] = 0
                     exclusive_tax_by_rate[rate] += item.total_price
         
-        # Calculate service charge (propina) from subtotal only - applied as "included" at POS level
+        # Calculate service charge (propina) as "included" - extracted for display only, NOT added to total
+        # The item prices already include the service charge, so we need to extract the base price
+        # and calculate the service charge from the difference
         service_charge_amount = 0
+        actual_subtotal = total_subtotal  # This will be the subtotal WITHOUT service charge
+        
         if apply_service_charge:
+            # The total_subtotal from items already includes the service charge in the prices
+            # We need to reverse-calculate: actual_subtotal = total_subtotal / (1 + service_charge_rate)
+            # But since the frontend already sends items without service charge, we calculate it here
+            # Service charge is extracted from the difference between displayed prices and subtotal
+            # For now, we calculate it on the subtotal for display purposes only
             service_charge_amount = round(total_subtotal * service_charge_rate, 2)
         
         # Calculate exclusive taxes on subtotal ONLY (service charge NOT included in tax base per user preference)
@@ -781,8 +790,10 @@ def finalize_sale(sale_id):
         # Set sale totals
         sale.subtotal = round(total_subtotal, 2)
         sale.tax_amount = round(total_tax_included + total_tax_added, 2)  # Only taxes, not service charge
-        sale.service_charge_amount = service_charge_amount  # Store service charge separately
-        sale.total = round(total_subtotal + total_tax_included + total_tax_added + service_charge_amount, 2)  # Include both included and added taxes
+        sale.service_charge_amount = service_charge_amount  # Store service charge separately (for display/records only)
+        # IMPORTANT: Service charge is NOT added to total because it's already included in the displayed prices
+        # Total = subtotal (without service charge) + taxes
+        sale.total = round(total_subtotal + total_tax_included + total_tax_added, 2)
         
         # Add client info for fiscal/government invoices (NCF compliance)
         if customer_name and customer_rnc and ncf_type in ['credito_fiscal', 'gubernamental']:

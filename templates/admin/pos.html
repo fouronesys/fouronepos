@@ -758,15 +758,19 @@ class CartManager {
         const applyServiceCharge = document.getElementById('apply-service-charge')?.checked || false;
         const serviceChargeRate = 0.10; // 10%
         
-        let subtotal = 0; // Subtotal (sum of product prices, no service charge)
+        let subtotal = 0; // Subtotal (sum of product prices WITHOUT service charge)
+        let pricesWithServiceCharge = 0; // Total of displayed prices (WITH service charge if applicable)
         let inclusiveTaxes = {}; // Taxes included in prices
         let exclusiveTaxes = {}; // Taxes to be added to base
         
         // First pass: Calculate subtotal and identify tax types per product
         this.cart.forEach(item => {
             const itemPrice = item.price * item.quantity;
-            // Subtotal is always the product price (service charge is calculated separately, not extracted from price)
-            const itemSubtotal = itemPrice;
+            pricesWithServiceCharge += itemPrice;
+            
+            // If service charge is "included", extract it from the price using reverse calculation
+            // Example: Price with tip = $330, Subtotal without tip = $330 / 1.10 = $300
+            const itemSubtotal = applyServiceCharge ? itemPrice / (1 + serviceChargeRate) : itemPrice;
             subtotal += itemSubtotal;
             
             // Process taxes for this product (taxes calculated on base price without service charge)
@@ -818,12 +822,14 @@ class CartManager {
         const totalExclusiveTax = Object.values(exclusiveTaxes).reduce((sum, tax) => sum + tax.amount, 0);
         const totalTax = totalInclusiveTax + totalExclusiveTax;
         
-        // Service charge (propina) - calculated on subtotal (sum of product prices)
-        // When checkbox is ON, service charge is ADDED to the total (not extracted from prices)
-        const serviceCharge = applyServiceCharge ? subtotal * serviceChargeRate : 0;
+        // Service charge (propina) - extracted from prices if "included"
+        // When checkbox is ON, service charge was already included in the price, so we extract it for display
+        // but DO NOT add it to the total (it's already in pricesWithServiceCharge)
+        const serviceCharge = applyServiceCharge ? pricesWithServiceCharge - subtotal : 0;
         
-        // Total: subtotal + exclusive taxes + service charge
-        const total = subtotal + totalExclusiveTax + serviceCharge;
+        // Total: subtotal (without service charge) + exclusive taxes
+        // Note: Service charge is NOT added because it's already included in the displayed prices
+        const total = subtotal + totalExclusiveTax;
         
         // For backward compatibility, provide a single tax rate (average)
         const averageTaxRate = subtotal > 0 ? totalTax / subtotal : 0;
@@ -836,7 +842,8 @@ class CartManager {
             exclusiveTaxes,
             total,
             applyServiceCharge,
-            note: applyServiceCharge ? 'Service charge calculated on subtotal and ADDED to total' : 'No service charge'
+            pricesWithServiceCharge,
+            note: applyServiceCharge ? 'Service charge INCLUDED in prices (extracted via reverse calc, not added to total)' : 'No service charge'
         });
         
         return { 
