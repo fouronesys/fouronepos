@@ -790,10 +790,10 @@ def finalize_sale(sale_id):
         # Set sale totals
         sale.subtotal = round(total_subtotal, 2)
         sale.tax_amount = round(total_tax_included + total_tax_added, 2)  # Only taxes, not service charge
-        sale.service_charge_amount = service_charge_amount  # Store service charge separately (for display/records only)
-        # IMPORTANT: Service charge is NOT added to total because it's already included in the displayed prices
-        # Total = subtotal (without service charge) + taxes
-        sale.total = round(total_subtotal + total_tax_included + total_tax_added, 2)
+        sale.service_charge_amount = service_charge_amount  # Store service charge separately
+        # Total = subtotal (without service charge) + taxes + service charge (added back)
+        # The service charge is extracted from prices to calculate ITBIS on base amount, then added back to total
+        sale.total = round(total_subtotal + total_tax_included + total_tax_added + service_charge_amount, 2)
         
         # Add client info for fiscal/government invoices (NCF compliance)
         if customer_name and customer_rnc and ncf_type in ['credito_fiscal', 'gubernamental']:

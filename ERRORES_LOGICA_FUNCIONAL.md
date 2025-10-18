@@ -221,40 +221,51 @@ CÁLCULO AUTOMÁTICO DEL SISTEMA:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. Extracción de propina (cálculo regresivo):
    Subtotal sin propina = 330 / 1.10 = RD$ 300.00
-   Propina 10% extraída = 330 - 300 = RD$ 30.00 (solo para mostrar)
+   Propina 10% extraída = 330 - 300 = RD$ 30.00
 
 2. Cálculo de ITBIS:
    ITBIS 18% = 300 × 0.18 = RD$ 54.00
    (se calcula sobre el subtotal SIN propina)
 
 3. Total a pagar:
-   Total = Subtotal + ITBIS = 300 + 54 = RD$ 354.00
-   (la propina NO se suma porque ya está incluida en el precio mostrado)
+   Total = Subtotal + ITBIS + Propina
+   Total = 300 + 54 + 30 = RD$ 384.00
+   (la propina se extrae del precio para calcular el ITBIS,
+    pero luego se vuelve a sumar al total final)
 
 DESGLOSE EN RECIBO:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Subtotal (sin propina):        RD$ 300.00
-Propina 10% (incluida):        RD$  30.00 ← Solo informativo
+Propina 10%:                   RD$  30.00
 ITBIS 18%:                     RD$  54.00
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TOTAL A PAGAR:                 RD$ 354.00
+TOTAL A PAGAR:                 RD$ 384.00
 ```
 
+**Explicación del método:**
+La propina se extrae del precio del producto mediante cálculo regresivo
+(precio / 1.10) para obtener el subtotal base. El ITBIS se calcula sobre
+este subtotal SIN propina. Finalmente, la propina se vuelve a sumar al
+total. Esto permite calcular correctamente el ITBIS sobre la base sin
+propina, mientras se mantiene la propina en el total final.
+
 **Implementación Actual:**
-- ✅ **Frontend (pos.html, línea ~776):** `itemSubtotal = applyServiceCharge ? itemPrice / 1.10 : itemPrice` (extrae propina del precio si está incluida)
+- ✅ **Frontend (pos.html, línea ~776):** `itemSubtotal = applyServiceCharge ? itemPrice / 1.10 : itemPrice` (extrae propina del precio)
 - ✅ **Frontend (pos.html, línea ~831):** `serviceCharge = pricesWithServiceCharge - subtotal` (propina extraída mediante cálculo regresivo)
-- ✅ **Frontend (pos.html, línea ~835):** `total = subtotal + totalExclusiveTax` (NO suma propina al total)
-- ✅ **Backend (api.py, línea ~775):** `tax_base = total_subtotal` (propina NO incluida en base imponible)
+- ✅ **Frontend (pos.html, línea ~835):** `total = subtotal + totalExclusiveTax + serviceCharge` (propina se vuelve a sumar)
+- ✅ **Backend (api.py, línea ~799):** `total = total_subtotal + taxes + service_charge_amount` (propina incluida en total)
+- ✅ **Backend (api.py, línea ~784):** `tax_base = total_subtotal` (propina NO incluida en base imponible del ITBIS)
 - ✅ **Interfaz:** Checkbox "Propina 10% Incluida" (seleccionada por defecto)
-- ✅ **Cálculo:** `Total = Subtotal (sin propina) + ITBIS(18% subtotal)`
+- ✅ **Cálculo:** `Total = Subtotal (sin propina) + ITBIS(18% subtotal) + Propina`
 
 **Notas Importantes:**
 - ⚠️ **Cambio de Normativa:** Este método NO sigue la normativa laboral dominicana tradicional
 - ✅ Cuando la propina está "incluida", los precios de productos YA contienen la propina del 10%
-- ✅ La propina se extrae mediante cálculo regresivo (precio / 1.10) para mostrarla en el desglose
-- ✅ La propina NO se suma al total (ya está en el precio mostrado)
-- ✅ La propina NO se incluye en la base imponible del ITBIS
-- ✅ Este es un método personalizado según preferencia del negocio
+- ✅ La propina se extrae mediante cálculo regresivo (precio / 1.10) del subtotal
+- ✅ El ITBIS se calcula sobre el subtotal SIN propina
+- ✅ La propina se vuelve a SUMAR al total final
+- ✅ Fórmula: Total = Subtotal (sin propina) + ITBIS + Propina
+- ✅ Este método permite calcular el ITBIS correctamente sobre la base sin propina
 
 ---
 

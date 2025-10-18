@@ -823,13 +823,13 @@ class CartManager {
         const totalTax = totalInclusiveTax + totalExclusiveTax;
         
         // Service charge (propina) - extracted from prices if "included"
-        // When checkbox is ON, service charge was already included in the price, so we extract it for display
-        // but DO NOT add it to the total (it's already in pricesWithServiceCharge)
+        // When checkbox is ON, we extract it from prices, then add it back to the total
+        // This allows us to calculate ITBIS on the subtotal WITHOUT the service charge
         const serviceCharge = applyServiceCharge ? pricesWithServiceCharge - subtotal : 0;
         
-        // Total: subtotal (without service charge) + exclusive taxes
-        // Note: Service charge is NOT added because it's already included in the displayed prices
-        const total = subtotal + totalExclusiveTax;
+        // Total: subtotal (without service charge) + exclusive taxes + service charge added back
+        // Note: Service charge is subtracted from prices, then added back to get correct total
+        const total = subtotal + totalExclusiveTax + serviceCharge;
         
         // For backward compatibility, provide a single tax rate (average)
         const averageTaxRate = subtotal > 0 ? totalTax / subtotal : 0;
