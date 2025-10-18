@@ -2561,13 +2561,21 @@ async function initializePOS() {
     {% endif %}
     
     // Load products for the first category (default)
-    const firstCategory = document.querySelector('[data-bs-toggle="pill"]');
+    const firstCategory = document.querySelector('.category-pill.active');
     if (firstCategory) {
-        const categoryId = firstCategory.getAttribute('data-bs-target').replace('#category-', '');
+        const categoryId = firstCategory.getAttribute('data-category-id');
+        console.log('[POS] Loading products for first category:', categoryId);
         loadProducts(categoryId);
     } else {
-        // Fallback: load products for category 1 if no tabs found
-        loadProducts(1);
+        // Fallback: try to find any category button
+        const anyCategory = document.querySelector('.category-pill');
+        if (anyCategory) {
+            const categoryId = anyCategory.getAttribute('data-category-id');
+            console.log('[POS] Loading products for fallback category:', categoryId);
+            loadProducts(categoryId);
+        } else {
+            console.warn('[POS] No category buttons found, cannot load products');
+        }
     }
     
     // Load available tables
