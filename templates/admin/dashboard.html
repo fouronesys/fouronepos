@@ -51,18 +51,6 @@
         </div>
         
         <div class="col-lg-3 col-md-6">
-            <div class="stats-card">
-                <div class="stats-label">Productos Bajo Stock</div>
-                <div class="stats-value">{{ low_stock_products|length }}</div>
-                <div class="d-flex align-items-center {% if low_stock_products|length > 0 %}text-warning{% else %}text-success{% endif %}">
-                    <i class="bi bi-{% if low_stock_products|length > 0 %}exclamation-triangle{% else %}check-circle{% endif %} me-1"></i>
-                    <small>{% if low_stock_products|length > 0 %}Requiere atención{% else %}Stock normal{% endif %}</small>
-                </div>
-                <i class="bi bi-box stats-icon"></i>
-            </div>
-        </div>
-        
-        <div class="col-lg-3 col-md-6">
             <div class="stats-card average-sale-card">
                 <div class="stats-label">Promedio por Venta</div>
                 <div class="stats-value average-sale-value">
@@ -75,57 +63,190 @@
                 <i class="bi bi-graph-up stats-icon"></i>
             </div>
         </div>
+        
+        <div class="col-lg-3 col-md-6">
+            <div class="stats-card">
+                <div class="stats-label">Mesas Activas</div>
+                <div class="stats-value">{{ active_tables }}</div>
+                <div class="d-flex align-items-center {% if active_tables > 0 %}text-warning{% else %}text-muted{% endif %}">
+                    <i class="bi bi-{% if active_tables > 0 %}clock{% else %}check-circle{% endif %} me-1"></i>
+                    <small>{% if active_tables > 0 %}En servicio{% else %}Sin ocupar{% endif %}</small>
+                </div>
+                <i class="bi bi-table stats-icon"></i>
+            </div>
+        </div>
     </div>
     
-    <!-- Main Content Grid -->
-    <div class="row g-4">
-        <!-- Low Stock Products -->
-        <div class="col-lg-8">
+    <!-- New Statistics Section -->
+    <div class="row g-4 mb-5">
+        <!-- Top Product -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-gradient-success text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-trophy-fill me-2"></i>Producto Más Vendido
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if top_product %}
+                    <div class="text-center py-3">
+                        <i class="bi bi-star-fill text-warning fs-1 mb-3"></i>
+                        <h4 class="fw-bold mb-2">{{ top_product[0] }}</h4>
+                        <div class="row text-center mt-3">
+                            <div class="col-6">
+                                <div class="border rounded p-2">
+                                    <small class="text-muted d-block">Cantidad</small>
+                                    <strong class="fs-5 text-success">{{ top_product[1]|int }}</strong>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="border rounded p-2">
+                                    <small class="text-muted d-block">Ingresos</small>
+                                    <strong class="fs-6 text-primary">RD$ {{ "%.0f"|format(top_product[2]) }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-inbox fs-1 mb-2"></i>
+                        <p class="mb-0">No hay ventas registradas hoy</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Top Category -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-gradient-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-bookmark-star-fill me-2"></i>Categoría Más Vendida
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if top_category %}
+                    <div class="text-center py-3">
+                        <i class="bi bi-award-fill text-info fs-1 mb-3"></i>
+                        <h4 class="fw-bold mb-2">{{ top_category[0] }}</h4>
+                        <div class="row text-center mt-3">
+                            <div class="col-6">
+                                <div class="border rounded p-2">
+                                    <small class="text-muted d-block">Cantidad</small>
+                                    <strong class="fs-5 text-info">{{ top_category[1]|int }}</strong>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="border rounded p-2">
+                                    <small class="text-muted d-block">Ingresos</small>
+                                    <strong class="fs-6 text-primary">RD$ {{ "%.0f"|format(top_category[2]) }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-inbox fs-1 mb-2"></i>
+                        <p class="mb-0">No hay ventas registradas hoy</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Payment Methods -->
+        <div class="col-lg-4 col-md-12">
+            <div class="card h-100">
+                <div class="card-header bg-gradient-info text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-credit-card-fill me-2"></i>Métodos de Pago
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if payment_methods %}
+                    <div class="py-2">
+                        {% for method in payment_methods %}
+                        <div class="d-flex justify-content-between align-items-center mb-3 pb-3 {% if not loop.last %}border-bottom{% endif %}">
+                            <div>
+                                <div class="d-flex align-items-center">
+                                    {% if method[0] == 'cash' %}
+                                    <i class="bi bi-cash-stack text-success fs-4 me-2"></i>
+                                    <strong>Efectivo</strong>
+                                    {% elif method[0] == 'card' %}
+                                    <i class="bi bi-credit-card text-primary fs-4 me-2"></i>
+                                    <strong>Tarjeta</strong>
+                                    {% elif method[0] == 'transfer' %}
+                                    <i class="bi bi-bank text-info fs-4 me-2"></i>
+                                    <strong>Transferencia</strong>
+                                    {% else %}
+                                    <i class="bi bi-wallet2 text-secondary fs-4 me-2"></i>
+                                    <strong>{{ method[0]|title }}</strong>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">{{ method[1] }} transacciones</small>
+                            </div>
+                            <div class="text-end">
+                                <div class="fw-bold text-success">RD$ {{ "%.0f"|format(method[2]) }}</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-inbox fs-1 mb-2"></i>
+                        <p class="mb-0">No hay pagos registrados hoy</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Stock Alert Section (only show if there are alerts) -->
+    <div class="row g-4 mb-5">
+        <div class="col-12">
             {% if low_stock_products %}
-            <div class="card">
-                <div class="card-header d-flex align-items-center justify-content-between">
+            <div class="card border-warning">
+                <div class="card-header bg-warning bg-opacity-10 d-flex align-items-center justify-content-between">
                     <h5 class="mb-0">
                         <i class="bi bi-exclamation-triangle text-warning me-2"></i>
-                        Productos con Stock Bajo
+                        Alerta de Stock Bajo
                     </h5>
                     <span class="badge bg-warning text-dark px-3">{{ low_stock_products|length }} productos</span>
                 </div>
                 <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Producto</th>
-                                    <th>Stock Actual</th>
-                                    <th>Stock Mínimo</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for product in low_stock_products %}
-                                <tr>
-                                    <td>{{ product.name }}</td>
-                                    <td><span class="badge bg-danger">{{ product.stock }}</span></td>
-                                    <td>{{ product.min_stock }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                    <div class="row">
+                        {% for product in low_stock_products[:8] %}
+                        <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+                            <div class="border rounded p-3 h-100">
+                                <div class="d-flex align-items-start justify-content-between mb-2">
+                                    <h6 class="mb-0 flex-grow-1">{{ product.name }}</h6>
+                                    <span class="badge bg-danger ms-2">{{ product.stock }}</span>
+                                </div>
+                                <small class="text-muted d-block">Mínimo: {{ product.min_stock }}</small>
+                                <small class="text-muted d-block">Categoría: {{ product.category.name if product.category else 'N/A' }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
                     </div>
-                </div>
-            </div>
-            {% else %}
-            <div class="card">
-                <div class="card-body text-center py-5">
-                    <i class="bi bi-check-circle-fill text-success fs-1 mb-3"></i>
-                    <h5 class="text-success">¡Excelente!</h5>
-                    <p class="text-muted">Todos los productos tienen stock suficiente</p>
+                    {% if low_stock_products|length > 8 %}
+                    <div class="text-center mt-3">
+                        <a href="{{ url_for('admin.products') }}" class="btn btn-outline-warning btn-sm">
+                            Ver todos los {{ low_stock_products|length }} productos
+                        </a>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
             {% endif %}
         </div>
-        
+    </div>
+    
+    <!-- Main Content Grid -->
+    <div class="row g-4">
         <!-- Quick Actions Sidebar -->
-        <div class="col-lg-4">
+        <div class="col-lg-12">
             <div class="row g-4">
                 <!-- Quick Actions -->
                 <div class="col-12">

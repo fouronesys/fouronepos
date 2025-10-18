@@ -158,11 +158,79 @@ def dashboard():
         models.Product.product_type == 'inventariable'
     ).all()
     
+    # Most sold product today
+    top_product = db.session.query(
+        models.Product.name,
+        func.sum(models.SaleItem.quantity).label('total_quantity'),
+        func.sum(models.SaleItem.total_price).label('total_revenue')
+    ).join(
+        models.SaleItem, models.Product.id == models.SaleItem.product_id
+    ).join(
+        models.Sale, models.SaleItem.sale_id == models.Sale.id
+    ).filter(
+        func.date(models.Sale.created_at) == today,
+        models.Sale.status == 'completed'
+    ).group_by(
+        models.Product.id, models.Product.name
+    ).order_by(
+        func.sum(models.SaleItem.quantity).desc()
+    ).first()
+    
+    # Most sold category today
+    top_category = db.session.query(
+        models.Category.name,
+        func.sum(models.SaleItem.quantity).label('total_quantity'),
+        func.sum(models.SaleItem.total_price).label('total_revenue')
+    ).join(
+        models.Product, models.Category.id == models.Product.category_id
+    ).join(
+        models.SaleItem, models.Product.id == models.SaleItem.product_id
+    ).join(
+        models.Sale, models.SaleItem.sale_id == models.Sale.id
+    ).filter(
+        func.date(models.Sale.created_at) == today,
+        models.Sale.status == 'completed'
+    ).group_by(
+        models.Category.id, models.Category.name
+    ).order_by(
+        func.sum(models.SaleItem.total_price).desc()
+    ).first()
+    
+    # Payment methods breakdown
+    payment_methods = db.session.query(
+        models.Sale.payment_method,
+        func.count(models.Sale.id).label('count'),
+        func.sum(models.Sale.total).label('total')
+    ).filter(
+        func.date(models.Sale.created_at) == today,
+        models.Sale.status == 'completed'
+    ).group_by(
+        models.Sale.payment_method
+    ).all()
+    
+    # Recent sales (last 10)
+    recent_sales = models.Sale.query.filter(
+        models.Sale.status == 'completed'
+    ).order_by(
+        models.Sale.created_at.desc()
+    ).limit(10).all()
+    
+    # Active tables count
+    from models import TableStatus
+    active_tables = models.Table.query.filter(
+        models.Table.status == TableStatus.OCCUPIED
+    ).count()
+    
     return render_template('admin/dashboard.html', 
                          daily_sales=daily_sales,
                          daily_transactions=daily_transactions,
                          low_stock_products=low_stock_products,
-                         sales_change_percent=sales_change_percent)
+                         sales_change_percent=sales_change_percent,
+                         top_product=top_product,
+                         top_category=top_category,
+                         payment_methods=payment_methods,
+                         recent_sales=recent_sales,
+                         active_tables=active_tables)
 
 
 @bp.route('/tables-management')
