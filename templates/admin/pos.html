@@ -768,9 +768,10 @@ class CartManager {
             const itemPrice = item.price * item.quantity;
             pricesWithServiceCharge += itemPrice;
             
-            // If service charge is "included", extract it from the price using reverse calculation
-            // Example: Price with tip = 317.80, Subtotal without tip = 317.80 - (317.80 * 0.10) = 286.02
-            const itemSubtotal = applyServiceCharge ? itemPrice / (1 + serviceChargeRate) : itemPrice;
+            // If service charge is "included", extract it by subtracting 10% directly from the price
+            // Example: Price with tip = 317.80, Propina 10% = 31.78, Subtotal = 317.80 - 31.78 = 286.02
+            const itemServiceCharge = applyServiceCharge ? itemPrice * serviceChargeRate : 0;
+            const itemSubtotal = itemPrice - itemServiceCharge;
             subtotal += itemSubtotal;
             
             // Process taxes for this product (taxes calculated on ORIGINAL price WITH service charge)
