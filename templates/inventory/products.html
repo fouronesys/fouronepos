@@ -27,7 +27,7 @@
         opacity: 0.8;
     }
     
-    /* Alert styling for dark mode */
+    /* Alert styling for dark mode - improved contrast */
     #taxTypesContainer .alert-info {
         background-color: rgba(13, 110, 253, 0.1);
         border-color: rgba(13, 110, 253, 0.2);
@@ -35,9 +35,14 @@
     }
     
     [data-bs-theme='dark'] #taxTypesContainer .alert-info {
-        background-color: rgba(13, 110, 253, 0.15);
-        border-color: rgba(13, 110, 253, 0.3);
+        background-color: rgba(13, 110, 253, 0.2);
+        border-color: rgba(13, 110, 253, 0.4);
         color: var(--bs-body-color);
+    }
+    
+    [data-bs-theme='dark'] #taxTypesContainer .alert-info strong,
+    [data-bs-theme='dark'] #taxTypesContainer .alert-info li {
+        color: rgba(255, 255, 255, 0.95);
     }
 </style>
 
@@ -352,10 +357,18 @@ function updateTaxTypesContainer() {
         return;
     }
     
-    // Agrupar tax_types por categoría
-    const impuestos = taxTypes.filter(t => t.name.includes('ITBIS') || t.name.includes('Impuesto'));
-    const cargos = taxTypes.filter(t => t.name.includes('Propina') || t.name.includes('Servicio'));
-    const otros = taxTypes.filter(t => !impuestos.includes(t) && !cargos.includes(t));
+    // Filtrar solo impuestos fiscales (ITBIS), excluyendo cargos por servicio y propinas
+    // Los cargos por servicio se manejan desde el POS, no a nivel de producto
+    const impuestos = taxTypes.filter(t => 
+        (t.name.includes('ITBIS') || t.name.includes('Impuesto')) && 
+        !t.name.includes('Propina') && 
+        !t.name.includes('Servicio')
+    );
+    const otros = taxTypes.filter(t => 
+        !impuestos.includes(t) && 
+        !t.name.includes('Propina') && 
+        !t.name.includes('Servicio')
+    );
     
     // Generar HTML con agrupación visual mejorada
     let html = '';
@@ -388,47 +401,6 @@ function updateTaxTypesContainer() {
                                     <strong>${taxType.name}</strong>
                                     <span class="badge bg-primary ms-1">${(taxType.rate * 100).toFixed(0)}%</span>
                                     ${taxType.is_inclusive ? '<span class="badge bg-info ms-1">Incluido</span>' : '<span class="badge bg-secondary ms-1">Exclusivo</span>'}
-                                    <br>
-                                    <small class="text-muted">${tooltipText}</small>
-                                </div>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-            `;
-        });
-        
-        html += `
-                </div>
-            </div>
-        `;
-    }
-    
-    // Sección de Cargos por Servicio
-    if (cargos.length > 0) {
-        html += `
-            <div class="mb-3">
-                <div class="d-flex align-items-center mb-2">
-                    <i class="bi bi-percent text-success me-2"></i>
-                    <strong>Cargos por Servicio</strong>
-                </div>
-                <div class="row">
-        `;
-        
-        cargos.forEach(taxType => {
-            const tooltipText = getTooltipForTaxType(taxType.name);
-            
-            html += `
-                <div class="col-md-6 mb-2">
-                    <div class="form-check p-3 border rounded tax-type-box">
-                        <input class="form-check-input" type="checkbox" value="${taxType.id}" 
-                               id="taxType${taxType.id}">
-                        <label class="form-check-label" for="taxType${taxType.id}">
-                            <div class="d-flex align-items-start">
-                                <i class="bi bi-wallet2 me-2 text-success"></i>
-                                <div class="flex-grow-1">
-                                    <strong>${taxType.name}</strong>
-                                    <span class="badge bg-success ms-1">${(taxType.rate * 100).toFixed(0)}%</span>
                                     <br>
                                     <small class="text-muted">${tooltipText}</small>
                                 </div>
@@ -495,7 +467,6 @@ function updateTaxTypesContainer() {
                 <li><strong>ITBIS 16%:</strong> Para lácteos, café, azúcar, cacao (tasa reducida)</li>
                 <li><strong>ITBIS 18% Incluido:</strong> Cuando el precio ya incluye el impuesto</li>
                 <li><strong>Sin Impuesto:</strong> Para productos exentos de impuestos</li>
-                <li><strong>Propina 10%:</strong> Se calcula automáticamente sobre subtotal + impuestos</li>
             </ul>
         </div>
     `;
