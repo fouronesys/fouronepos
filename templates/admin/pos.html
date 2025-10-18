@@ -769,19 +769,20 @@ class CartManager {
             pricesWithServiceCharge += itemPrice;
             
             // If service charge is "included", extract it from the price using reverse calculation
-            // Example: Price with tip = $330, Subtotal without tip = $330 / 1.10 = $300
+            // Example: Price with tip = 317.80, Subtotal without tip = 317.80 - (317.80 * 0.10) = 286.02
             const itemSubtotal = applyServiceCharge ? itemPrice / (1 + serviceChargeRate) : itemPrice;
             subtotal += itemSubtotal;
             
-            // Process taxes for this product (taxes calculated on base price without service charge)
+            // Process taxes for this product (taxes calculated on ORIGINAL price WITH service charge)
             if (item.tax_types && item.tax_types.length > 0) {
                 item.tax_types.forEach(taxType => {
                     if (taxType.rate > 0) {
                         const taxName = taxType.name || 'ITBIS';
                         
                         if (taxType.is_inclusive) {
-                            // Tax included in price - extract from item subtotal (already without service charge)
-                            const taxAmount = itemSubtotal - (itemSubtotal / (1 + taxType.rate));
+                            // Tax included in price - extract from ORIGINAL item price (WITH service charge)
+                            // Example: Price 317.80, ITBIS 18% = 317.80 * 0.18 = 57.20
+                            const taxAmount = itemPrice * taxType.rate;
                             if (!inclusiveTaxes[taxName]) {
                                 inclusiveTaxes[taxName] = {
                                     rate: taxType.rate,
@@ -791,16 +792,16 @@ class CartManager {
                             }
                             inclusiveTaxes[taxName].amount += taxAmount;
                         } else {
-                            // Tax exclusive - will be calculated on tax base later
+                            // Tax exclusive - will be calculated on ORIGINAL price later
                             if (!exclusiveTaxes[taxName]) {
                                 exclusiveTaxes[taxName] = {
                                     rate: taxType.rate,
                                     amount: 0,
                                     is_inclusive: false,
-                                    itemsSubtotal: 0 // Track subtotal of items with this tax
+                                    itemsPrice: 0 // Track original price of items with this tax
                                 };
                             }
-                            exclusiveTaxes[taxName].itemsSubtotal += itemSubtotal;
+                            exclusiveTaxes[taxName].itemsPrice += itemPrice;
                         }
                     }
                 });
@@ -808,12 +809,11 @@ class CartManager {
             // If no tax_types, the product is tax exempt (no tax calculation)
         });
         
-        // Calculate exclusive taxes on subtotal (without service charge)
+        // Calculate exclusive taxes on ORIGINAL prices (WITH service charge)
         Object.keys(exclusiveTaxes).forEach(taxName => {
             const taxInfo = exclusiveTaxes[taxName];
-            // Apply tax proportionally to items that have this tax type
-            const proportion = subtotal > 0 ? taxInfo.itemsSubtotal / subtotal : 0;
-            taxInfo.amount = subtotal * proportion * taxInfo.rate;
+            // Apply tax on the original price (not on subtotal without service charge)
+            taxInfo.amount = taxInfo.itemsPrice * taxInfo.rate;
         });
         
         // Combine all taxes for breakdown and total calculation
