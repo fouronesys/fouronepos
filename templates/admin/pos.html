@@ -829,8 +829,9 @@ class CartManager {
         const serviceCharge = applyServiceCharge ? pricesWithServiceCharge - subtotal : 0;
         
         // Total: subtotal (without service charge) + exclusive taxes + service charge added back
-        // Note: Service charge is subtracted from prices, then added back to get correct total
-        const total = subtotal + totalExclusiveTax + serviceCharge;
+        // Apply rounding to nearest whole number (375.06 -> 376, 375.02 -> 375)
+        const totalBeforeRounding = subtotal + totalExclusiveTax + serviceCharge;
+        const total = Math.round(totalBeforeRounding);
         
         // For backward compatibility, provide a single tax rate (average)
         const averageTaxRate = subtotal > 0 ? totalTax / subtotal : 0;

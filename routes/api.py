@@ -792,8 +792,9 @@ def finalize_sale(sale_id):
         sale.tax_amount = round(total_tax_included + total_tax_added, 2)  # Only taxes, not service charge
         sale.service_charge_amount = service_charge_amount  # Store service charge separately
         # Total = subtotal (without service charge) + taxes + service charge (added back)
-        # The service charge is extracted from prices to calculate ITBIS on base amount, then added back to total
-        sale.total = round(total_subtotal + total_tax_included + total_tax_added + service_charge_amount, 2)
+        # Apply rounding to nearest whole number (375.06 -> 376, 375.02 -> 375)
+        total_before_rounding = total_subtotal + total_tax_included + total_tax_added + service_charge_amount
+        sale.total = round(total_before_rounding)
         
         # Add client info for fiscal/government invoices (NCF compliance)
         if customer_name and customer_rnc and ncf_type in ['credito_fiscal', 'gubernamental']:
