@@ -138,6 +138,20 @@ def dashboard():
         models.Sale.status == 'completed'
     ).count()
     
+    # Get yesterday's sales for comparison
+    from datetime import timedelta
+    yesterday = today - timedelta(days=1)
+    yesterday_sales = db.session.query(func.sum(models.Sale.total)).filter(
+        func.date(models.Sale.created_at) == yesterday,
+        models.Sale.status == 'completed'
+    ).scalar() or 0
+    
+    # Calculate percentage change
+    if yesterday_sales > 0:
+        sales_change_percent = ((daily_sales - yesterday_sales) / yesterday_sales) * 100
+    else:
+        sales_change_percent = 100 if daily_sales > 0 else 0
+    
     low_stock_products = models.Product.query.filter(
         models.Product.stock <= models.Product.min_stock,
         models.Product.active == True,
@@ -147,7 +161,8 @@ def dashboard():
     return render_template('admin/dashboard.html', 
                          daily_sales=daily_sales,
                          daily_transactions=daily_transactions,
-                         low_stock_products=low_stock_products)
+                         low_stock_products=low_stock_products,
+                         sales_change_percent=sales_change_percent)
 
 
 @bp.route('/tables-management')
