@@ -210,25 +210,29 @@ Propina 10%: RD$ 35.40
 Total Final: RD$ 389.40
 ```
 
-**Método Actual (Configuración Personalizada - 16 Oct 2025):**
+**Método Actual (Configuración Personalizada - 18 Oct 2025):**
 ```
-Subtotal: RD$ 300
-Propina 10% Incluida: RD$ 30 (10% del subtotal solamente)
-ITBIS 18%: RD$ 54 (18% del subtotal, NO incluye propina en base imponible)
-Total Final: RD$ 384.00
+Precio del Producto (con propina incluida): RD$ 330
+Subtotal (sin propina): RD$ 300 (330 / 1.10)
+Propina 10% Incluida (extraída del precio): RD$ 30 (NO se suma al total)
+ITBIS 18%: RD$ 54 (18% del subtotal sin propina)
+Total Final: RD$ 354.00
 ```
 
 **Implementación Actual:**
-- ✅ **Frontend (pos.html, línea ~818):** `baseForServiceCharge = subtotal` (propina del subtotal únicamente)
+- ✅ **Frontend (pos.html, línea ~776):** `itemSubtotal = itemPrice / 1.10` (extrae propina del precio)
+- ✅ **Frontend (pos.html, línea ~830):** `serviceCharge = pricesWithServiceCharge - subtotal` (propina extraída)
+- ✅ **Frontend (pos.html, línea ~834):** `total = subtotal + totalExclusiveTax` (NO suma propina al total)
 - ✅ **Backend (api.py, línea ~775):** `tax_base = total_subtotal` (propina NO incluida en base imponible)
 - ✅ **Interfaz:** Checkbox "Propina 10% Incluida" (seleccionada por defecto)
-- ✅ **Cálculo:** `Total = Subtotal + Propina(10% subtotal) + ITBIS(18% subtotal)`
+- ✅ **Cálculo:** `Total = Subtotal (sin propina) + ITBIS(18% subtotal)`
 
 **Notas Importantes:**
 - ⚠️ **Cambio de Normativa:** Este método NO sigue la normativa laboral dominicana tradicional
-- ✅ La propina se calcula del subtotal antes de impuestos
+- ✅ Cuando la propina está "incluida", los precios de productos YA contienen la propina del 10%
+- ✅ La propina se extrae mediante cálculo regresivo (precio / 1.10) para mostrarla en el desglose
+- ✅ La propina NO se suma al total (ya está en el precio mostrado)
 - ✅ La propina NO se incluye en la base imponible del ITBIS
-- ✅ La propina se aplica a nivel de POS, no por producto
 - ✅ Este es un método personalizado según preferencia del negocio
 
 ---
@@ -448,23 +452,25 @@ assert total == 129.80
 - Excluye `service_charge` del cálculo de tax_rate
 - Implementado filtrado: `tax_only = [tax for tax in product_tax_types if tax.get('tax_category') == 'tax']`
 
-#### 2. Corrección del Cálculo de Propina ✅ ACTUALIZADO (16 Oct 2025)
-**Archivo:** `templates/admin/pos.html` (líneas ~818-824)
+#### 2. Corrección del Cálculo de Propina ✅ ACTUALIZADO (18 Oct 2025)
+**Archivo:** `templates/admin/pos.html` (líneas ~760-859)
 
 **Evolución del Método:**
 - **FASE 1 (Inicial):** Propina sobre subtotal solamente ❌
 - **FASE 1 (Corregido):** Propina sobre (subtotal + impuestos) según normativa RD ✅
-- **ACTUAL (16 Oct 2025):** Propina sobre subtotal únicamente - Configuración personalizada ✅
+- **16 Oct 2025:** Propina sobre subtotal únicamente - Configuración personalizada ✅
+- **ACTUAL (18 Oct 2025):** Propina "incluida" en el precio del producto - Cálculo regresivo ✅
 
-**Método Actual (Configuración Personalizada):**
+**Método Actual (Propina Incluida - Cálculo Regresivo):**
 ```javascript
-// Subtotal: RD$ 300
-// Propina 10% Incluida: RD$ 30 (10% del subtotal)
-// ITBIS 18%: RD$ 54 (18% del subtotal, NO incluye propina)
-// Total Final: RD$ 384.00
+// Precio del Producto (con propina): RD$ 330
+// Subtotal (sin propina): RD$ 300 (330 / 1.10)
+// Propina 10% Incluida (extraída): RD$ 30 (NO se suma al total)
+// ITBIS 18%: RD$ 54 (18% del subtotal sin propina)
+// Total Final: RD$ 354.00
 ```
 
-**⚠️ Nota:** El método actual NO sigue la normativa laboral dominicana tradicional, es una configuración personalizada según preferencia del negocio.
+**⚠️ Nota:** Cuando la propina está "incluida", los precios de productos YA contienen la propina. Se extrae mediante cálculo regresivo (precio / 1.10) solo para mostrarla en el desglose, pero NO se suma al total.
 
 #### 3. Validación Obligatoria de Tax Types en Productos ✅
 **Frontend:** `templates/inventory/products.html` (líneas 459-463)
