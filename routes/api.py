@@ -623,8 +623,15 @@ def finalize_sale(sale_id):
     
     # ROLE RESTRICTION: Only cashiers and administrators can finalize sales
     if user.role.value not in ['ADMINISTRADOR', 'CAJERO']:
-        print(f"[DEBUG FINALIZE] Role check failed: {user.role.value}")
-        return jsonify({'error': 'Solo cajeros y administradores pueden finalizar ventas'}), 403
+        logger.warning(f"User {user.username} (role: {user.role.value}) attempted to finalize sale {sale_id}")
+        return error_response(
+            error_type='permission',
+            message='Permisos insuficientes',
+            details=f'Solo cajeros y administradores pueden finalizar ventas. Su rol actual es: {user.role.value}',
+            user_role=user.role.value,
+            required_roles=['ADMINISTRADOR', 'CAJERO'],
+            status_code=403
+        )
     
     data = request.get_json()
     
@@ -665,9 +672,14 @@ def finalize_sale(sale_id):
         sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
         
         if not sale:
-            error_msg = f'Venta {sale_id} no encontrada'
-            print(f"[ERROR FINALIZE] {error_msg}")
-            raise ValueError(error_msg)
+            logger.error(f"Sale {sale_id} not found during finalization")
+            return error_response(
+                error_type='not_found',
+                message='Venta no encontrada',
+                details=f'No existe una venta con ID {sale_id}',
+                sale_id=sale_id,
+                status_code=404
+            )
         
         print(f"[DEBUG FINALIZE] Sale found: ID={sale.id}, status={sale.status}, cash_register_id={sale.cash_register_id}")
         
@@ -687,17 +699,28 @@ def finalize_sale(sale_id):
         
         # Validate that sale is in pending status (only pending sales can be finalized)
         if sale.status != 'pending':
-            error_msg = f'No se puede finalizar una venta con estado {sale.status}'
-            print(f"[ERROR FINALIZE] {error_msg}")
-            raise ValueError(error_msg)
+            logger.warning(f"Attempted to finalize sale {sale_id} with status {sale.status}")
+            return error_response(
+                error_type='business',
+                message='Estado de venta inválido',
+                details=f'Solo se pueden finalizar ventas con estado "pending". Estado actual: {sale.status}',
+                sale_id=sale_id,
+                current_status=sale.status,
+                required_status='pending'
+            )
         
-        print(f"[DEBUG FINALIZE] Sale status validation passed")
+        logger.debug(f"Sale {sale_id} status validation passed")
         
         # PREVENT EMPTY SALES: Validate that sale has items before proceeding with NCF allocation
         if not sale.sale_items:
-            error_msg = 'No se puede finalizar una venta sin productos'
-            print(f"[ERROR FINALIZE] {error_msg}")
-            raise ValueError(error_msg)
+            logger.warning(f"Attempted to finalize empty sale {sale_id}")
+            return error_response(
+                error_type='business',
+                message='Venta sin productos',
+                details='No se puede finalizar una venta que no tiene productos. Agregue al menos un producto antes de finalizar.',
+                sale_id=sale_id,
+                user_message='Debe agregar al menos un producto a la venta'
+            )
         
         print(f"[DEBUG FINALIZE] Sale has {len(sale.sale_items)} items")
         
@@ -730,7 +753,20 @@ def finalize_sale(sale_id):
                 continue
             # Only validate stock for inventariable products
             if product.stock < required_quantity:
-                raise ValueError(f'Stock insuficiente para {product.name}. Disponible: {product.stock}, requerido: {required_quantity}')
+                shortage = required_quantity - product.stock
+                logger.warning(f"Insufficient stock for product {product.id} ({product.name}) in sale {sale_id}")
+                return error_response(
+                    error_type='business',
+                    message='Stock insuficiente',
+                    details=f'No hay suficiente stock de {product.name} para completar la venta. Disponible: {product.stock}, requerido: {required_quantity}, faltante: {shortage}',
+                    sale_id=sale_id,
+                    product_id=product.id,
+                    product_name=product.name,
+                    stock_available=product.stock,
+                    quantity_required=required_quantity,
+                    shortage=shortage,
+                    user_message=f'Stock insuficiente de {product.name}. Disponible: {product.stock}, necesario: {required_quantity}'
+                )
         
         # SALE REASSIGNMENT: If sale doesn't have cash register (waiter-created), assign finalizing user's cash register
         if not sale.cash_register_id:
@@ -742,9 +778,15 @@ def finalize_sale(sale_id):
             ).first()
             
             if not user_cash_register:
-                error_msg = 'Solo usuarios con caja asignada pueden finalizar ventas. Contacta al administrador.'
-                print(f"[ERROR FINALIZE] {error_msg}")
-                raise ValueError(error_msg)
+                logger.error(f"User {user.username} has no active cash register for finalizing sale {sale_id}")
+                return error_response(
+                    error_type='business',
+                    message='Sin caja asignada',
+                    details='Solo usuarios con caja asignada pueden finalizar ventas. Contacte al administrador para que le asigne una caja.',
+                    sale_id=sale_id,
+                    user_id=user.id,
+                    user_message='No tiene una caja asignada. Contacte al administrador.'
+                )
             
             # Assign the cash register to the sale for NCF generation
             sale.cash_register_id = user_cash_register.id
@@ -771,9 +813,17 @@ def finalize_sale(sale_id):
             
             if len(active_sequences) > 1:
                 sequence_ids = [str(seq.id) for seq in active_sequences]
-                error_msg = f'Error de configuración: múltiples secuencias NCF activas para tipo {ncf_type} (IDs: {", ".join(sequence_ids)}). Solo debe haber una secuencia activa por tipo. Contacte al administrador.'
-                print(f"[ERROR FINALIZE] {error_msg}")
-                raise ValueError(error_msg)
+                logger.error(f"Multiple active NCF sequences for type {ncf_type}: {sequence_ids}")
+                return error_response(
+                    error_type='server',
+                    message='Error de configuración del sistema',
+                    details=f'Hay múltiples secuencias NCF activas para tipo {ncf_type} (IDs: {", ".join(sequence_ids)}). Solo debe haber una secuencia activa por tipo. Contacte al administrador.',
+                    sale_id=sale_id,
+                    ncf_type=ncf_type,
+                    sequence_ids=sequence_ids,
+                    user_message='Error de configuración del sistema. Contacte al administrador.',
+                    status_code=500
+                )
             
             ncf_sequence = active_sequences[0] if active_sequences else None
             
@@ -800,15 +850,29 @@ def finalize_sale(sale_id):
                 
                 if available_types:
                     available_display = [ncf_type_names.get(t, t) for t in set(available_types)]
-                    error_msg = f'No hay secuencia de NCF configurada para comprobantes de tipo "{ncf_type_display}". Por favor, seleccione otro tipo de comprobante o contacte al administrador. Tipos disponibles: {", ".join(available_display)}'
+                    logger.warning(f"No NCF sequence for type {ncf_type} in sale {sale_id}. Available: {available_types}")
+                    return error_response(
+                        error_type='business',
+                        message='Secuencia NCF no disponible',
+                        details=f'No hay secuencia de NCF configurada para comprobantes de tipo "{ncf_type_display}". Por favor, seleccione otro tipo de comprobante o contacte al administrador.',
+                        sale_id=sale_id,
+                        ncf_type=ncf_type,
+                        available_types=available_display,
+                        user_message=f'No hay comprobantes de tipo "{ncf_type_display}" disponibles. Tipos disponibles: {", ".join(available_display)}'
+                    )
                 else:
-                    error_msg = 'Sistema de facturación no configurado: no hay secuencias NCF activas. Contacte al administrador para configurar las secuencias fiscales antes de procesar ventas.'
-                
-                print(f"[ERROR FINALIZE] {error_msg}")
-                raise ValueError(error_msg)
+                    logger.error(f"No active NCF sequences in the system")
+                    return error_response(
+                        error_type='server',
+                        message='Sistema de facturación no configurado',
+                        details='No hay secuencias NCF activas en el sistema. Contacte al administrador para configurar las secuencias fiscales antes de procesar ventas.',
+                        sale_id=sale_id,
+                        user_message='Sistema de facturación no configurado. Contacte al administrador.',
+                        status_code=500
+                    )
             
             # Check if sequence is exhausted (treat end_number as inclusive)
-            print(f"[DEBUG FINALIZE] NCF sequence status: current={ncf_sequence.current_number}, end={ncf_sequence.end_number}")
+            logger.debug(f"NCF sequence status: current={ncf_sequence.current_number}, end={ncf_sequence.end_number}")
             if ncf_sequence.current_number > ncf_sequence.end_number:
                 ncf_type_names = {
                     'CONSUMO': 'Consumo',
@@ -818,9 +882,18 @@ def finalize_sale(sale_id):
                     'NOTA_DEBITO': 'Nota de Débito'
                 }
                 ncf_type_display = ncf_type_names.get(ncf_type.upper(), ncf_type)
-                error_msg = f'Secuencia de NCF agotada para comprobantes de tipo "{ncf_type_display}". Por favor, contacte al administrador para configurar una nueva secuencia fiscal. (Límite alcanzado: {ncf_sequence.end_number})'
-                print(f"[ERROR FINALIZE] {error_msg}")
-                raise ValueError(error_msg)
+                logger.error(f"NCF sequence exhausted for type {ncf_type} (seq: {ncf_sequence.id})")
+                return error_response(
+                    error_type='business',
+                    message='Secuencia NCF agotada',
+                    details=f'Se han agotado los comprobantes de tipo "{ncf_type_display}". Contacte al administrador para configurar una nueva secuencia fiscal.',
+                    sale_id=sale_id,
+                    ncf_type=ncf_type,
+                    sequence_id=ncf_sequence.id,
+                    current_number=ncf_sequence.current_number,
+                    end_number=ncf_sequence.end_number,
+                    user_message=f'No quedan comprobantes de tipo "{ncf_type_display}". Contacte al administrador.'
+                )
             
             # Generate NCF number using current number
             ncf_number = f"{ncf_sequence.serie}{ncf_sequence.current_number:08d}"
@@ -1024,30 +1097,53 @@ def finalize_sale(sale_id):
         
     except ValueError as e:
         # Handle business logic errors (no sale, wrong status, no NCF sequence, exhausted sequence, stock issues)
-        error_msg = str(e)
-        print(f"[ERROR FINALIZE] ValueError: {error_msg}")
         db.session.rollback()
-        return jsonify({'error': error_msg}), 400
+        logger.warning(f"Business logic error finalizing sale {sale_id}: {str(e)}")
+        return error_response(
+            error_type='business',
+            message='Error de validación',
+            details=str(e),
+            sale_id=sale_id,
+            user_message=str(e)
+        )
         
     except IntegrityError as e:
         # Handle database constraint violations
-        error_msg = str(e)
-        print(f"[ERROR FINALIZE] IntegrityError: {error_msg}")
         db.session.rollback()
+        error_msg = str(e)
+        logger.error(f"Database integrity error finalizing sale {sale_id}: {error_msg}", exc_info=True)
+        
+        # Detectar error específico de NCF duplicado
         if 'unique constraint' in error_msg.lower() and 'ncf' in error_msg.lower():
-            return jsonify({'error': 'Error de concurrencia al generar NCF. Intente nuevamente.'}), 500
+            return error_response(
+                error_type='server',
+                message='Error de concurrencia',
+                details='Error de concurrencia al generar NCF. Otro usuario puede haber procesado esta venta al mismo tiempo. Por favor intente nuevamente.',
+                sale_id=sale_id,
+                user_message='Error de concurrencia al generar NCF. Intente nuevamente.',
+                status_code=409
+            )
         else:
-            return jsonify({'error': f'Error de integridad de datos: {error_msg}'}), 500
+            return error_response(
+                error_type='server',
+                message='Error de integridad de datos',
+                details='Los datos enviados violan restricciones de la base de datos',
+                sale_id=sale_id,
+                status_code=409
+            )
             
     except Exception as e:
         # Handle other unexpected errors
-        error_msg = str(e)
-        print(f"[ERROR FINALIZE] Unexpected error: {error_msg}")
-        print(f"[ERROR FINALIZE] Error type: {type(e).__name__}")
-        import traceback
-        print(f"[ERROR FINALIZE] Traceback: {traceback.format_exc()}")
         db.session.rollback()
-        return jsonify({'error': f'Error interno: {error_msg}'}), 500
+        logger.exception(f"Unexpected error finalizing sale {sale_id}")
+        return error_response(
+            error_type='server',
+            message='Error interno del servidor',
+            details='Ocurrió un error inesperado. Por favor contacte al administrador.',
+            sale_id=sale_id,
+            error_id=f'ERR_FINALIZE_{int(time.time())}',
+            status_code=500
+        )
 
 
 
