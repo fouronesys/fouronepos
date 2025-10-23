@@ -4,6 +4,59 @@ Includes RNC validation and NCF compliance for DGII 606
 """
 import re
 from typing import Optional, Dict, Any
+from datetime import datetime
+from flask import jsonify
+
+
+def error_response(error_type: str, message: str, details: Optional[str] = None, 
+                   field: Optional[str] = None, status_code: int = 400, **kwargs):
+    """
+    Genera una respuesta de error estandarizada para endpoints de API
+    
+    Args:
+        error_type: Tipo de error ('validation', 'permission', 'not_found', 'server', 'business')
+        message: Mensaje principal del error (breve y claro)
+        details: Detalles adicionales del error (opcional)
+        field: Campo que causó el error (opcional)
+        status_code: Código HTTP de respuesta (default: 400)
+        **kwargs: Datos adicionales a incluir en la respuesta
+    
+    Returns:
+        tuple: (jsonify response, status_code)
+    
+    Examples:
+        >>> return error_response(
+        ...     error_type='validation',
+        ...     message='Stock insuficiente',
+        ...     details=f'No hay suficiente stock de {product.name}',
+        ...     field='quantity',
+        ...     stock_available=product.stock,
+        ...     quantity_requested=quantity
+        ... )
+        
+        >>> return error_response(
+        ...     error_type='permission',
+        ...     message='Acceso denegado',
+        ...     details='Solo cajeros y administradores pueden finalizar ventas',
+        ...     status_code=403
+        ... )
+    """
+    response_data = {
+        'error': message,
+        'type': error_type,
+        'timestamp': datetime.utcnow().isoformat()
+    }
+    
+    if details:
+        response_data['details'] = details
+    
+    if field:
+        response_data['field'] = field
+    
+    # Añadir datos adicionales
+    response_data.update(kwargs)
+    
+    return jsonify(response_data), status_code
 
 
 def validate_rnc(rnc: str) -> Dict[str, Any]:
