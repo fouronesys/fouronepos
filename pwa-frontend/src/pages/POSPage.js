@@ -18,9 +18,144 @@ const POSPage = ({ user, onLogout }) => {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({});
 
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
+
+  // Constantes de validación
+  const VALIDATION_LIMITS = {
+    MIN_QUANTITY: 1,
+    MAX_QUANTITY: 1000,
+    MAX_CART_ITEMS: 100,
+    MIN_CUSTOMER_NAME_LENGTH: 3,
+    MIN_CASH_AMOUNT: 0,
+    MAX_CASH_AMOUNT: 1000000,
+    ALLOWED_PAYMENT_METHODS: ['cash', 'card', 'transfer']
+  };
+
+  // Funciones de validación
+  const validateRNC = (rnc) => {
+    if (!rnc || rnc.trim() === '') {
+      return { valid: true }; // RNC es opcional
+    }
+    
+    // Eliminar guiones y espacios
+    const cleanRNC = rnc.replace(/[-\s]/g, '');
+    
+    // Debe ser de 9 u 11 dígitos
+    if (!/^\d{9}$|^\d{11}$/.test(cleanRNC)) {
+      return {
+        valid: false,
+        error: 'El RNC/Cédula debe tener 9 u 11 dígitos'
+      };
+    }
+    
+    return { valid: true };
+  };
+
+  const validateCustomerName = (name) => {
+    if (!name || name.trim() === '') {
+      return { valid: true }; // Nombre es opcional
+    }
+    
+    if (name.trim().length < VALIDATION_LIMITS.MIN_CUSTOMER_NAME_LENGTH) {
+      return {
+        valid: false,
+        error: `El nombre debe tener al menos ${VALIDATION_LIMITS.MIN_CUSTOMER_NAME_LENGTH} caracteres`
+      };
+    }
+    
+    return { valid: true };
+  };
+
+  const validateCashReceived = (amount, total) => {
+    if (!amount || amount === '') {
+      return {
+        valid: false,
+        error: 'Debe ingresar el monto recibido'
+      };
+    }
+    
+    const cashAmount = parseFloat(amount);
+    
+    if (isNaN(cashAmount)) {
+      return {
+        valid: false,
+        error: 'El monto debe ser un número válido'
+      };
+    }
+    
+    if (cashAmount < VALIDATION_LIMITS.MIN_CASH_AMOUNT) {
+      return {
+        valid: false,
+        error: 'El monto no puede ser negativo'
+      };
+    }
+    
+    if (cashAmount > VALIDATION_LIMITS.MAX_CASH_AMOUNT) {
+      return {
+        valid: false,
+        error: `El monto no puede exceder RD$ ${VALIDATION_LIMITS.MAX_CASH_AMOUNT.toLocaleString()}`
+      };
+    }
+    
+    if (cashAmount < total) {
+      return {
+        valid: false,
+        error: `El monto recibido (RD$ ${cashAmount.toFixed(2)}) debe ser mayor o igual al total (RD$ ${total.toFixed(2)})`
+      };
+    }
+    
+    return { valid: true };
+  };
+
+  const validateQuantity = (quantity) => {
+    const qty = parseInt(quantity);
+    
+    if (isNaN(qty) || qty < VALIDATION_LIMITS.MIN_QUANTITY) {
+      return {
+        valid: false,
+        error: `La cantidad mínima es ${VALIDATION_LIMITS.MIN_QUANTITY}`
+      };
+    }
+    
+    if (qty > VALIDATION_LIMITS.MAX_QUANTITY) {
+      return {
+        valid: false,
+        error: `La cantidad máxima es ${VALIDATION_LIMITS.MAX_QUANTITY} unidades`
+      };
+    }
+    
+    return { valid: true, quantity: qty };
+  };
+
+  const validateStock = (product, requestedQuantity) => {
+    // Solo omitir validación si stock es undefined o null (no hay control de stock)
+    if (product.stock === undefined || product.stock === null) {
+      return { valid: true }; // Si no hay control de stock, permitir
+    }
+    
+    // Si el stock es 0 o insuficiente, rechazar
+    if (requestedQuantity > product.stock) {
+      return {
+        valid: false,
+        error: `Stock insuficiente. Disponible: ${product.stock} unidades`
+      };
+    }
+    
+    return { valid: true };
+  };
+
+  const validatePaymentMethod = (method) => {
+    if (!VALIDATION_LIMITS.ALLOWED_PAYMENT_METHODS.includes(method)) {
+      return {
+        valid: false,
+        error: 'Método de pago inválido'
+      };
+    }
+    return { valid: true };
+  };
 
   // Fetch data with offline fallback
   const { data: products = [], isLoading: loadingProducts } = useQuery(
@@ -92,6 +227,32 @@ const POSPage = ({ user, onLogout }) => {
     });
 
     try {
+      // Validar límite de ítems en el carrito
+      const existingItem = cart.find(item => item.id === product.id);
+      const currentCartSize = cart.length;
+      
+      if (!existingItem && currentCartSize >= VALIDATION_LIMITS.MAX_CART_ITEMS) {
+        toast.error(`No se pueden agregar más de ${VALIDATION_LIMITS.MAX_CART_ITEMS} productos diferentes al carrito`);
+        return;
+      }
+      
+      // Calcular la nueva cantidad
+      const newQuantity = existingItem ? existingItem.quantity + 1 : 1;
+      
+      // Validar cantidad máxima
+      const quantityValidation = validateQuantity(newQuantity);
+      if (!quantityValidation.valid) {
+        toast.error(quantityValidation.error);
+        return;
+      }
+      
+      // Validar stock disponible
+      const stockValidation = validateStock(product, newQuantity);
+      if (!stockValidation.valid) {
+        toast.error(stockValidation.error);
+        return;
+      }
+
       setCart(prevCart => {
         console.log('[CART DEBUG] 📊 Estado del carrito antes de añadir:', {
           cartLength: prevCart.length,
@@ -141,6 +302,23 @@ const POSPage = ({ user, onLogout }) => {
     if (newQuantity <= 0) {
       removeFromCart(productId);
       return;
+    }
+    
+    // Validar cantidad
+    const quantityValidation = validateQuantity(newQuantity);
+    if (!quantityValidation.valid) {
+      toast.error(quantityValidation.error);
+      return;
+    }
+    
+    // Buscar el producto para validar stock
+    const product = products.find(p => p.id === productId);
+    if (product) {
+      const stockValidation = validateStock(product, newQuantity);
+      if (!stockValidation.valid) {
+        toast.error(stockValidation.error);
+        return;
+      }
     }
     
     setCart(prevCart =>
@@ -251,9 +429,62 @@ const POSPage = ({ user, onLogout }) => {
   };
 
   const handleCompleteSale = async () => {
-    if (paymentMethod === 'cash' && (!cashReceived || parseFloat(cashReceived) < previewTotal)) {
-      toast.error('El monto recibido debe ser mayor o igual al total');
+    // Limpiar errores previos
+    setValidationErrors({});
+    const errors = {};
+
+    // Validar método de pago
+    const paymentValidation = validatePaymentMethod(paymentMethod);
+    if (!paymentValidation.valid) {
+      errors.paymentMethod = paymentValidation.error;
+      setValidationErrors(errors);
+      toast.error(paymentValidation.error);
       return;
+    }
+
+    // Validar efectivo recibido si el método es cash
+    if (paymentMethod === 'cash') {
+      const cashValidation = validateCashReceived(cashReceived, previewTotal);
+      if (!cashValidation.valid) {
+        errors.cashReceived = cashValidation.error;
+        setValidationErrors(errors);
+        toast.error(cashValidation.error);
+        return;
+      }
+    }
+
+    // Validar nombre del cliente si se proporcionó
+    if (customerData.name) {
+      const nameValidation = validateCustomerName(customerData.name);
+      if (!nameValidation.valid) {
+        errors.customerName = nameValidation.error;
+        setValidationErrors(errors);
+        toast.error(nameValidation.error);
+        return;
+      }
+    }
+
+    // Validar RNC del cliente si se proporcionó
+    if (customerData.rnc) {
+      const rncValidation = validateRNC(customerData.rnc);
+      if (!rncValidation.valid) {
+        errors.customerRnc = rncValidation.error;
+        setValidationErrors(errors);
+        toast.error(rncValidation.error);
+        return;
+      }
+    }
+
+    // Validar stock disponible para todos los productos en el carrito
+    for (const item of cart) {
+      const product = products.find(p => p.id === item.id);
+      if (product) {
+        const stockValidation = validateStock(product, item.quantity);
+        if (!stockValidation.valid) {
+          toast.error(`${product.name}: ${stockValidation.error}`);
+          return;
+        }
+      }
     }
 
     setIsSubmitting(true);
@@ -308,11 +539,38 @@ const POSPage = ({ user, onLogout }) => {
       setSelectedCustomer(null);
       setCustomerSearchTerm('');
       setShowCustomerDropdown(false);
+      setValidationErrors({});
       queryClient.invalidateQueries('sales');
       
     } catch (error) {
       console.error('Error creating sale:', error);
-      toast.error('Error al procesar la venta: ' + (error.response?.data?.error || error.message));
+      
+      // Manejar errores específicos del backend
+      if (error.response?.data) {
+        const errorData = error.response.data;
+        
+        // Mostrar mensaje de error específico basado en el tipo
+        if (errorData.type === 'validation') {
+          toast.error(`Error de validación: ${errorData.user_message || errorData.error}`);
+        } else if (errorData.type === 'business') {
+          toast.error(`Error de negocio: ${errorData.user_message || errorData.error}`);
+        } else if (errorData.type === 'not_found') {
+          toast.error(`No encontrado: ${errorData.user_message || errorData.error}`);
+        } else if (errorData.type === 'permission') {
+          toast.error(`Permiso denegado: ${errorData.user_message || errorData.error}`);
+        } else {
+          toast.error(errorData.user_message || errorData.error || 'Error al procesar la venta');
+        }
+        
+        // Mostrar detalles específicos si hay
+        if (errorData.details) {
+          console.error('Detalles del error:', errorData.details);
+        }
+      } else if (error.message) {
+        toast.error(`Error: ${error.message}`);
+      } else {
+        toast.error('Error desconocido al procesar la venta');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -568,13 +826,24 @@ const POSPage = ({ user, onLogout }) => {
                     type="number"
                     id="cashReceived"
                     value={cashReceived}
-                    onChange={(e) => setCashReceived(e.target.value)}
-                    className="form-control"
+                    onChange={(e) => {
+                      setCashReceived(e.target.value);
+                      // Limpiar error cuando el usuario empieza a escribir
+                      if (validationErrors.cashReceived) {
+                        setValidationErrors(prev => ({ ...prev, cashReceived: undefined }));
+                      }
+                    }}
+                    className={`form-control ${validationErrors.cashReceived ? 'is-invalid' : ''}`}
                     placeholder="0.00"
                     step="0.01"
                     min={previewTotal}
                   />
-                  {cashReceived && (
+                  {validationErrors.cashReceived && (
+                    <div className="validation-error">
+                      {validationErrors.cashReceived}
+                    </div>
+                  )}
+                  {cashReceived && !validationErrors.cashReceived && parseFloat(cashReceived) >= previewTotal && (
                     <div className="change-amount">
                       <strong>Cambio: ${change.toFixed(2)}</strong>
                     </div>
@@ -592,9 +861,15 @@ const POSPage = ({ user, onLogout }) => {
                       type="text"
                       placeholder="Buscar cliente o escribir nombre"
                       value={customerSearchTerm}
-                      onChange={(e) => handleCustomerSearchChange(e.target.value)}
+                      onChange={(e) => {
+                        handleCustomerSearchChange(e.target.value);
+                        // Limpiar error cuando el usuario empieza a escribir
+                        if (validationErrors.customerName) {
+                          setValidationErrors(prev => ({ ...prev, customerName: undefined }));
+                        }
+                      }}
                       onFocus={() => setShowCustomerDropdown(true)}
-                      className="form-control customer-search-input"
+                      className={`form-control customer-search-input ${validationErrors.customerName ? 'is-invalid' : ''}`}
                     />
                     
                     {selectedCustomer && (
@@ -608,6 +883,12 @@ const POSPage = ({ user, onLogout }) => {
                       </button>
                     )}
                   </div>
+                  
+                  {validationErrors.customerName && (
+                    <div className="validation-error">
+                      {validationErrors.customerName}
+                    </div>
+                  )}
                   
                   {showCustomerDropdown && filteredCustomers.length > 0 && (
                     <div className="customer-dropdown">
@@ -629,11 +910,22 @@ const POSPage = ({ user, onLogout }) => {
                 
                 <input
                   type="text"
-                  placeholder="RNC/Cédula"
+                  placeholder="RNC/Cédula (9 u 11 dígitos)"
                   value={customerData.rnc}
-                  onChange={(e) => setCustomerData(prev => ({ ...prev, rnc: e.target.value }))}
-                  className="form-control mt-2"
+                  onChange={(e) => {
+                    setCustomerData(prev => ({ ...prev, rnc: e.target.value }));
+                    // Limpiar error cuando el usuario empieza a escribir
+                    if (validationErrors.customerRnc) {
+                      setValidationErrors(prev => ({ ...prev, customerRnc: undefined }));
+                    }
+                  }}
+                  className={`form-control mt-2 ${validationErrors.customerRnc ? 'is-invalid' : ''}`}
                 />
+                {validationErrors.customerRnc && (
+                  <div className="validation-error">
+                    {validationErrors.customerRnc}
+                  </div>
+                )}
               </div>
             </div>
             
@@ -1144,6 +1436,28 @@ const POSPage = ({ user, onLogout }) => {
           border: 1px solid var(--glass-border);
           border-radius: var(--radius-lg);
           color: var(--text-primary);
+        }
+
+        .form-control.is-invalid {
+          border-color: #ef4444;
+          box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+        }
+
+        .validation-error {
+          color: #ef4444;
+          font-size: 0.875rem;
+          margin-top: var(--space-xs);
+          padding: var(--space-xs) var(--space-sm);
+          background: rgba(239, 68, 68, 0.1);
+          border-radius: var(--radius-sm);
+          display: flex;
+          align-items: center;
+          gap: var(--space-xs);
+        }
+
+        .validation-error::before {
+          content: "⚠️";
+          font-size: 1rem;
         }
 
         .customer-selector {
