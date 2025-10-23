@@ -322,34 +322,95 @@ def add_sale_item(sale_id):
     data = request.get_json()
     
     if not data:
-        return jsonify({'error': 'No data provided'}), 400
+        return error_response(
+            error_type='validation',
+            message='Datos no proporcionados',
+            details='Debe enviar datos JSON en el cuerpo de la petición'
+        )
         
-    if 'product_id' not in data or 'quantity' not in data:
-        return jsonify({'error': 'Faltan campos requeridos: product_id y quantity'}), 400
+    # Validar campos requeridos
+    missing_fields = []
+    if 'product_id' not in data:
+        missing_fields.append('product_id')
+    if 'quantity' not in data:
+        missing_fields.append('quantity')
+    
+    if missing_fields:
+        return error_response(
+            error_type='validation',
+            message='Campos requeridos faltantes',
+            details=f'Debe proporcionar los siguientes campos: {", ".join(missing_fields)}',
+            missing_fields=missing_fields
+        )
     
     # Validate quantity is positive integer
     try:
         quantity = int(data['quantity'])
+        
         if quantity <= 0:
-            return jsonify({'error': 'La cantidad debe ser mayor a 0'}), 400
+            return error_response(
+                error_type='validation',
+                message='Cantidad inválida',
+                details=f'La cantidad debe ser mayor a 0. Recibido: {quantity}',
+                field='quantity',
+                value_received=data['quantity']
+            )
+        
+        # Límite máximo razonable para prevenir errores
+        if quantity > 1000:
+            return error_response(
+                error_type='validation',
+                message='Cantidad excesiva',
+                details=f'La cantidad máxima por ítem es 1000 unidades. Recibido: {quantity}',
+                field='quantity',
+                value_received=quantity,
+                max_allowed=1000
+            )
+            
     except (ValueError, TypeError):
-        return jsonify({'error': 'La cantidad debe ser un número válido'}), 400
+        return error_response(
+            error_type='validation',
+            message='Tipo de dato inválido',
+            details=f'La cantidad debe ser un número entero. Recibido: "{data.get("quantity")}" (tipo: {type(data.get("quantity")).__name__})',
+            field='quantity',
+            value_received=data.get('quantity')
+        )
     
     # CRITICAL: Use transactional locking to prevent post-finalization mutations
     try:
         # Lock the sale to prevent concurrent finalization
         sale = db.session.query(models.Sale).filter_by(id=sale_id).with_for_update().first()
         if not sale:
-            return jsonify({'error': 'Venta no encontrada'}), 404
+            return error_response(
+                error_type='not_found',
+                message='Venta no encontrada',
+                details=f'No existe una venta con ID {sale_id}',
+                sale_id=sale_id,
+                status_code=404
+            )
         
         # CRITICAL: Re-check sale status after acquiring lock (prevents post-finalization mutations)
         if sale.status not in ['pending', 'tab_open']:
-            return jsonify({'error': 'Solo se pueden modificar ventas pendientes o tabs abiertos'}), 400
+            return error_response(
+                error_type='business',
+                message='Venta no modificable',
+                details=f'Solo se pueden modificar ventas pendientes o tabs abiertos. Estado actual: {sale.status}',
+                sale_id=sale_id,
+                sale_status=sale.status,
+                allowed_statuses=['pending', 'tab_open']
+            )
         
         # Lock product to ensure consistent stock validation
         product = db.session.query(models.Product).filter_by(id=data['product_id']).with_for_update().first()
         if not product:
-            return jsonify({'error': 'Producto no encontrado'}), 404
+            return error_response(
+                error_type='not_found',
+                message='Producto no encontrado',
+                details=f'No existe un producto con ID {data["product_id"]}',
+                field='product_id',
+                value_received=data['product_id'],
+                status_code=404
+            )
 
         # Check for existing sale items of the same product in this sale (always needed)
         existing_quantity = db.session.query(db.func.sum(models.SaleItem.quantity)).filter_by(
@@ -364,9 +425,21 @@ def add_sale_item(sale_id):
         if product.product_type == 'inventariable':
             # Check stock availability against total quantity
             if product.stock < total_quantity:
-                return jsonify({
-                    'error': f'Stock insuficiente para {product.name}. Disponible: {product.stock}, ya en venta: {existing_quantity}, solicitado: {quantity}'
-                }), 400
+                shortage = total_quantity - product.stock
+                return error_response(
+                    error_type='business',
+                    message='Stock insuficiente',
+                    details=f'No hay suficiente stock de {product.name}. Disponible: {product.stock}, ya en carrito: {existing_quantity}, solicitado ahora: {quantity}, total necesario: {total_quantity}',
+                    field='quantity',
+                    product_id=product.id,
+                    product_name=product.name,
+                    stock_available=product.stock,
+                    quantity_in_cart=int(existing_quantity),
+                    quantity_requested=quantity,
+                    total_needed=total_quantity,
+                    shortage=shortage,
+                    user_message=f'No hay suficiente stock de {product.name}. Disponible: {product.stock}, necesario: {total_quantity}'
+                )
         # For consumable products, skip stock validation entirely
 
         # Check if product already exists in this sale - merge quantities instead of creating duplicate lines
@@ -494,9 +567,39 @@ def add_sale_item(sale_id):
             'tax_types': product_tax_types if 'product_tax_types' in locals() else []  # NEW: Include detailed tax types for receipt generation
         })
         
+    except ValueError as e:
+        # Errores de validación de negocio
+        db.session.rollback()
+        logger.warning(f"Validation error adding item to sale {sale_id}: {str(e)}")
+        return error_response(
+            error_type='validation',
+            message='Error de validación',
+            details=str(e),
+            sale_id=sale_id
+        )
+    except IntegrityError as e:
+        # Errores de integridad de base de datos
+        db.session.rollback()
+        logger.error(f"Database integrity error adding item to sale {sale_id}: {str(e)}", exc_info=True)
+        return error_response(
+            error_type='server',
+            message='Error de integridad de datos',
+            details='Los datos enviados violan restricciones de la base de datos',
+            sale_id=sale_id,
+            status_code=409
+        )
     except Exception as e:
-        # Handle any unexpected errors
-        return jsonify({'error': 'Error interno del servidor'}), 500
+        # Errores inesperados
+        db.session.rollback()
+        logger.exception(f"Unexpected error adding item to sale {sale_id}")
+        return error_response(
+            error_type='server',
+            message='Error interno del servidor',
+            details='Ocurrió un error inesperado. Por favor contacte al administrador.',
+            sale_id=sale_id,
+            error_id=f'ERR_ADD_ITEM_{int(time.time())}',
+            status_code=500
+        )
 
 
 @bp.route('/sales/<int:sale_id>/finalize', methods=['POST'])
