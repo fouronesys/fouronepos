@@ -124,4 +124,5 @@ A comprehensive internal audit system with advanced visual analytics monitors fi
   - `/admin/api/sales-report/pdf`: PDF download endpoint
 - **User Interface**: Interactive reports page with real-time data visualization, filterable tables, and one-click PDF downloads
 - **Security**: Role-based access (administrators, managers, cashiers can access their own data)
+- **Quick Access**: Added "Reportes de Ventas" button to dashboard quick actions menu for easier navigation
 - Architect-reviewed for code quality, security, and performance
