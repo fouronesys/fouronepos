@@ -645,8 +645,8 @@ def finalize_sale(sale_id):
     cash_received = data.get('cash_received')
     change_amount = data.get('change_amount')
     
-    # FASE 2: Validar cash_received cuando se proporcione (para pagos en efectivo)
-    if cash_received is not None:
+    # FASE 2: Validar cash_received solo para pagos en efectivo
+    if payment_method == 'cash' and cash_received is not None:
         cash_validation = utils.validate_numeric_range(
             cash_received, 
             min_val=0, 
