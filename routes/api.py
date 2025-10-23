@@ -9,7 +9,7 @@ import random
 import os
 import logging
 from receipt_generator import generate_pdf_receipt, generate_thermal_receipt_text
-from utils import get_company_info_for_receipt, validate_ncf
+from utils import get_company_info_for_receipt, validate_ncf, error_response
 from flask_wtf.csrf import validate_csrf
 from werkzeug.exceptions import BadRequest
 
@@ -217,9 +217,26 @@ def create_sale():
         table_id = data.get('table_id')
         if table_id:
             # If table_id is provided, validate that the table exists
-            table = models.Table.query.get(int(table_id))
-            if not table:
-                return jsonify({'error': f'Mesa {table_id} no encontrada'}), 400
+            try:
+                table_id_int = int(table_id)
+                table = models.Table.query.get(table_id_int)
+                if not table:
+                    return error_response(
+                        error_type='not_found',
+                        message='Mesa no encontrada',
+                        details=f'No existe una mesa con ID {table_id_int}',
+                        field='table_id',
+                        value_received=table_id,
+                        status_code=404
+                    )
+            except (ValueError, TypeError):
+                return error_response(
+                    error_type='validation',
+                    message='ID de mesa inválido',
+                    details=f'El ID de mesa debe ser un número entero. Recibido: "{table_id}"',
+                    field='table_id',
+                    value_received=table_id
+                )
         
         # Create new sale (waiters don't need cash registers initially)
         sale = models.Sale()
@@ -270,12 +287,25 @@ def create_sale():
             'created_at': sale.created_at.isoformat()
         })
         
+    except IntegrityError as e:
+        db.session.rollback()
+        logger.error(f"Database integrity error creating sale: {str(e)}", exc_info=True)
+        return error_response(
+            error_type='server',
+            message='Error de integridad de datos',
+            details='Los datos enviados violan restricciones de la base de datos',
+            status_code=409
+        )
     except Exception as e:
         db.session.rollback()
-        print(f"Error creating sale: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Error al crear la venta', 'details': str(e)}), 500
+        logger.exception(f"Unexpected error creating sale")
+        return error_response(
+            error_type='server',
+            message='Error al crear la venta',
+            details='Ocurrió un error inesperado. Por favor contacte al administrador.',
+            error_id=f'ERR_CREATE_SALE_{int(time.time())}',
+            status_code=500
+        )
 
 
 @bp.route('/sales/<int:sale_id>/items', methods=['POST'])
