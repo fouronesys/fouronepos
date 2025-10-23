@@ -127,7 +127,9 @@ A comprehensive internal audit system with advanced visual analytics monitors fi
 - **Quick Access**: Added "Reportes de Ventas" button to dashboard quick actions menu for easier navigation
 - Architect-reviewed for code quality, security, and performance
 
-## Error Handling Improvements - Phase 1 (Completed - Oct 23, 2025)
+## Error Handling Improvements (Completed - Oct 23, 2025)
+
+### Phase 1: Standardized Error Responses ✅
 - **Standardized Error Responses**: Created centralized `error_response()` helper function in `utils.py`:
   - Consistent JSON structure with error_type, message, details, timestamp, and contextual metadata
   - Five error categories: validation, business, permission, not_found, server
@@ -143,10 +145,30 @@ A comprehensive internal audit system with advanced visual analytics monitors fi
   - `logger.error()` for system errors (database, NCF conflicts, missing configuration)
   - `logger.exception()` for unexpected errors with full stack traces
   - Contextual data in logs (user_id, sale_id, product_id, etc.)
-- **User-Friendly Messages**: Clear, actionable error messages in Spanish for operators:
-  - Stock errors show available vs. required quantities
-  - NCF errors explain which types are available or if sequences are exhausted
-  - Permission errors specify required roles
-  - Validation errors indicate which fields are missing or invalid
-- **Architecture Review**: All changes reviewed and approved by architect agent
-- **Next Steps**: Phase 2 will extend error improvements to frontend validation and additional API endpoints
+- **User-Friendly Messages**: Clear, actionable error messages in Spanish for operators
+
+### Phase 2: Validation Functions from utils.py ✅
+- **RNC Validation**: Client RNC validation in sales finalization endpoint with automatic formatting
+  - Uses `validate_rnc()` from utils.py
+  - Validates Dominican Republic RNC format (9 or 11 digits)
+  - Automatic formatting (e.g., 123-45678-9)
+  - Clear error messages explaining format requirements
+- **Payment Method Validation**: Validates payment method against allowed list ['cash', 'card', 'transfer']
+  - Prevents invalid payment methods
+  - Clear error messages with valid options
+- **Numeric Range Validations**: Refactored all monetary validations using `validate_numeric_range()`:
+  - Cash received: RD$ 0 - RD$ 1,000,000
+  - Product cost: RD$ 0 - RD$ 1,000,000
+  - Product price: RD$ 0 - RD$ 1,000,000
+  - Consistent error messages and validation logic
+- **Integer Range Validations**: Refactored all quantity validations using `validate_integer_range()`:
+  - Sale item quantity: 1-1000 units
+  - Product stock: 0-100,000 units
+  - Minimum stock: 0-1000 units
+  - Prevents unrealistic values and typographical errors
+- **Endpoints Updated**:
+  - `POST /api/sales/{id}/finalize`: RNC validation, payment method validation, cash_received validation
+  - `POST /api/sales/{id}/items`: Quantity validation refactored
+  - `POST /api/products`: Cost, price, stock validations refactored
+  - `PUT /api/products/{id}`: Cost, price, stock validations refactored
+- **Consistency**: All validations now use centralized functions from utils.py for maintainability

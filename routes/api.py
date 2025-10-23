@@ -9,6 +9,7 @@ import random
 import os
 import logging
 from receipt_generator import generate_pdf_receipt, generate_thermal_receipt_text
+import utils
 from utils import get_company_info_for_receipt, validate_ncf, error_response
 from flask_wtf.csrf import validate_csrf
 from werkzeug.exceptions import BadRequest
@@ -343,38 +344,26 @@ def add_sale_item(sale_id):
             missing_fields=missing_fields
         )
     
-    # Validate quantity is positive integer
-    try:
-        quantity = int(data['quantity'])
-        
-        if quantity <= 0:
-            return error_response(
-                error_type='validation',
-                message='Cantidad inválida',
-                details=f'La cantidad debe ser mayor a 0. Recibido: {quantity}',
-                field='quantity',
-                value_received=data['quantity']
-            )
-        
-        # Límite máximo razonable para prevenir errores
-        if quantity > 1000:
-            return error_response(
-                error_type='validation',
-                message='Cantidad excesiva',
-                details=f'La cantidad máxima por ítem es 1000 unidades. Recibido: {quantity}',
-                field='quantity',
-                value_received=quantity,
-                max_allowed=1000
-            )
-            
-    except (ValueError, TypeError):
+    # FASE 2: Validar cantidad usando validate_integer_range()
+    quantity_validation = utils.validate_integer_range(
+        data.get('quantity'),
+        min_val=1,
+        max_val=1000,
+        field_name='Cantidad'
+    )
+    
+    if not quantity_validation['valid']:
         return error_response(
             error_type='validation',
-            message='Tipo de dato inválido',
-            details=f'La cantidad debe ser un número entero. Recibido: "{data.get("quantity")}" (tipo: {type(data.get("quantity")).__name__})',
+            message=quantity_validation['message'],
+            details='La cantidad debe ser un número entero entre 1 y 1000 unidades',
             field='quantity',
-            value_received=data.get('quantity')
+            value_received=data.get('quantity'),
+            min_allowed=1,
+            max_allowed=1000
         )
+    
+    quantity = quantity_validation['value']
     
     # CRITICAL: Use transactional locking to prevent post-finalization mutations
     try:
@@ -639,9 +628,39 @@ def finalize_sale(sale_id):
     ncf_type_raw = data.get('ncf_type', 'consumo')
     payment_method = data.get('payment_method', 'cash')
     
+    # FASE 2: Validar método de pago contra lista permitida
+    VALID_PAYMENT_METHODS = ['cash', 'card', 'transfer']
+    if payment_method not in VALID_PAYMENT_METHODS:
+        logger.warning(f"Invalid payment method '{payment_method}' attempted for sale {sale_id}")
+        return error_response(
+            error_type='validation',
+            message='Método de pago inválido',
+            details=f'El método de pago debe ser uno de: {", ".join(VALID_PAYMENT_METHODS)}. Recibido: {payment_method}',
+            field='payment_method',
+            value_received=payment_method,
+            valid_options=VALID_PAYMENT_METHODS
+        )
+    
     # Handle cash payment details
     cash_received = data.get('cash_received')
     change_amount = data.get('change_amount')
+    
+    # FASE 2: Validar cash_received cuando se proporcione (para pagos en efectivo)
+    if cash_received is not None:
+        cash_validation = utils.validate_numeric_range(
+            cash_received, 
+            min_val=0, 
+            max_val=1000000,  # Límite razonable de RD$ 1,000,000
+            field_name='Efectivo recibido'
+        )
+        if not cash_validation['valid']:
+            return error_response(
+                error_type='validation',
+                message=cash_validation['message'],
+                details=f'El monto de efectivo recibido debe estar entre RD$ 0 y RD$ 1,000,000',
+                field='cash_received',
+                value_received=cash_received
+            )
     
     # Handle "sin_comprobante" case - no NCF should be generated
     skip_ncf = (ncf_type_raw == 'sin_comprobante')
@@ -656,6 +675,22 @@ def finalize_sale(sale_id):
     # Get client info for fiscal/government invoices
     customer_name = data.get('client_name')
     customer_rnc = data.get('client_rnc')
+    
+    # FASE 2: Validar RNC del cliente cuando se proporcione
+    if customer_rnc:
+        rnc_validation = utils.validate_rnc(customer_rnc)
+        if not rnc_validation['valid']:
+            logger.warning(f"Invalid customer RNC '{customer_rnc}' attempted for sale {sale_id}")
+            return error_response(
+                error_type='validation',
+                message='RNC inválido',
+                details=rnc_validation['message'],
+                field='client_rnc',
+                value_received=customer_rnc,
+                user_message=f'El RNC proporcionado no es válido: {rnc_validation["message"]}'
+            )
+        # Use formatted RNC for consistency
+        customer_rnc = rnc_validation['formatted']
     
     # NEW: Get service charge (propina) option
     apply_service_charge = data.get('apply_service_charge', False)

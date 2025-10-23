@@ -247,15 +247,26 @@ def create_product():
         if not category or not category.active:
             return jsonify({'error': 'La categoría seleccionada no es válida'}), 400
         
-        # Validate numeric values
-        try:
-            cost = float(data.get('cost', 0))
-            price = float(data.get('price', 0))
-        except (ValueError, TypeError):
-            return jsonify({'error': 'El costo y precio deben ser números válidos'}), 400
+        # FASE 2: Validar montos usando validate_numeric_range()
+        cost_validation = utils.validate_numeric_range(
+            data.get('cost', 0),
+            min_val=0,
+            max_val=1000000,  # RD$ 1,000,000 límite razonable
+            field_name='Costo'
+        )
+        if not cost_validation['valid']:
+            return jsonify({'error': cost_validation['message']}), 400
+        cost = cost_validation['value']
         
-        if cost < 0 or price < 0:
-            return jsonify({'error': 'El costo y precio no pueden ser negativos'}), 400
+        price_validation = utils.validate_numeric_range(
+            data.get('price', 0),
+            min_val=0,
+            max_val=1000000,  # RD$ 1,000,000 límite razonable
+            field_name='Precio'
+        )
+        if not price_validation['valid']:
+            return jsonify({'error': price_validation['message']}), 400
+        price = price_validation['value']
         
         product = models.Product()
         product.name = data['name'].strip()
@@ -270,8 +281,26 @@ def create_product():
         
         # Solo manejar stock para productos inventariables
         if product.product_type == 'inventariable':
-            product.stock = int(data.get('stock', 0))
-            product.min_stock = int(data.get('min_stock', 5))
+            # FASE 2: Validar stock usando validate_integer_range()
+            stock_validation = utils.validate_integer_range(
+                data.get('stock', 0),
+                min_val=0,
+                max_val=100000,
+                field_name='Stock'
+            )
+            if not stock_validation['valid']:
+                return jsonify({'error': stock_validation['message']}), 400
+            product.stock = stock_validation['value']
+            
+            min_stock_validation = utils.validate_integer_range(
+                data.get('min_stock', 5),
+                min_val=0,
+                max_val=1000,
+                field_name='Stock mínimo'
+            )
+            if not min_stock_validation['valid']:
+                return jsonify({'error': min_stock_validation['message']}), 400
+            product.min_stock = min_stock_validation['value']
         else:  # consumible
             product.stock = 0
             product.min_stock = 0
@@ -344,15 +373,53 @@ def update_product(product_id):
         product.name = data['name']
         product.description = data.get('description', '')
         product.category_id = data['category_id']
-        product.cost = float(data['cost'])
-        product.price = float(data['price'])
+        
+        # FASE 2: Validar montos usando validate_numeric_range()
+        cost_validation = utils.validate_numeric_range(
+            data.get('cost'),
+            min_val=0,
+            max_val=1000000,
+            field_name='Costo'
+        )
+        if not cost_validation['valid']:
+            return jsonify({'error': cost_validation['message']}), 400
+        product.cost = cost_validation['value']
+        
+        price_validation = utils.validate_numeric_range(
+            data.get('price'),
+            min_val=0,
+            max_val=1000000,
+            field_name='Precio'
+        )
+        if not price_validation['valid']:
+            return jsonify({'error': price_validation['message']}), 400
+        product.price = price_validation['value']
+        
         # Keep legacy fields but don't update them from frontend
         product.product_type = data.get('product_type', 'inventariable')
         
         # Solo manejar stock para productos inventariables
         if product.product_type == 'inventariable':
-            product.stock = int(data.get('stock', 0))
-            product.min_stock = int(data.get('min_stock', 5))
+            # FASE 2: Validar stock usando validate_integer_range()
+            stock_validation = utils.validate_integer_range(
+                data.get('stock', 0),
+                min_val=0,
+                max_val=100000,
+                field_name='Stock'
+            )
+            if not stock_validation['valid']:
+                return jsonify({'error': stock_validation['message']}), 400
+            product.stock = stock_validation['value']
+            
+            min_stock_validation = utils.validate_integer_range(
+                data.get('min_stock', 5),
+                min_val=0,
+                max_val=1000,
+                field_name='Stock mínimo'
+            )
+            if not min_stock_validation['valid']:
+                return jsonify({'error': min_stock_validation['message']}), 400
+            product.min_stock = min_stock_validation['value']
         else:  # consumible
             product.stock = 0
             product.min_stock = 0
