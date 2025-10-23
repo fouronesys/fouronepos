@@ -126,3 +126,27 @@ A comprehensive internal audit system with advanced visual analytics monitors fi
 - **Security**: Role-based access (administrators, managers, cashiers can access their own data)
 - **Quick Access**: Added "Reportes de Ventas" button to dashboard quick actions menu for easier navigation
 - Architect-reviewed for code quality, security, and performance
+
+## Error Handling Improvements - Phase 1 (Completed - Oct 23, 2025)
+- **Standardized Error Responses**: Created centralized `error_response()` helper function in `utils.py`:
+  - Consistent JSON structure with error_type, message, details, timestamp, and contextual metadata
+  - Five error categories: validation, business, permission, not_found, server
+  - Unique error IDs for tracking and debugging (e.g., ERR_CREATE_SALE_1729701234)
+  - Optional user_message field for non-technical, actionable feedback
+  - Appropriate HTTP status codes (400, 403, 404, 409, 500)
+- **Enhanced API Endpoints**: Updated three critical sales endpoints with improved error handling:
+  - `POST /api/sales`: Validates table existence, data types, and database constraints
+  - `POST /api/sales/{id}/items`: Comprehensive validation for stock, product availability, sale status, and quantity limits
+  - `POST /api/sales/{id}/finalize`: Detailed errors for permissions, empty sales, stock, cash register, NCF sequences
+- **Improved Logging**: Replaced generic error messages with structured logging:
+  - `logger.warning()` for business validation failures (stock, status, permissions)
+  - `logger.error()` for system errors (database, NCF conflicts, missing configuration)
+  - `logger.exception()` for unexpected errors with full stack traces
+  - Contextual data in logs (user_id, sale_id, product_id, etc.)
+- **User-Friendly Messages**: Clear, actionable error messages in Spanish for operators:
+  - Stock errors show available vs. required quantities
+  - NCF errors explain which types are available or if sequences are exhausted
+  - Permission errors specify required roles
+  - Validation errors indicate which fields are missing or invalid
+- **Architecture Review**: All changes reviewed and approved by architect agent
+- **Next Steps**: Phase 2 will extend error improvements to frontend validation and additional API endpoints
