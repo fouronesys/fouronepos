@@ -2337,3 +2337,213 @@ def delete_supplier(supplier_id):
         flash(f'Error al eliminar proveedor: {str(e)}', 'error')
     
     return redirect(url_for('admin.suppliers'))
+
+
+@bp.route('/api/sales-report')
+def sales_report_api():
+    """API endpoint para obtener datos de ventas por período"""
+    user = require_admin_or_manager_or_cashier()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Obtener parámetros
+    period = request.args.get('period', 'day')  # day, week, month, year, custom
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    try:
+        from datetime import datetime, timedelta
+        
+        # Determinar rango de fechas según el período
+        if period == 'day':
+            start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+        elif period == 'week':
+            start = datetime.now() - timedelta(days=7)
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+        elif period == 'month':
+            start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+        elif period == 'year':
+            start = datetime.now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+        elif period == 'custom' and start_date and end_date:
+            start = datetime.strptime(start_date, '%Y-%m-%d')
+            end = datetime.strptime(end_date, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+        else:
+            return jsonify({'error': 'Período inválido'}), 400
+        
+        # Consultar ventas completadas en el período
+        query = models.Sale.query.filter(
+            models.Sale.status == 'completed',
+            models.Sale.created_at >= start,
+            models.Sale.created_at <= end
+        )
+        
+        # Para cajeros, solo sus ventas
+        if user.role.value == 'CAJERO':
+            cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
+            if cash_register:
+                query = query.filter(models.Sale.cash_register_id == cash_register.id)
+        
+        sales = query.order_by(models.Sale.created_at.desc()).all()
+        
+        # Calcular estadísticas
+        total_sales = len(sales)
+        total_amount = sum(sale.total for sale in sales)
+        total_tax = sum(sale.tax_amount for sale in sales)
+        total_subtotal = sum(sale.subtotal for sale in sales)
+        
+        # Agrupar por método de pago
+        payment_methods = {}
+        for sale in sales:
+            method = sale.payment_method or 'Efectivo'
+            if method not in payment_methods:
+                payment_methods[method] = {'count': 0, 'total': 0}
+            payment_methods[method]['count'] += 1
+            payment_methods[method]['total'] += sale.total
+        
+        # Productos más vendidos
+        product_sales = {}
+        for sale in sales:
+            for item in sale.sale_items:
+                product_name = item.product.name
+                if product_name not in product_sales:
+                    product_sales[product_name] = {'quantity': 0, 'total': 0}
+                product_sales[product_name]['quantity'] += item.quantity
+                product_sales[product_name]['total'] += item.total_price
+        
+        # Ordenar productos por cantidad vendida
+        top_products = sorted(
+            [{'name': k, **v} for k, v in product_sales.items()],
+            key=lambda x: x['quantity'],
+            reverse=True
+        )[:10]
+        
+        # Ventas por día (para gráficos)
+        sales_by_day = {}
+        for sale in sales:
+            day_key = sale.created_at.strftime('%Y-%m-%d')
+            if day_key not in sales_by_day:
+                sales_by_day[day_key] = {'count': 0, 'total': 0}
+            sales_by_day[day_key]['count'] += 1
+            sales_by_day[day_key]['total'] += sale.total
+        
+        # Lista detallada de ventas
+        sales_list = []
+        for sale in sales:
+            sales_list.append({
+                'id': sale.id,
+                'ncf': sale.ncf or 'N/A',
+                'customer_name': sale.customer_name or 'Cliente General',
+                'customer_rnc': sale.customer_rnc or '',
+                'created_at': sale.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'subtotal': float(sale.subtotal),
+                'tax_amount': float(sale.tax_amount),
+                'total': float(sale.total),
+                'payment_method': sale.payment_method or 'Efectivo',
+                'user': sale.user.username if sale.user else 'N/A',
+                'items': [{
+                    'product_name': item.product.name,
+                    'quantity': item.quantity,
+                    'unit_price': float(item.unit_price),
+                    'total_price': float(item.total_price)
+                } for item in sale.sale_items]
+            })
+        
+        return jsonify({
+            'success': True,
+            'period': period,
+            'start_date': start.strftime('%Y-%m-%d'),
+            'end_date': end.strftime('%Y-%m-%d'),
+            'summary': {
+                'total_sales': total_sales,
+                'total_amount': float(total_amount),
+                'total_tax': float(total_tax),
+                'total_subtotal': float(total_subtotal),
+                'average_sale': float(total_amount / total_sales) if total_sales > 0 else 0
+            },
+            'payment_methods': payment_methods,
+            'top_products': top_products,
+            'sales_by_day': sales_by_day,
+            'sales': sales_list
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error al generar reporte: {str(e)}'}), 500
+
+
+@bp.route('/api/sales-report/pdf')
+def download_sales_report_pdf():
+    """Generar y descargar PDF de reporte de ventas"""
+    user = require_admin_or_manager_or_cashier()
+    if not isinstance(user, models.User):
+        flash('No autorizado', 'error')
+        return redirect(url_for('auth.login'))
+    
+    # Obtener parámetros
+    period = request.args.get('period', 'day')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    try:
+        from datetime import datetime, timedelta
+        from receipt_generator import generate_sales_report_pdf
+        from flask import send_file
+        
+        # Determinar rango de fechas según el período
+        if period == 'day':
+            start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Día {start.strftime('%d/%m/%Y')}"
+        elif period == 'week':
+            start = datetime.now() - timedelta(days=7)
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = "Últimos 7 días"
+        elif period == 'month':
+            start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Mes {start.strftime('%B %Y')}"
+        elif period == 'year':
+            start = datetime.now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Año {start.year}"
+        elif period == 'custom' and start_date and end_date:
+            start = datetime.strptime(start_date, '%Y-%m-%d')
+            end = datetime.strptime(end_date, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            period_name = f"{start.strftime('%d/%m/%Y')} - {end.strftime('%d/%m/%Y')}"
+        else:
+            flash('Período inválido', 'error')
+            return redirect(url_for('admin.reports'))
+        
+        # Consultar ventas completadas en el período
+        query = models.Sale.query.filter(
+            models.Sale.status == 'completed',
+            models.Sale.created_at >= start,
+            models.Sale.created_at <= end
+        )
+        
+        # Para cajeros, solo sus ventas
+        if user.role.value == 'CAJERO':
+            cash_register = models.CashRegister.query.filter_by(user_id=user.id, active=True).first()
+            if cash_register:
+                query = query.filter(models.Sale.cash_register_id == cash_register.id)
+        
+        sales = query.order_by(models.Sale.created_at.desc()).all()
+        
+        # Generar PDF
+        pdf_path = generate_sales_report_pdf(sales, period_name, start, end)
+        
+        # Enviar archivo
+        return send_file(
+            pdf_path,
+            as_attachment=True,
+            download_name=f"reporte_ventas_{period}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+            mimetype='application/pdf'
+        )
+        
+    except Exception as e:
+        flash(f'Error al generar PDF: {str(e)}', 'error')
+        return redirect(url_for('admin.reports'))

@@ -143,33 +143,296 @@ document.getElementById('reportFilters').addEventListener('submit', function(e) 
     generateCustomReport(startDate, endDate, reportType);
 });
 
-function generateCustomReport(startDate, endDate, reportType) {
-    // TODO: Implement custom report generation
-    showReportPlaceholder(`Reporte de ${reportType} desde ${startDate} hasta ${endDate}`);
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('es-DO', {
+        style: 'currency',
+        currency: 'DOP'
+    }).format(amount);
 }
 
-function generateDailyReport() {
-    // TODO: Implement daily report generation
-    showReportPlaceholder('Reporte Diario');
+async function generateCustomReport(startDate, endDate, reportType) {
+    if (reportType !== 'sales') {
+        showReportPlaceholder(`Reporte de ${reportType} desde ${startDate} hasta ${endDate}`);
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/api/sales-report?period=custom&start_date=${startDate}&end_date=${endDate}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            displaySalesReport(data);
+        } else {
+            alert('Error al generar reporte: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error al cargar el reporte');
+    }
 }
 
-function generateWeeklyReport() {
-    // TODO: Implement weekly report generation
-    showReportPlaceholder('Reporte Semanal');
+async function generateDailyReport() {
+    await loadSalesReport('day');
 }
 
-function generateMonthlyReport() {
-    // TODO: Implement monthly report generation
-    showReportPlaceholder('Reporte Mensual');
+async function generateWeeklyReport() {
+    await loadSalesReport('week');
+}
+
+async function generateMonthlyReport() {
+    await loadSalesReport('month');
+}
+
+async function loadSalesReport(period) {
+    try {
+        const response = await fetch(`/admin/api/sales-report?period=${period}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            displaySalesReport(data);
+        } else {
+            alert('Error al generar reporte: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error al cargar el reporte');
+    }
+}
+
+function displaySalesReport(data) {
+    const { summary, payment_methods, top_products, sales, period, start_date, end_date } = data;
+    
+    let html = `
+        <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5>Reporte de Ventas: ${period === 'day' ? 'Diario' : period === 'week' ? 'Semanal' : period === 'month' ? 'Mensual' : 'Personalizado'}</h5>
+                <button class="btn btn-danger" onclick="downloadPDF('${period}', '${start_date}', '${end_date}')">
+                    <i class="bi bi-file-pdf"></i> Descargar PDF
+                </button>
+            </div>
+            <p class="text-muted">Período: ${start_date} - ${end_date}</p>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="text-muted">Total Ventas</h6>
+                        <h3>${summary.total_sales}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="text-muted">Subtotal</h6>
+                        <h3>${formatCurrency(summary.total_subtotal)}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="text-muted">Impuestos</h6>
+                        <h3>${formatCurrency(summary.total_tax)}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="text-muted">Total</h6>
+                        <h3 class="text-success">${formatCurrency(summary.total_amount)}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6>Métodos de Pago</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Método</th>
+                                    <th>Cantidad</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+    `;
+    
+    for (const [method, data] of Object.entries(payment_methods)) {
+        html += `
+            <tr>
+                <td>${method.charAt(0).toUpperCase() + method.slice(1)}</td>
+                <td>${data.count}</td>
+                <td>${formatCurrency(data.total)}</td>
+            </tr>
+        `;
+    }
+    
+    html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6>Top 5 Productos Más Vendidos</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Cantidad</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+    `;
+    
+    top_products.slice(0, 5).forEach(product => {
+        html += `
+            <tr>
+                <td>${product.name}</td>
+                <td>${product.quantity}</td>
+                <td>${formatCurrency(product.total)}</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h6>Detalle de Ventas (${sales.length} transacciones)</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Fecha/Hora</th>
+                                <th>NCF</th>
+                                <th>Cliente</th>
+                                <th>Subtotal</th>
+                                <th>ITBIS</th>
+                                <th>Total</th>
+                                <th>Pago</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+    `;
+    
+    sales.forEach((sale, index) => {
+        html += `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${sale.created_at}</td>
+                <td>${sale.ncf}</td>
+                <td>${sale.customer_name}</td>
+                <td>${formatCurrency(sale.subtotal)}</td>
+                <td>${formatCurrency(sale.tax_amount)}</td>
+                <td><strong>${formatCurrency(sale.total)}</strong></td>
+                <td>${sale.payment_method.charAt(0).toUpperCase() + sale.payment_method.slice(1)}</td>
+                <td>
+                    <button class="btn btn-sm btn-info" onclick="showSaleDetails(${sale.id}, ${JSON.stringify(sale.items).replace(/"/g, '&quot;')})">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('reportResults').style.display = 'block';
+    document.getElementById('reportContent').innerHTML = html;
+    document.getElementById('reportResults').scrollIntoView({ behavior: 'smooth' });
+}
+
+function downloadPDF(period, startDate, endDate) {
+    let url = `/admin/api/sales-report/pdf?period=${period}`;
+    if (period === 'custom') {
+        url += `&start_date=${startDate}&end_date=${endDate}`;
+    }
+    window.open(url, '_blank');
+}
+
+function showSaleDetails(saleId, items) {
+    let itemsHtml = '<table class="table table-sm"><thead><tr><th>Producto</th><th>Cant.</th><th>P. Unit.</th><th>Total</th></tr></thead><tbody>';
+    
+    items.forEach(item => {
+        itemsHtml += `
+            <tr>
+                <td>${item.product_name}</td>
+                <td>${item.quantity}</td>
+                <td>${formatCurrency(item.unit_price)}</td>
+                <td>${formatCurrency(item.total_price)}</td>
+            </tr>
+        `;
+    });
+    
+    itemsHtml += '</tbody></table>';
+    
+    const modal = new bootstrap.Modal(document.createElement('div'));
+    const modalHtml = `
+        <div class="modal fade" id="saleDetailsModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Detalles de Venta #${saleId}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        ${itemsHtml}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = modalHtml;
+    document.body.appendChild(tempDiv.firstElementChild);
+    
+    const modalElement = document.getElementById('saleDetailsModal');
+    const bsModal = new bootstrap.Modal(modalElement);
+    bsModal.show();
+    
+    modalElement.addEventListener('hidden.bs.modal', function () {
+        modalElement.remove();
+    });
 }
 
 function generate606Report() {
-    // Redirect to the full DGII reports interface
     window.location.href = '/dgii/';
 }
 
 function generate607Report() {
-    // Redirect to the full DGII reports interface
     window.location.href = '/dgii/';
 }
 
@@ -186,5 +449,11 @@ function showReportPlaceholder(title) {
     
     document.getElementById('reportResults').scrollIntoView({ behavior: 'smooth' });
 }
+
+window.onload = function() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('startDate').value = today;
+    document.getElementById('endDate').value = today;
+};
 </script>
 {% endblock %}
