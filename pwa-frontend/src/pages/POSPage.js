@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import apiService from '../services/apiService';
 import offlineStorage from '../services/offlineStorage';
 import LoadingSpinner from '../components/LoadingSpinner';
+import ErrorDisplay from '../components/ErrorDisplay';
 
 const POSPage = ({ user, onLogout }) => {
   const [cart, setCart] = useState([]);
@@ -19,6 +20,8 @@ const POSPage = ({ user, onLogout }) => {
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
+  const [saleError, setSaleError] = useState(null);
+  const [currentStep, setCurrentStep] = useState(null);
 
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
@@ -431,6 +434,8 @@ const POSPage = ({ user, onLogout }) => {
   const handleCompleteSale = async () => {
     // Limpiar errores previos
     setValidationErrors({});
+    setSaleError(null);
+    setCurrentStep(null);
     const errors = {};
 
     // Validar método de pago
@@ -481,6 +486,13 @@ const POSPage = ({ user, onLogout }) => {
       if (product) {
         const stockValidation = validateStock(product, item.quantity);
         if (!stockValidation.valid) {
+          // Mostrar error detallado de stock con el componente ErrorDisplay
+          setSaleError({
+            type: 'business',
+            message: 'Stock insuficiente',
+            details: `${product.name}: Solicitado ${item.quantity}, disponible ${product.stock} unidades`,
+            suggestion: `Reduce la cantidad de "${product.name}" a ${product.stock} unidades o menos.`
+          });
           toast.error(`${product.name}: ${stockValidation.error}`);
           return;
         }
@@ -490,6 +502,7 @@ const POSPage = ({ user, onLogout }) => {
     setIsSubmitting(true);
     try {
       // Step 1: Create empty sale
+      setCurrentStep('Creando venta...');
       const csrfToken = await apiService.getCsrfToken();
       const saleResponse = await apiService.axiosInstance.post('/sales', {
         description: 'Venta POS',
@@ -499,7 +512,10 @@ const POSPage = ({ user, onLogout }) => {
       const saleId = saleResponse.data.id;
       
       // Step 2: Add items individually (server calculates taxes per product)
-      for (const item of cart) {
+      setCurrentStep(`Agregando productos (0/${cart.length})...`);
+      for (let i = 0; i < cart.length; i++) {
+        const item = cart[i];
+        setCurrentStep(`Agregando productos (${i + 1}/${cart.length})...`);
         await apiService.axiosInstance.post(`/sales/${saleId}/items`, {
           product_id: item.id,
           quantity: item.quantity,
@@ -508,6 +524,7 @@ const POSPage = ({ user, onLogout }) => {
       }
       
       // Step 3: Finalize sale with payment info (no tax data - server calculated)
+      setCurrentStep('Finalizando venta...');
       const finalizeData = {
         payment_method: paymentMethod,
         ncf_type: 'consumo', // Default NCF type
@@ -531,6 +548,7 @@ const POSPage = ({ user, onLogout }) => {
       const finalizeResponse = await apiService.axiosInstance.post(`/sales/${saleId}/finalize`, finalizeData);
       
       // Success - clear cart and close modal
+      setCurrentStep('¡Venta completada!');
       toast.success('Venta procesada exitosamente');
       setCart([]);
       setShowPaymentModal(false);
@@ -540,35 +558,73 @@ const POSPage = ({ user, onLogout }) => {
       setCustomerSearchTerm('');
       setShowCustomerDropdown(false);
       setValidationErrors({});
+      setSaleError(null);
+      setCurrentStep(null);
       queryClient.invalidateQueries('sales');
       
     } catch (error) {
       console.error('Error creating sale:', error);
+      setCurrentStep(null);
       
-      // Manejar errores específicos del backend
-      if (error.response?.data) {
+      // Determinar si es un error de red o del servidor
+      const isNetworkError = !error.response && (
+        error.message === 'Network Error' || 
+        error.code === 'ECONNABORTED' ||
+        error.code === 'ERR_NETWORK'
+      );
+      
+      if (isNetworkError) {
+        // Error de red
+        setSaleError({
+          type: 'network',
+          message: 'Error de conexión',
+          details: 'No se pudo conectar con el servidor. Verifica tu conexión a internet.',
+          onRetry: handleCompleteSale
+        });
+        toast.error('Error de conexión. Por favor, verifica tu internet.');
+      } else if (error.response?.data) {
+        // Error del servidor con respuesta estructurada
         const errorData = error.response.data;
+        const errorType = errorData.type || 'server';
         
-        // Mostrar mensaje de error específico basado en el tipo
-        if (errorData.type === 'validation') {
-          toast.error(`Error de validación: ${errorData.user_message || errorData.error}`);
-        } else if (errorData.type === 'business') {
-          toast.error(`Error de negocio: ${errorData.user_message || errorData.error}`);
-        } else if (errorData.type === 'not_found') {
-          toast.error(`No encontrado: ${errorData.user_message || errorData.error}`);
-        } else if (errorData.type === 'permission') {
-          toast.error(`Permiso denegado: ${errorData.user_message || errorData.error}`);
-        } else {
-          toast.error(errorData.user_message || errorData.error || 'Error al procesar la venta');
-        }
+        // Configurar el error para mostrar con ErrorDisplay
+        setSaleError({
+          type: errorType,
+          message: errorData.user_message || errorData.error || 'Error al procesar la venta',
+          details: errorData.details || null,
+          field: errorData.field || null
+        });
         
-        // Mostrar detalles específicos si hay
+        // También mostrar toast para notificación rápida
+        const errorPrefix = {
+          'validation': 'Error de validación',
+          'business': 'Error de negocio',
+          'not_found': 'No encontrado',
+          'permission': 'Permiso denegado',
+          'server': 'Error del servidor'
+        }[errorType] || 'Error';
+        
+        toast.error(`${errorPrefix}: ${errorData.user_message || errorData.error}`);
+        
+        // Log detalles para debugging
         if (errorData.details) {
           console.error('Detalles del error:', errorData.details);
         }
       } else if (error.message) {
+        // Error genérico con mensaje
+        setSaleError({
+          type: 'server',
+          message: 'Error al procesar la venta',
+          details: error.message
+        });
         toast.error(`Error: ${error.message}`);
       } else {
+        // Error completamente desconocido
+        setSaleError({
+          type: 'server',
+          message: 'Error desconocido',
+          details: 'Ocurrió un error inesperado al procesar la venta. Por favor, intenta nuevamente.'
+        });
         toast.error('Error desconocido al procesar la venta');
       }
     } finally {
@@ -927,12 +983,33 @@ const POSPage = ({ user, onLogout }) => {
                   </div>
                 )}
               </div>
+
+              {/* Indicador de progreso durante el proceso de venta */}
+              {currentStep && (
+                <div className="sale-progress-indicator">
+                  <LoadingSpinner size="sm" />
+                  <span>{currentStep}</span>
+                </div>
+              )}
+
+              {/* Mostrar errores estructurados con el componente ErrorDisplay */}
+              {saleError && (
+                <ErrorDisplay
+                  error={saleError.message}
+                  type={saleError.type}
+                  details={saleError.details}
+                  suggestion={saleError.suggestion}
+                  onRetry={saleError.onRetry}
+                  onDismiss={() => setSaleError(null)}
+                />
+              )}
             </div>
             
             <div className="modal-footer">
               <button
                 className="btn btn-secondary"
                 onClick={() => setShowPaymentModal(false)}
+                disabled={isSubmitting}
               >
                 Cancelar
               </button>
@@ -1558,6 +1635,35 @@ const POSPage = ({ user, onLogout }) => {
           padding: var(--space-md);
           border-radius: var(--radius-lg);
           font-weight: 600;
+        }
+
+        .sale-progress-indicator {
+          display: flex;
+          align-items: center;
+          gap: var(--space-md);
+          padding: var(--space-md);
+          margin-top: var(--space-lg);
+          background: var(--glass-bg);
+          border: 1px solid var(--glass-border);
+          border-radius: var(--radius-lg);
+          animation: slideIn 0.3s ease-out;
+        }
+
+        .sale-progress-indicator span {
+          color: var(--text-accent);
+          font-weight: 500;
+          font-size: 0.9rem;
+        }
+
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
 
         @media (max-width: 1024px) {
