@@ -3,15 +3,119 @@ Utility functions for Dominican Republic POS system
 Includes RNC validation and NCF compliance for DGII 606
 """
 import re
+import uuid
+import logging
 from typing import Optional, Dict, Any
 from datetime import datetime
-from flask import jsonify
+from flask import jsonify, session
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+
+def generate_error_id() -> str:
+    """
+    Genera un ID único para rastreo de errores
+    
+    Returns:
+        str: ID único en formato UUID corto (primeros 8 caracteres)
+    """
+    return str(uuid.uuid4())[:8].upper()
+
+
+def get_user_context() -> Dict[str, Any]:
+    """
+    Obtiene contexto del usuario actual para logging
+    
+    Returns:
+        Dict con información del usuario (user_id, username, role)
+    """
+    try:
+        from models import User
+        user_id = session.get('user_id')
+        if user_id:
+            user = User.query.get(user_id)
+            if user:
+                return {
+                    'user_id': user.id,
+                    'username': user.username,
+                    'role': user.role.value if hasattr(user.role, 'value') else str(user.role)
+                }
+    except Exception:
+        pass
+    
+    return {'user_id': None, 'username': 'anonymous', 'role': 'unknown'}
+
+
+def log_error(error_type: str, message: str, error_id: str = None, 
+              context: Dict[str, Any] = None, exc_info: bool = False):
+    """
+    Logging centralizado de errores con contexto completo
+    
+    Args:
+        error_type: Tipo de error ('validation', 'permission', 'not_found', 'server', 'business')
+        message: Mensaje descriptivo del error
+        error_id: ID único del error (se genera automáticamente si no se proporciona)
+        context: Contexto adicional (sale_id, product_id, etc.)
+        exc_info: Si se debe incluir información de excepción
+    """
+    if error_id is None:
+        error_id = generate_error_id()
+    
+    user_ctx = get_user_context()
+    
+    log_data = {
+        'error_id': error_id,
+        'error_type': error_type,
+        'message': message,
+        'user_id': user_ctx.get('user_id'),
+        'username': user_ctx.get('username'),
+        'role': user_ctx.get('role'),
+    }
+    
+    if context:
+        log_data.update(context)
+    
+    # Determinar nivel de log según tipo de error
+    if error_type in ['validation', 'business']:
+        logger.warning(f"[{error_id}] {message}", extra=log_data, exc_info=exc_info)
+    elif error_type in ['permission', 'not_found']:
+        logger.warning(f"[{error_id}] {message}", extra=log_data, exc_info=exc_info)
+    else:  # server errors
+        logger.error(f"[{error_id}] {message}", extra=log_data, exc_info=exc_info)
+
+
+def log_success(operation: str, message: str, context: Dict[str, Any] = None):
+    """
+    Logging de operaciones críticas exitosas
+    
+    Args:
+        operation: Nombre de la operación (ej: 'sale_finalized', 'product_created')
+        message: Mensaje descriptivo del éxito
+        context: Contexto adicional (sale_id, product_id, amount, etc.)
+    """
+    user_ctx = get_user_context()
+    
+    log_data = {
+        'operation': operation,
+        'message': message,
+        'user_id': user_ctx.get('user_id'),
+        'username': user_ctx.get('username'),
+        'role': user_ctx.get('role'),
+        'timestamp': datetime.utcnow().isoformat()
+    }
+    
+    if context:
+        log_data.update(context)
+    
+    logger.info(f"[SUCCESS] {operation}: {message}", extra=log_data)
 
 
 def error_response(error_type: str, message: str, details: Optional[str] = None, 
-                   field: Optional[str] = None, status_code: int = 400, **kwargs):
+                   field: Optional[str] = None, status_code: int = 400, 
+                   log_context: Dict[str, Any] = None, **kwargs):
     """
-    Genera una respuesta de error estandarizada para endpoints de API
+    Genera una respuesta de error estandarizada para endpoints de API con logging automático
     
     Args:
         error_type: Tipo de error ('validation', 'permission', 'not_found', 'server', 'business')
@@ -19,6 +123,7 @@ def error_response(error_type: str, message: str, details: Optional[str] = None,
         details: Detalles adicionales del error (opcional)
         field: Campo que causó el error (opcional)
         status_code: Código HTTP de respuesta (default: 400)
+        log_context: Contexto adicional para logging (sale_id, product_id, etc.)
         **kwargs: Datos adicionales a incluir en la respuesta
     
     Returns:
@@ -31,19 +136,33 @@ def error_response(error_type: str, message: str, details: Optional[str] = None,
         ...     details=f'No hay suficiente stock de {product.name}',
         ...     field='quantity',
         ...     stock_available=product.stock,
-        ...     quantity_requested=quantity
+        ...     quantity_requested=quantity,
+        ...     log_context={'sale_id': sale.id, 'product_id': product.id}
         ... )
         
         >>> return error_response(
         ...     error_type='permission',
         ...     message='Acceso denegado',
         ...     details='Solo cajeros y administradores pueden finalizar ventas',
-        ...     status_code=403
+        ...     status_code=403,
+        ...     log_context={'sale_id': sale_id}
         ... )
     """
+    # Generar ID único para el error
+    error_id = generate_error_id()
+    
+    # Log automático del error con contexto
+    log_error(
+        error_type=error_type,
+        message=message,
+        error_id=error_id,
+        context=log_context or {}
+    )
+    
     response_data = {
         'error': message,
         'type': error_type,
+        'error_id': error_id,
         'timestamp': datetime.utcnow().isoformat()
     }
     
@@ -53,7 +172,7 @@ def error_response(error_type: str, message: str, details: Optional[str] = None,
     if field:
         response_data['field'] = field
     
-    # Añadir datos adicionales
+    # Añadir datos adicionales (excluyendo log_context que es solo para logging interno)
     response_data.update(kwargs)
     
     return jsonify(response_data), status_code

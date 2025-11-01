@@ -1,4 +1,8 @@
 import os
+import logging
+from logging.handlers import RotatingFileHandler
+import sys
+
 # Configure timezone to GMT -4:00
 os.environ['TZ'] = 'GMT+4'  # GMT+4 means UTC-4 (4 hours behind UTC)
 
@@ -9,6 +13,75 @@ from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
+
+# Configure logging with rotation
+def setup_logging():
+    """
+    Configura logging centralizado con rotación de archivos
+    
+    Niveles de log:
+    - DEBUG: Información detallada para debugging
+    - INFO: Operaciones exitosas y flujo normal
+    - WARNING: Validaciones fallidas, errores esperados
+    - ERROR: Errores inesperados del servidor
+    - CRITICAL: Errores críticos del sistema
+    """
+    # Crear directorio de logs si no existe
+    log_dir = 'logs'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    # Configurar formato de log detallado
+    log_format = logging.Formatter(
+        '[%(asctime)s] %(levelname)s [%(name)s:%(lineno)d] - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # Handler para archivo con rotación (10 MB por archivo, mantener 10 archivos)
+    file_handler = RotatingFileHandler(
+        filename=os.path.join(log_dir, 'pos_app.log'),
+        maxBytes=10 * 1024 * 1024,  # 10 MB
+        backupCount=10,
+        encoding='utf-8'
+    )
+    file_handler.setFormatter(log_format)
+    file_handler.setLevel(logging.INFO)
+    
+    # Handler para archivo de errores separado
+    error_handler = RotatingFileHandler(
+        filename=os.path.join(log_dir, 'pos_errors.log'),
+        maxBytes=10 * 1024 * 1024,  # 10 MB
+        backupCount=10,
+        encoding='utf-8'
+    )
+    error_handler.setFormatter(log_format)
+    error_handler.setLevel(logging.ERROR)
+    
+    # Handler para consola (solo en desarrollo)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(log_format)
+    console_handler.setLevel(logging.DEBUG if os.environ.get("ENVIRONMENT") != "production" else logging.INFO)
+    
+    # Configurar logger raíz
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    
+    # Limpiar handlers existentes
+    root_logger.handlers.clear()
+    
+    # Añadir handlers
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(error_handler)
+    root_logger.addHandler(console_handler)
+    
+    # Reducir verbosidad de librerías externas
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
+    logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+    
+    logging.info("Sistema de logging configurado correctamente")
+
+# Inicializar logging al arrancar la aplicación
+setup_logging()
 
 # create the app
 app = Flask(__name__)
