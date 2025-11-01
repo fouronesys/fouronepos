@@ -10,7 +10,8 @@ import os
 import logging
 from receipt_generator import generate_pdf_receipt, generate_thermal_receipt_text
 import utils
-from utils import get_company_info_for_receipt, validate_ncf, error_response
+from utils import (get_company_info_for_receipt, validate_ncf, error_response,
+                  log_error, log_success, generate_error_id)
 from flask_wtf.csrf import validate_csrf
 from werkzeug.exceptions import BadRequest
 
@@ -281,6 +282,17 @@ def create_sale():
         db.session.add(sale)
         db.session.commit()
         
+        # Log de operación exitosa
+        log_success(
+            operation='sale_created',
+            message=f'Venta creada exitosamente',
+            context={
+                'sale_id': sale.id,
+                'table_id': sale.table_id,
+                'has_cash_register': bool(sale.cash_register_id)
+            }
+        )
+        
         return jsonify({
             'id': sale.id,
             'status': sale.status,
@@ -290,7 +302,12 @@ def create_sale():
         
     except IntegrityError as e:
         db.session.rollback()
-        logger.error(f"Database integrity error creating sale: {str(e)}", exc_info=True)
+        log_error(
+            error_type='server',
+            message=f'Error de integridad de datos al crear venta: {str(e)}',
+            context={'error_details': str(e)},
+            exc_info=True
+        )
         return error_response(
             error_type='server',
             message='Error de integridad de datos',
@@ -299,12 +316,16 @@ def create_sale():
         )
     except Exception as e:
         db.session.rollback()
-        logger.exception(f"Unexpected error creating sale")
+        log_error(
+            error_type='server',
+            message=f'Error inesperado al crear venta: {str(e)}',
+            context={},
+            exc_info=True
+        )
         return error_response(
             error_type='server',
             message='Error al crear la venta',
             details='Ocurrió un error inesperado. Por favor contacte al administrador.',
-            error_id=f'ERR_CREATE_SALE_{int(time.time())}',
             status_code=500
         )
 
@@ -545,6 +566,20 @@ def add_sale_item(sale_id):
         # Commit the transaction
         db.session.commit()
         
+        # Log de operación exitosa
+        log_success(
+            operation='sale_item_added',
+            message=f'Producto agregado a venta',
+            context={
+                'sale_id': sale_id,
+                'product_id': product.id,
+                'product_name': product.name,
+                'quantity': sale_item.quantity,
+                'total_price': float(sale_item.total_price),
+                'sale_total': float(sale.total)
+            }
+        )
+        
         return jsonify({
             'id': sale_item.id,
             'product_name': product.name,
@@ -559,34 +594,47 @@ def add_sale_item(sale_id):
     except ValueError as e:
         # Errores de validación de negocio
         db.session.rollback()
-        logger.warning(f"Validation error adding item to sale {sale_id}: {str(e)}")
+        log_error(
+            error_type='validation',
+            message=f'Error de validación al agregar item a venta {sale_id}: {str(e)}',
+            context={'sale_id': sale_id, 'error_details': str(e)}
+        )
         return error_response(
             error_type='validation',
             message='Error de validación',
             details=str(e),
-            sale_id=sale_id
+            log_context={'sale_id': sale_id}
         )
     except IntegrityError as e:
         # Errores de integridad de base de datos
         db.session.rollback()
-        logger.error(f"Database integrity error adding item to sale {sale_id}: {str(e)}", exc_info=True)
+        log_error(
+            error_type='server',
+            message=f'Error de integridad de datos al agregar item a venta {sale_id}: {str(e)}',
+            context={'sale_id': sale_id, 'error_details': str(e)},
+            exc_info=True
+        )
         return error_response(
             error_type='server',
             message='Error de integridad de datos',
             details='Los datos enviados violan restricciones de la base de datos',
-            sale_id=sale_id,
+            log_context={'sale_id': sale_id},
             status_code=409
         )
     except Exception as e:
         # Errores inesperados
         db.session.rollback()
-        logger.exception(f"Unexpected error adding item to sale {sale_id}")
+        log_error(
+            error_type='server',
+            message=f'Error inesperado al agregar item a venta {sale_id}: {str(e)}',
+            context={'sale_id': sale_id},
+            exc_info=True
+        )
         return error_response(
             error_type='server',
             message='Error interno del servidor',
             details='Ocurrió un error inesperado. Por favor contacte al administrador.',
-            sale_id=sale_id,
-            error_id=f'ERR_ADD_ITEM_{int(time.time())}',
+            log_context={'sale_id': sale_id},
             status_code=500
         )
 
@@ -1075,6 +1123,23 @@ def finalize_sale(sale_id):
         # Commit the transaction
         db.session.commit()
         
+        # Log de operación crítica exitosa
+        log_success(
+            operation='sale_finalized',
+            message=f'Venta finalizada y NCF asignado',
+            context={
+                'sale_id': sale.id,
+                'ncf': sale.ncf,
+                'ncf_type': ncf_type,
+                'total': float(sale.total),
+                'payment_method': payment_method,
+                'items_count': len(sale.sale_items),
+                'customer_name': sale.customer_name or 'N/A',
+                'customer_rnc': sale.customer_rnc or 'N/A',
+                'cash_register_id': sale.cash_register_id
+            }
+        )
+        
         # If ANY part fails, everything rolls back and no NCF is consumed
         
         # Success response data
@@ -1158,12 +1223,16 @@ def finalize_sale(sale_id):
     except ValueError as e:
         # Handle business logic errors (no sale, wrong status, no NCF sequence, exhausted sequence, stock issues)
         db.session.rollback()
-        logger.warning(f"Business logic error finalizing sale {sale_id}: {str(e)}")
+        log_error(
+            error_type='business',
+            message=f'Error de lógica de negocio al finalizar venta {sale_id}: {str(e)}',
+            context={'sale_id': sale_id, 'error_details': str(e)}
+        )
         return error_response(
             error_type='business',
             message='Error de validación',
             details=str(e),
-            sale_id=sale_id,
+            log_context={'sale_id': sale_id},
             user_message=str(e)
         )
         
@@ -1171,7 +1240,12 @@ def finalize_sale(sale_id):
         # Handle database constraint violations
         db.session.rollback()
         error_msg = str(e)
-        logger.error(f"Database integrity error finalizing sale {sale_id}: {error_msg}", exc_info=True)
+        log_error(
+            error_type='server',
+            message=f'Error de integridad de datos al finalizar venta {sale_id}: {error_msg}',
+            context={'sale_id': sale_id, 'error_details': error_msg},
+            exc_info=True
+        )
         
         # Detectar error específico de NCF duplicado
         if 'unique constraint' in error_msg.lower() and 'ncf' in error_msg.lower():
