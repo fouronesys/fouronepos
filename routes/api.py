@@ -692,6 +692,31 @@ def finalize_sale(sale_id):
         # Use formatted RNC for consistency
         customer_rnc = rnc_validation['formatted']
     
+    # FASE 5: Validar que cliente sea requerido para NCF de crédito fiscal
+    if ncf_type and ncf_type.lower() == 'credito_fiscal':
+        # Para comprobantes de crédito fiscal es OBLIGATORIO tener datos del cliente
+        if not customer_name or not customer_name.strip():
+            logger.warning(f"Missing customer name for credito_fiscal NCF in sale {sale_id}")
+            return error_response(
+                error_type='validation',
+                message='Cliente requerido para Crédito Fiscal',
+                details='Los comprobantes de Crédito Fiscal requieren el nombre del cliente para cumplir con las normas de la DGII',
+                field='client_name',
+                ncf_type=ncf_type,
+                user_message='Debe proporcionar el nombre del cliente para emitir un Comprobante de Crédito Fiscal'
+            )
+        
+        if not customer_rnc or not customer_rnc.strip():
+            logger.warning(f"Missing customer RNC for credito_fiscal NCF in sale {sale_id}")
+            return error_response(
+                error_type='validation',
+                message='RNC requerido para Crédito Fiscal',
+                details='Los comprobantes de Crédito Fiscal requieren el RNC/Cédula del cliente para cumplir con las normas de la DGII',
+                field='client_rnc',
+                ncf_type=ncf_type,
+                user_message='Debe proporcionar el RNC/Cédula del cliente para emitir un Comprobante de Crédito Fiscal'
+            )
+    
     # NEW: Get service charge (propina) option
     apply_service_charge = data.get('apply_service_charge', False)
     service_charge_rate = 0.10  # 10% standard tip rate in Dominican Republic

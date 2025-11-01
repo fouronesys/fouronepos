@@ -22,6 +22,7 @@ const POSPage = ({ user, onLogout }) => {
   const [validationErrors, setValidationErrors] = useState({});
   const [saleError, setSaleError] = useState(null);
   const [currentStep, setCurrentStep] = useState(null);
+  const [ncfType, setNcfType] = useState('consumo'); // FASE 5: Tipo de NCF seleccionado
 
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
@@ -338,6 +339,17 @@ const POSPage = ({ user, onLogout }) => {
   };
 
   const clearCart = () => {
+    // FASE 5: Confirmación para operación de alto riesgo (vaciar carrito)
+    if (cart.length > 0) {
+      const itemCount = cart.length;
+      const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+      const confirmMessage = `¿Está seguro de que desea vaciar el carrito?\n\nSe eliminarán ${itemCount} producto(s) diferentes (${totalItems} unidades en total).`;
+      
+      if (!window.confirm(confirmMessage)) {
+        return; // Usuario canceló la operación
+      }
+    }
+    
     setCart([]);
     localStorage.removeItem('pos_cart');
     toast.success('Carrito vaciado');
@@ -438,6 +450,16 @@ const POSPage = ({ user, onLogout }) => {
     setCurrentStep(null);
     const errors = {};
 
+    // FASE 5: Confirmación para ventas de montos muy grandes (> RD$ 100,000)
+    const HIGH_VALUE_THRESHOLD = 100000;
+    if (previewTotal > HIGH_VALUE_THRESHOLD) {
+      const confirmMessage = `⚠️ VENTA DE MONTO ELEVADO\n\nEl total de esta venta es RD$ ${previewTotal.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n\n¿Está seguro de que desea procesar esta venta?`;
+      
+      if (!window.confirm(confirmMessage)) {
+        return; // Usuario canceló la operación
+      }
+    }
+
     // Validar método de pago
     const paymentValidation = validatePaymentMethod(paymentMethod);
     if (!paymentValidation.valid) {
@@ -454,6 +476,23 @@ const POSPage = ({ user, onLogout }) => {
         errors.cashReceived = cashValidation.error;
         setValidationErrors(errors);
         toast.error(cashValidation.error);
+        return;
+      }
+    }
+
+    // FASE 5: Validar que cliente sea requerido para NCF de crédito fiscal
+    if (ncfType === 'credito_fiscal') {
+      if (!customerData.name || customerData.name.trim() === '') {
+        errors.customerName = 'El nombre del cliente es obligatorio para Comprobantes de Crédito Fiscal';
+        setValidationErrors(errors);
+        toast.error('Debe proporcionar el nombre del cliente para Crédito Fiscal');
+        return;
+      }
+      
+      if (!customerData.rnc || customerData.rnc.trim() === '') {
+        errors.customerRnc = 'El RNC/Cédula es obligatorio para Comprobantes de Crédito Fiscal';
+        setValidationErrors(errors);
+        toast.error('Debe proporcionar el RNC/Cédula del cliente para Crédito Fiscal');
         return;
       }
     }
@@ -527,7 +566,7 @@ const POSPage = ({ user, onLogout }) => {
       setCurrentStep('Finalizando venta...');
       const finalizeData = {
         payment_method: paymentMethod,
-        ncf_type: 'consumo', // Default NCF type
+        ncf_type: ncfType, // FASE 5: Usar el tipo de NCF seleccionado por el usuario
         csrf_token: csrfToken
       };
       
@@ -560,6 +599,7 @@ const POSPage = ({ user, onLogout }) => {
       setValidationErrors({});
       setSaleError(null);
       setCurrentStep(null);
+      setNcfType('consumo'); // FASE 5: Resetear tipo de NCF al completar venta
       queryClient.invalidateQueries('sales');
       
     } catch (error) {
@@ -980,6 +1020,58 @@ const POSPage = ({ user, onLogout }) => {
                 {validationErrors.customerRnc && (
                   <div className="validation-error">
                     {validationErrors.customerRnc}
+                  </div>
+                )}
+              </div>
+
+              {/* FASE 5: Selector de tipo de NCF */}
+              <div className="ncf-type-selector">
+                <h5>Tipo de Comprobante Fiscal:</h5>
+                <div className="ncf-options">
+                  <label className="ncf-option">
+                    <input
+                      type="radio"
+                      name="ncfType"
+                      value="consumo"
+                      checked={ncfType === 'consumo'}
+                      onChange={(e) => setNcfType(e.target.value)}
+                    />
+                    <div className="ncf-option-content">
+                      <strong>Consumo</strong>
+                      <small>Para ventas al consumidor final</small>
+                    </div>
+                  </label>
+                  <label className="ncf-option">
+                    <input
+                      type="radio"
+                      name="ncfType"
+                      value="credito_fiscal"
+                      checked={ncfType === 'credito_fiscal'}
+                      onChange={(e) => setNcfType(e.target.value)}
+                    />
+                    <div className="ncf-option-content">
+                      <strong>Crédito Fiscal</strong>
+                      <small>Para empresas (requiere RNC)</small>
+                    </div>
+                  </label>
+                  <label className="ncf-option">
+                    <input
+                      type="radio"
+                      name="ncfType"
+                      value="sin_comprobante"
+                      checked={ncfType === 'sin_comprobante'}
+                      onChange={(e) => setNcfType(e.target.value)}
+                    />
+                    <div className="ncf-option-content">
+                      <strong>Sin Comprobante</strong>
+                      <small>No emitir NCF</small>
+                    </div>
+                  </label>
+                </div>
+                {ncfType === 'credito_fiscal' && (
+                  <div className="ncf-info-alert">
+                    <i className="bi bi-info-circle"></i>
+                    <span>Los Comprobantes de Crédito Fiscal requieren nombre y RNC del cliente</span>
                   </div>
                 )}
               </div>
@@ -1621,6 +1713,87 @@ const POSPage = ({ user, onLogout }) => {
         .customer-rnc {
           font-size: 0.875rem;
           color: var(--text-muted);
+        }
+
+        /* FASE 5: Estilos para selector de tipo de NCF */
+        .ncf-type-selector {
+          margin-bottom: var(--space-xl);
+        }
+
+        .ncf-type-selector h5 {
+          margin-bottom: var(--space-md);
+          font-size: 1rem;
+          font-weight: 600;
+        }
+
+        .ncf-options {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: var(--space-md);
+        }
+
+        .ncf-option {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: var(--space-sm);
+          padding: var(--space-md);
+          border: 2px solid var(--glass-border);
+          border-radius: var(--radius-lg);
+          cursor: pointer;
+          transition: all var(--transition-fast);
+          background: var(--glass-bg);
+        }
+
+        .ncf-option:hover {
+          border-color: var(--text-accent);
+          background: var(--bg-tertiary);
+        }
+
+        .ncf-option input[type="radio"] {
+          margin: 0;
+        }
+
+        .ncf-option input[type="radio"]:checked + .ncf-option-content {
+          color: var(--text-accent);
+        }
+
+        .ncf-option-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          gap: var(--space-xs);
+        }
+
+        .ncf-option-content strong {
+          font-weight: 600;
+          font-size: 0.95rem;
+        }
+
+        .ncf-option-content small {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+        }
+
+        .ncf-info-alert {
+          margin-top: var(--space-md);
+          padding: var(--space-md);
+          background: rgba(59, 130, 246, 0.1);
+          border: 1px solid rgba(59, 130, 246, 0.3);
+          border-radius: var(--radius-lg);
+          display: flex;
+          align-items: center;
+          gap: var(--space-sm);
+          color: #60a5fa;
+        }
+
+        .ncf-info-alert i {
+          font-size: 1.25rem;
+        }
+
+        .ncf-info-alert span {
+          font-size: 0.875rem;
         }
 
         .modal-footer {
