@@ -272,9 +272,10 @@
 
 ---
 
-## FASE 6: Logging y Debugging 📋 PENDIENTE
-**Duración estimada:** 1 día  
-**Prioridad:** 🟡 MEDIA
+## FASE 6: Logging y Debugging ✅ COMPLETADA
+**Duración real:** 1 día  
+**Prioridad:** 🟡 MEDIA  
+**Fecha de finalización:** 1 de noviembre de 2025
 
 ### Objetivos:
 - Mejorar trazabilidad de errores
@@ -282,21 +283,88 @@
 - Añadir IDs únicos para rastrear errores
 
 ### Tareas:
-- [ ] 6.1. Añadir IDs únicos a errores del servidor
-- [ ] 6.2. Mejorar logging con contexto (usuario, venta, productos)
-- [ ] 6.3. Diferenciar niveles de log (WARNING, ERROR, CRITICAL)
-- [ ] 6.4. Crear función de logging centralizada
-- [ ] 6.5. Añadir logging de operaciones críticas exitosas
-- [ ] 6.6. Configurar rotation de logs
+- [x] 6.1. Añadir IDs únicos a errores del servidor
+- [x] 6.2. Mejorar logging con contexto (usuario, venta, productos)
+- [x] 6.3. Diferenciar niveles de log (WARNING, ERROR, CRITICAL)
+- [x] 6.4. Crear función de logging centralizada
+- [x] 6.5. Añadir logging de operaciones críticas exitosas
+- [x] 6.6. Configurar rotation de logs
 
 ### Criterios de éxito:
-- ✓ Todos los errores tienen ID único
-- ✓ Logs incluyen contexto completo
-- ✓ Niveles de log apropiados
-- ✓ Fácil rastreo de errores en producción
+- ✅ Todos los errores tienen ID único (generado automáticamente con UUID)
+- ✅ Logs incluyen contexto completo (user_id, username, role, sale_id, product_id, etc.)
+- ✅ Niveles de log apropiados (INFO, WARNING, ERROR según tipo de error)
+- ✅ Fácil rastreo de errores en producción (IDs únicos + contexto completo)
 
-### Estado: 📋 PENDIENTE
-**Completado:** 0/6 tareas (0%)
+### Estado: ✅ COMPLETADA
+**Completado:** 6/6 tareas (100%)
+
+### Implementación destacada:
+
+#### Funciones de logging centralizadas en `utils.py`:
+- **`generate_error_id()`**: Genera IDs únicos (UUID de 8 caracteres) para rastreo de errores
+- **`get_user_context()`**: Obtiene contexto automático del usuario actual (user_id, username, role)
+- **`log_error()`**: Logging centralizado de errores con contexto completo
+  - Niveles automáticos: WARNING para validation/business/permission, ERROR para server
+  - Contexto automático del usuario + contexto adicional personalizado
+  - Soporte para exc_info (stack traces)
+- **`log_success()`**: Logging de operaciones críticas exitosas con nivel INFO
+  - Registra operaciones exitosas (sale_created, sale_item_added, sale_finalized)
+  - Incluye contexto completo de la operación
+- **`error_response()` actualizada**: 
+  - Ahora incluye error_id único automáticamente
+  - Logging automático de errores con contexto
+  - Parámetro `log_context` para contexto adicional
+
+#### Sistema de rotación de logs en `main.py`:
+- **Configuración de archivos de log**:
+  - `logs/pos_app.log`: Todos los logs (INFO y superiores)
+  - `logs/pos_errors.log`: Solo errores (ERROR y superiores)
+  - Rotación automática: 10 MB por archivo, mantener 10 archivos históricos
+  - Encoding UTF-8 para soporte de caracteres especiales
+- **Formato de log detallado**:
+  ```
+  [2025-11-01 14:30:45] ERROR [routes.api:1250] - [A3B4C5D6] Error de integridad...
+  ```
+  - Timestamp
+  - Nivel de log
+  - Módulo y línea
+  - Error ID único
+  - Mensaje descriptivo
+- **Control de verbosidad**:
+  - Reducida verbosidad de werkzeug y sqlalchemy
+  - Nivel DEBUG en desarrollo, INFO en producción para consola
+
+#### Logging en operaciones críticas de `routes/api.py`:
+
+**Operaciones exitosas registradas:**
+1. **`create_sale`**: Log con sale_id, table_id, cash_register
+2. **`add_sale_item`**: Log con sale_id, product_id, quantity, totales
+3. **`finalize_sale`**: Log completo con:
+   - sale_id, ncf, ncf_type
+   - total, payment_method
+   - items_count
+   - customer_name, customer_rnc
+   - cash_register_id
+
+**Errores refactorizados:**
+- Todos los errores en create_sale, add_sale_item, finalize_sale ahora usan `log_error()`
+- Contexto completo incluido en cada error (sale_id, product_id, etc.)
+- Stack traces capturados con exc_info=True para errores de servidor
+
+### Beneficios implementados:
+1. **Trazabilidad completa**: Cada error tiene un ID único que permite rastrear toda la cadena de eventos
+2. **Contexto rico**: Logs incluyen automáticamente usuario, operación, y datos relevantes
+3. **Debugging facilitado**: Stack traces completos + contexto permiten reproducir errores
+4. **Auditoría mejorada**: Todas las operaciones críticas exitosas quedan registradas
+5. **Gestión automática**: Rotación de logs evita que los archivos crezcan indefinidamente
+6. **Separación de errores**: Archivo dedicado para errores facilita su revisión
+
+### Ejemplo de log generado:
+```
+[2025-11-01 14:32:10] INFO [utils:114] - [SUCCESS] sale_finalized: Venta finalizada y NCF asignado
+[2025-11-01 14:32:10] ERROR [utils:88] - [A1B2C3D4] Stock insuficiente para producto Coca Cola 2L
+```
 
 ---
 
@@ -336,16 +404,16 @@
 - **FASE 3:** ✅ COMPLETADA (7/7 - 100%)
 - **FASE 4:** ✅ COMPLETADA (6/6 - 100%)
 - **FASE 5:** ✅ COMPLETADA (6/6 - 100%)
-- **FASE 6:** 📋 PENDIENTE (0/6 - 0%)
+- **FASE 6:** ✅ COMPLETADA (6/6 - 100%)
 - **FASE 7:** 📋 PENDIENTE (0/6 - 0%)
 
 ### Por Prioridad:
 - 🔴 **ALTA:** Fases 1-3 (19/19 tareas - 100%) ✅ COMPLETADAS
-- 🟡 **MEDIA:** Fases 4-6 (12/18 tareas - 67%) 🔄 EN PROGRESO
+- 🟡 **MEDIA:** Fases 4-6 (18/18 tareas - 100%) ✅ COMPLETADAS
 - 🟢 **BAJA:** Fase 7 (0/6 tareas - 0%)
 
 ### Total:
-**31/43 tareas completadas (72%)**
+**37/43 tareas completadas (86%)**
 
 ---
 
@@ -446,6 +514,38 @@ Al completar todas las fases:
   
   - **Validación arquitectónica:** Flujo end-to-end verificado y aprobado
 
+- ✅ **FASE 6 COMPLETADA:** Logging y Debugging
+  - **Funciones de logging centralizadas creadas en `utils.py`:**
+    - `generate_error_id()`: IDs únicos UUID de 8 caracteres
+    - `get_user_context()`: Contexto automático del usuario (id, username, role)
+    - `log_error()`: Logging centralizado con niveles automáticos y contexto
+    - `log_success()`: Logging de operaciones exitosas con contexto completo
+    - `error_response()` actualizada: Ahora incluye error_id y logging automático
+  
+  - **Sistema de rotación de logs implementado en `main.py`:**
+    - Archivos separados: `logs/pos_app.log` (general) y `logs/pos_errors.log` (solo errores)
+    - Rotación automática: 10 MB por archivo, mantener 10 archivos históricos
+    - Formato detallado: timestamp, nivel, módulo, línea, error_id, mensaje
+    - Control de verbosidad: DEBUG en desarrollo, INFO en producción
+  
+  - **Logging de operaciones críticas en `routes/api.py`:**
+    - `create_sale`: Log de venta creada con sale_id y contexto
+    - `add_sale_item`: Log de producto agregado con totales y cantidades
+    - `finalize_sale`: Log completo con NCF, totales, cliente, método de pago
+    - Todos los errores refactorizados para usar `log_error()` con contexto completo
+  
+  - **Archivos modificados:**
+    - `utils.py` (funciones de logging)
+    - `main.py` (configuración de rotación de logs)
+    - `routes/api.py` (logging de operaciones y errores)
+  
+  - **Beneficios alcanzados:**
+    - Trazabilidad completa con IDs únicos
+    - Contexto rico en todos los logs (usuario, operación, datos)
+    - Debugging facilitado con stack traces + contexto
+    - Auditoría mejorada de operaciones exitosas
+    - Gestión automática de archivos de log
+
 ---
 
-**Última actualización:** 1 de noviembre de 2025 - FASE 5 completada (72% del plan total completado)
+**Última actualización:** 1 de noviembre de 2025 - FASE 6 completada (86% del plan total completado)

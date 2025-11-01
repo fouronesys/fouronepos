@@ -30,11 +30,23 @@ def api_head():
 
 def require_login():
     if 'user_id' not in session:
-        return jsonify({'error': 'No autorizado'}), 401
+        return error_response(
+            error_type='permission',
+            message='No autorizado',
+            details='Debe iniciar sesión para acceder a este recurso',
+            log_context={'endpoint': request.endpoint, 'method': request.method},
+            status_code=401
+        )
     
     user = models.User.query.get(session['user_id'])
     if not user:
-        return jsonify({'error': 'Usuario no encontrado'}), 401
+        return error_response(
+            error_type='not_found',
+            message='Usuario no encontrado',
+            details='La sesión hace referencia a un usuario que no existe en el sistema',
+            log_context={'user_id': session.get('user_id'), 'endpoint': request.endpoint},
+            status_code=401
+        )
     
     return user
 
@@ -53,11 +65,23 @@ def validate_csrf_token():
             csrf_token = request.headers.get('X-CSRFToken')
         
         if not csrf_token:
-            return jsonify({'error': 'Token de seguridad requerido (csrf_token)'}), 400
+            return error_response(
+                error_type='validation',
+                message='Token de seguridad requerido',
+                details='Debe proporcionar un token CSRF en el header X-CSRFToken o en el campo csrf_token del JSON',
+                field='csrf_token',
+                log_context={'endpoint': request.endpoint, 'method': request.method}
+            )
             
         validate_csrf(csrf_token)
     except BadRequest:
-        return jsonify({'error': 'Token de seguridad inválido'}), 400
+        return error_response(
+            error_type='validation',
+            message='Token de seguridad inválido',
+            details='El token CSRF proporcionado no es válido o ha expirado',
+            field='csrf_token',
+            log_context={'endpoint': request.endpoint, 'method': request.method}
+        )
     return None  # Success
 
 
@@ -1323,12 +1347,28 @@ def remove_sale_item(sale_id, item_id):
                 sale.tax_amount = 0
                 sale.total = 0
         
+        log_success(
+            operation='sale_item_removed',
+            message=f'Producto eliminado de venta',
+            context={'sale_id': sale_id, 'item_id': item_id, 'new_total': float(sale.total)}
+        )
         return jsonify({'success': True, 'new_total': sale.total})
     
     except ValueError as e:
-        return jsonify({'error': str(e)}), 400
+        return error_response(
+            error_type='validation',
+            message='Error de validación',
+            details=str(e),
+            log_context={'sale_id': sale_id, 'item_id': item_id}
+        )
     except Exception as e:
-        return jsonify({'error': f'Error interno: {str(e)}'}), 500
+        return error_response(
+            error_type='server',
+            message='Error interno del servidor',
+            details=f'Error inesperado al eliminar producto de venta: {str(e)}',
+            log_context={'sale_id': sale_id, 'item_id': item_id},
+            status_code=500
+        )
 
 
 @bp.route('/sales/<int:sale_id>/items/<int:item_id>/quantity', methods=['PUT'])
@@ -1341,7 +1381,14 @@ def update_item_quantity(sale_id, item_id):
     new_quantity = data.get('quantity', 1)
     
     if new_quantity <= 0:
-        return jsonify({'error': 'La cantidad debe ser mayor a 0'}), 400
+        return error_response(
+            error_type='validation',
+            message='Cantidad inválida',
+            details='La cantidad debe ser mayor a 0',
+            field='quantity',
+            value_received=new_quantity,
+            log_context={'sale_id': sale_id, 'item_id': item_id}
+        )
     
     try:
         with db.session.begin():
@@ -1374,6 +1421,11 @@ def update_item_quantity(sale_id, item_id):
             sale.tax_amount = sale.subtotal * 0.18
             sale.total = sale.subtotal + sale.tax_amount
         
+        log_success(
+            operation='sale_item_quantity_updated',
+            message=f'Cantidad actualizada en venta',
+            context={'sale_id': sale_id, 'item_id': item_id, 'new_quantity': new_quantity}
+        )
         return jsonify({
             'success': True,
             'new_quantity': sale_item.quantity,
@@ -1382,9 +1434,20 @@ def update_item_quantity(sale_id, item_id):
         })
     
     except ValueError as e:
-        return jsonify({'error': str(e)}), 400
+        return error_response(
+            error_type='validation',
+            message='Error de validación',
+            details=str(e),
+            log_context={'sale_id': sale_id, 'item_id': item_id, 'new_quantity': new_quantity}
+        )
     except Exception as e:
-        return jsonify({'error': f'Error interno: {str(e)}'}), 500
+        return error_response(
+            error_type='server',
+            message='Error interno del servidor',
+            details=f'Error inesperado al actualizar cantidad: {str(e)}',
+            log_context={'sale_id': sale_id, 'item_id': item_id},
+            status_code=500
+        )
 
 
 @bp.route('/tables/<int:table_id>/close', methods=['POST'])
