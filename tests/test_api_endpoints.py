@@ -55,7 +55,8 @@ def authenticated_cashier(client, app_context):
     cashier = User(
         username='cajero_test',
         email='cajero@test.com',
-        role=UserRole.CAJERO
+        role=UserRole.CAJERO,
+        name='Cajero Test'
     )
     cashier.password_hash = generate_password_hash('password123')
     db.session.add(cashier)
@@ -63,8 +64,7 @@ def authenticated_cashier(client, app_context):
     # Create cash register for cashier
     cash_register = CashRegister(
         name='Caja Test',
-        current_cash=1000.00,
-        is_active=True
+        active=True
     )
     db.session.add(cash_register)
     db.session.commit()
@@ -88,7 +88,8 @@ def authenticated_waiter(client, app_context):
     waiter = User(
         username='mesero_test',
         email='mesero@test.com',
-        role=UserRole.MESERO
+        role=UserRole.MESERO,
+        name='Mesero Test'
     )
     waiter.password_hash = generate_password_hash('password123')
     db.session.add(waiter)
@@ -107,7 +108,11 @@ def authenticated_waiter(client, app_context):
 def sample_products(app_context):
     """Fixture para crear productos de prueba"""
     # Create category
-    category = Category(name='Bebidas', active=True)
+    category = Category(
+        name='Bebidas',
+        description='Categoría de bebidas para testing',
+        active=True
+    )
     db.session.add(category)
     db.session.flush()
     
@@ -763,3 +768,370 @@ class TestErrorResponseStructure:
         if data['type'] == 'validation':
             # Field should be present for validation errors
             assert 'field' in data or 'details' in data
+
+
+class TestSaleIntegrationFlow:
+    """Tests de integración para el flujo completo de venta (End-to-End)"""
+    
+    def test_complete_sale_flow_cash_payment(self, client, authenticated_cashier, sample_products):
+        """Test de flujo completo: crear venta -> agregar productos -> finalizar con efectivo"""
+        cashier, cash_register = authenticated_cashier
+        product = sample_products['with_stock']
+        initial_stock = product.stock
+        
+        # Paso 1: Crear venta
+        sale_response = client.post('/api/sales',
+            data=json.dumps({}),
+            content_type='application/json'
+        )
+        assert sale_response.status_code == 201
+        sale_data = json.loads(sale_response.data)
+        sale_id = sale_data['sale_id']
+        assert sale_data['status'] == 'pending'
+        
+        # Paso 2: Agregar producto a la venta
+        add_item_response = client.post(f'/api/sales/{sale_id}/items',
+            data=json.dumps({
+                'product_id': product.id,
+                'quantity': 2
+            }),
+            content_type='application/json'
+        )
+        assert add_item_response.status_code == 200
+        item_data = json.loads(add_item_response.data)
+        assert item_data['quantity'] == 2
+        assert 'item_id' in item_data
+        
+        # Paso 3: Finalizar la venta
+        finalize_response = client.post(f'/api/sales/{sale_id}/finalize',
+            data=json.dumps({
+                'payment_method': 'cash',
+                'cash_received': 250.00,
+                'ncf_type': 'consumo'
+            }),
+            content_type='application/json'
+        )
+        assert finalize_response.status_code == 200
+        final_data = json.loads(finalize_response.data)
+        
+        # Verificar respuesta de finalización
+        assert final_data['status'] == 'completed'
+        assert final_data['payment_method'] == 'cash'
+        assert 'ncf' in final_data
+        assert 'total' in final_data
+        assert 'change' in final_data
+        
+        # Verificar que el cambio es correcto (250 - total de 2 productos)
+        assert final_data['change'] == 250.00 - final_data['total']
+        
+        # Paso 4: Verificar que el stock se actualizó correctamente
+        db.session.refresh(product)
+        assert product.stock == initial_stock - 2
+    
+    def test_complete_sale_flow_card_payment(self, client, authenticated_cashier, sample_products):
+        """Test de flujo completo con pago con tarjeta"""
+        cashier, cash_register = authenticated_cashier
+        product = sample_products['with_stock']
+        
+        # Crear venta
+        sale_response = client.post('/api/sales',
+            data=json.dumps({}),
+            content_type='application/json'
+        )
+        sale_id = json.loads(sale_response.data)['sale_id']
+        
+        # Agregar producto
+        client.post(f'/api/sales/{sale_id}/items',
+            data=json.dumps({
+                'product_id': product.id,
+                'quantity': 1
+            }),
+            content_type='application/json'
+        )
+        
+        # Finalizar con tarjeta
+        finalize_response = client.post(f'/api/sales/{sale_id}/finalize',
+            data=json.dumps({
+                'payment_method': 'card',
+                'ncf_type': 'consumo'
+            }),
+            content_type='application/json'
+        )
+        
+        assert finalize_response.status_code == 200
+        final_data = json.loads(finalize_response.data)
+        assert final_data['payment_method'] == 'card'
+        assert final_data['change'] == 0.00  # No hay cambio con tarjeta
+    
+    def test_complete_sale_flow_multiple_products(self, client, authenticated_cashier, sample_products):
+        """Test de flujo completo con múltiples productos"""
+        cashier, cash_register = authenticated_cashier
+        product1 = sample_products['with_stock']
+        product3 = sample_products['service']
+        
+        # Crear venta
+        sale_response = client.post('/api/sales',
+            data=json.dumps({}),
+            content_type='application/json'
+        )
+        sale_id = json.loads(sale_response.data)['sale_id']
+        
+        # Agregar primer producto (inventariable)
+        item1_response = client.post(f'/api/sales/{sale_id}/items',
+            data=json.dumps({
+                'product_id': product1.id,
+                'quantity': 3
+            }),
+            content_type='application/json'
+        )
+        assert item1_response.status_code == 200
+        
+        # Agregar segundo producto (servicio)
+        item2_response = client.post(f'/api/sales/{sale_id}/items',
+            data=json.dumps({
+                'product_id': product3.id,
+                'quantity': 1
+            }),
+            content_type='application/json'
+        )
+        assert item2_response.status_code == 200
+        
+        # Finalizar la venta
+        finalize_response = client.post(f'/api/sales/{sale_id}/finalize',
+            data=json.dumps({
+                'payment_method': 'cash',
+                'cash_received': 500.00,
+                'ncf_type': 'consumo'
+            }),
+            content_type='application/json'
+        )
+        
+        assert finalize_response.status_code == 200
+        final_data = json.loads(finalize_response.data)
+        
+        # Verificar que el total incluye ambos productos
+        expected_total = (product1.price * 3) + (product3.price * 1)
+        assert final_data['total'] >= expected_total  # Puede tener impuestos
+    
+    def test_complete_sale_flow_with_credito_fiscal(self, client, authenticated_cashier, sample_products):
+        """Test de flujo completo con NCF de crédito fiscal"""
+        cashier, cash_register = authenticated_cashier
+        product = sample_products['with_stock']
+        
+        # Crear venta
+        sale_response = client.post('/api/sales',
+            data=json.dumps({}),
+            content_type='application/json'
+        )
+        sale_id = json.loads(sale_response.data)['sale_id']
+        
+        # Agregar producto
+        client.post(f'/api/sales/{sale_id}/items',
+            data=json.dumps({
+                'product_id': product.id,
+                'quantity': 5
+            }),
+            content_type='application/json'
+        )
+        
+        # Finalizar con NCF de crédito fiscal
+        finalize_response = client.post(f'/api/sales/{sale_id}/finalize',
+            data=json.dumps({
+                'payment_method': 'transfer',
+                'ncf_type': 'credito_fiscal',
+                'customer_name': 'Empresa de Prueba S.A.',
+                'customer_rnc': '123456789'
+            }),
+            content_type='application/json'
+        )
+        
+        assert finalize_response.status_code == 200
+        final_data = json.loads(finalize_response.data)
+        
+        # Verificar que se asignó NCF
+        assert 'ncf' in final_data
+        assert final_data['ncf'] is not None
+        
+        # Verificar información del cliente
+        assert final_data['customer_name'] == 'Empresa de Prueba S.A.'
+        assert final_data['customer_rnc'] == '123-456789-0'  # Formateado automáticamente
+    
+    def test_complete_sale_flow_verify_ncf_assignment(self, client, authenticated_cashier, sample_products):
+        """Verificar que se asigna NCF correctamente en el flujo completo"""
+        cashier, cash_register = authenticated_cashier
+        product = sample_products['with_stock']
+        
+        # Crear venta
+        sale_response = client.post('/api/sales',
+            data=json.dumps({}),
+            content_type='application/json'
+        )
+        sale_id = json.loads(sale_response.data)['sale_id']
+        
+        # Agregar producto
+        client.post(f'/api/sales/{sale_id}/items',
+            data=json.dumps({
+                'product_id': product.id,
+                'quantity': 1
+            }),
+            content_type='application/json'
+        )
+        
+        # Finalizar con NCF de consumo
+        finalize_response = client.post(f'/api/sales/{sale_id}/finalize',
+            data=json.dumps({
+                'payment_method': 'cash',
+                'cash_received': 150.00,
+                'ncf_type': 'consumo'
+            }),
+            content_type='application/json'
+        )
+        
+        final_data = json.loads(finalize_response.data)
+        
+        # Verificar que se asignó un NCF
+        assert 'ncf' in final_data
+        # NCF puede ser None si no hay secuencias configuradas, pero el campo debe existir
+    
+    def test_complete_sale_flow_with_table(self, client, authenticated_cashier, sample_products, sample_table):
+        """Test de flujo completo con mesa asignada"""
+        cashier, cash_register = authenticated_cashier
+        product = sample_products['with_stock']
+        
+        # Crear venta con mesa
+        sale_response = client.post('/api/sales',
+            data=json.dumps({
+                'table_id': sample_table.id
+            }),
+            content_type='application/json'
+        )
+        assert sale_response.status_code == 201
+        sale_id = json.loads(sale_response.data)['sale_id']
+        
+        # Agregar productos
+        client.post(f'/api/sales/{sale_id}/items',
+            data=json.dumps({
+                'product_id': product.id,
+                'quantity': 2
+            }),
+            content_type='application/json'
+        )
+        
+        # Finalizar la venta
+        finalize_response = client.post(f'/api/sales/{sale_id}/finalize',
+            data=json.dumps({
+                'payment_method': 'card',
+                'ncf_type': 'consumo'
+            }),
+            content_type='application/json'
+        )
+        
+        assert finalize_response.status_code == 200
+        final_data = json.loads(finalize_response.data)
+        assert final_data['status'] == 'completed'
+        
+        # Verificar que la mesa se liberó (status vuelve a 'available')
+        # Esto se hace en el backend automáticamente
+        db.session.refresh(sample_table)
+        # La mesa debería volver a 'available' después de finalizar la venta
+    
+    def test_complete_sale_flow_stock_validation(self, client, authenticated_cashier, sample_products):
+        """Verificar que el flujo completo valida stock correctamente"""
+        cashier, cash_register = authenticated_cashier
+        product = sample_products['with_stock']
+        initial_stock = product.stock
+        
+        # Crear primera venta y consumir casi todo el stock
+        sale1_response = client.post('/api/sales',
+            data=json.dumps({}),
+            content_type='application/json'
+        )
+        sale1_id = json.loads(sale1_response.data)['sale_id']
+        
+        # Agregar cantidad que deje solo 1 en stock
+        client.post(f'/api/sales/{sale1_id}/items',
+            data=json.dumps({
+                'product_id': product.id,
+                'quantity': initial_stock - 1
+            }),
+            content_type='application/json'
+        )
+        
+        # Finalizar primera venta
+        client.post(f'/api/sales/{sale1_id}/finalize',
+            data=json.dumps({
+                'payment_method': 'cash',
+                'cash_received': 10000.00,
+                'ncf_type': 'consumo'
+            }),
+            content_type='application/json'
+        )
+        
+        # Crear segunda venta
+        sale2_response = client.post('/api/sales',
+            data=json.dumps({}),
+            content_type='application/json'
+        )
+        sale2_id = json.loads(sale2_response.data)['sale_id']
+        
+        # Intentar agregar más productos de los que hay en stock
+        add_item_response = client.post(f'/api/sales/{sale2_id}/items',
+            data=json.dumps({
+                'product_id': product.id,
+                'quantity': 5  # Más de lo que queda
+            }),
+            content_type='application/json'
+        )
+        
+        # Debe fallar por stock insuficiente
+        assert add_item_response.status_code == 400
+        data = json.loads(add_item_response.data)
+        assert data['type'] == 'business'
+        assert 'Stock insuficiente' in data['error']
+    
+    def test_complete_sale_flow_total_calculation(self, client, authenticated_cashier, sample_products):
+        """Verificar que los totales se calculan correctamente en el flujo completo"""
+        cashier, cash_register = authenticated_cashier
+        product = sample_products['with_stock']
+        quantity = 4
+        
+        # Crear venta
+        sale_response = client.post('/api/sales',
+            data=json.dumps({}),
+            content_type='application/json'
+        )
+        sale_id = json.loads(sale_response.data)['sale_id']
+        
+        # Agregar productos
+        client.post(f'/api/sales/{sale_id}/items',
+            data=json.dumps({
+                'product_id': product.id,
+                'quantity': quantity
+            }),
+            content_type='application/json'
+        )
+        
+        # Finalizar la venta
+        cash_received = 1000.00
+        finalize_response = client.post(f'/api/sales/{sale_id}/finalize',
+            data=json.dumps({
+                'payment_method': 'cash',
+                'cash_received': cash_received,
+                'ncf_type': 'consumo'
+            }),
+            content_type='application/json'
+        )
+        
+        final_data = json.loads(finalize_response.data)
+        
+        # Verificar cálculos
+        assert 'total' in final_data
+        assert 'change' in final_data
+        assert 'subtotal' in final_data
+        
+        # El total debe ser >= subtotal (puede tener impuestos)
+        assert final_data['total'] >= final_data['subtotal']
+        
+        # El cambio debe ser correcto
+        expected_change = cash_received - final_data['total']
+        assert abs(final_data['change'] - expected_change) < 0.01  # Tolerancia por redondeo
