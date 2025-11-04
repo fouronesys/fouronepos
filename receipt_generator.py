@@ -652,3 +652,211 @@ def generate_sales_report_pdf(sales: List[Any], period_name: str, start_date: da
     
     doc.build(content)
     return output_path
+
+
+def generate_products_report_pdf(product_stats: List[Any], period_name: str, start_date: datetime, end_date: datetime, limit: int = 50) -> str:
+    """
+    Generate a comprehensive products report PDF
+    
+    Args:
+        product_stats: List of product statistics query results
+        period_name: Name of the period (e.g., "Día 23/10/2025")
+        start_date: Start date of the period
+        end_date: End date of the period
+        limit: Number of products to include (default 50)
+        
+    Returns:
+        Path to generated PDF
+    """
+    import os
+    from utils import get_company_info_for_receipt
+    
+    company_info = get_company_info_for_receipt()
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"reporte_productos_{timestamp}.pdf"
+    output_path = os.path.join('static', 'receipts', filename)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    doc = SimpleDocTemplate(
+        output_path,
+        pagesize=letter,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=40,
+        bottomMargin=40
+    )
+    
+    content = []
+    styles = getSampleStyleSheet()
+    
+    styles.add(ParagraphStyle(
+        name='ReportTitle',
+        fontSize=16,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold',
+        spaceAfter=12
+    ))
+    
+    styles.add(ParagraphStyle(
+        name='SectionHeader',
+        fontSize=12,
+        alignment=TA_LEFT,
+        fontName='Helvetica-Bold',
+        spaceAfter=6,
+        spaceBefore=12
+    ))
+    
+    styles.add(ParagraphStyle(
+        name='NormalText',
+        fontSize=9,
+        alignment=TA_LEFT,
+        fontName='Helvetica'
+    ))
+    
+    styles.add(ParagraphStyle(
+        name='CompanyInfo',
+        fontSize=9,
+        alignment=TA_CENTER,
+        fontName='Helvetica'
+    ))
+    
+    content.append(Paragraph(company_info.get('business_name', 'Four One POS'), styles['ReportTitle']))
+    content.append(Paragraph(f"RNC: {company_info.get('rnc', 'N/A')}", styles['CompanyInfo']))
+    content.append(Paragraph(f"{company_info.get('address', '')}", styles['CompanyInfo']))
+    content.append(Spacer(1, 12))
+    
+    content.append(Paragraph(f"Reporte de Productos Más Vendidos - {period_name}", styles['ReportTitle']))
+    content.append(Paragraph(
+        f"Período: {start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}", 
+        styles['CompanyInfo']
+    ))
+    content.append(Paragraph(
+        f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", 
+        styles['CompanyInfo']
+    ))
+    content.append(Spacer(1, 20))
+    
+    if not product_stats:
+        content.append(Paragraph("No se encontraron datos para el período seleccionado.", styles['NormalText']))
+        doc.build(content)
+        return output_path
+    
+    total_quantity = sum(p.total_quantity for p in product_stats)
+    total_revenue = sum(p.total_revenue for p in product_stats)
+    
+    summary_data = [
+        ['Total de Productos:', str(len(product_stats))],
+        ['Unidades Vendidas:', f"{int(total_quantity):,}"],
+        ['Ingresos Totales:', format_currency_rd(total_revenue)],
+        ['Promedio por Producto:', format_currency_rd(total_revenue / len(product_stats)) if len(product_stats) > 0 else '$0.00']
+    ]
+    
+    summary_table = Table(summary_data, colWidths=[3*inch, 2*inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.lightblue),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+    ]))
+    
+    content.append(Paragraph("Resumen General", styles['SectionHeader']))
+    content.append(summary_table)
+    content.append(Spacer(1, 20))
+    
+    content.append(Paragraph(f"Top {min(limit, len(product_stats))} Productos Más Vendidos", styles['SectionHeader']))
+    
+    products_data = [['#', 'Producto', 'Categoría', 'Cantidad', 'Ingresos', 'Precio Prom.', 'Ganancia', 'Margen %']]
+    
+    for idx, product in enumerate(product_stats, 1):
+        total_cost = product.cost * product.total_quantity if product.cost else 0
+        profit = product.total_revenue - total_cost
+        profit_margin = (profit / product.total_revenue * 100) if product.total_revenue > 0 else 0
+        
+        category_name = product.category_name or 'Sin categoría'
+        product_name = product.name[:25] + '...' if len(product.name) > 27 else product.name
+        
+        products_data.append([
+            str(idx),
+            product_name,
+            category_name[:15] + '...' if len(category_name) > 17 else category_name,
+            f"{int(product.total_quantity):,}",
+            format_currency_rd(product.total_revenue),
+            format_currency_rd(product.avg_price),
+            format_currency_rd(profit),
+            f"{profit_margin:.1f}%"
+        ])
+    
+    products_table = Table(products_data, colWidths=[0.35*inch, 1.8*inch, 1.1*inch, 0.8*inch, 1*inch, 0.9*inch, 0.9*inch, 0.65*inch])
+    products_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.beige]),
+        ('ALIGN', (1, 1), (2, -1), 'LEFT'),
+    ]))
+    
+    content.append(products_table)
+    content.append(Spacer(1, 20))
+    
+    category_stats = {}
+    for product in product_stats:
+        category = product.category_name or 'Sin categoría'
+        if category not in category_stats:
+            category_stats[category] = {'quantity': 0, 'revenue': 0, 'count': 0}
+        category_stats[category]['quantity'] += product.total_quantity
+        category_stats[category]['revenue'] += product.total_revenue
+        category_stats[category]['count'] += 1
+    
+    if len(category_stats) > 1:
+        content.append(Paragraph("Resumen por Categoría", styles['SectionHeader']))
+        
+        category_data = [['Categoría', 'Productos', 'Cantidad', 'Ingresos', '% Total']]
+        
+        sorted_categories = sorted(category_stats.items(), key=lambda x: x[1]['revenue'], reverse=True)
+        
+        for category, stats in sorted_categories:
+            percentage = (stats['revenue'] / total_revenue * 100) if total_revenue > 0 else 0
+            category_display = category[:30] + '...' if len(category) > 32 else category
+            
+            category_data.append([
+                category_display,
+                str(stats['count']),
+                f"{int(stats['quantity']):,}",
+                format_currency_rd(stats['revenue']),
+                f"{percentage:.1f}%"
+            ])
+        
+        category_table = Table(category_data, colWidths=[2.2*inch, 1*inch, 1.2*inch, 1.5*inch, 0.8*inch])
+        category_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+            ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+        ]))
+        
+        content.append(category_table)
+    
+    content.append(Spacer(1, 30))
+    content.append(Paragraph("_" * 50, styles['NormalText']))
+    content.append(Paragraph("Firma Autorizada", styles['NormalText']))
+    
+    doc.build(content)
+    return output_path

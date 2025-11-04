@@ -151,23 +151,28 @@ function formatCurrency(amount) {
 }
 
 async function generateCustomReport(startDate, endDate, reportType) {
-    if (reportType !== 'sales') {
-        showReportPlaceholder(`Reporte de ${reportType} desde ${startDate} hasta ${endDate}`);
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/admin/api/sales-report?period=custom&start_date=${startDate}&end_date=${endDate}`);
-        const data = await response.json();
-        
-        if (data.success) {
-            displaySalesReport(data);
-        } else {
-            alert('Error al generar reporte: ' + data.error);
+    if (reportType === 'sales') {
+        try {
+            const response = await fetch(`/admin/api/sales-report?period=custom&start_date=${startDate}&end_date=${endDate}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                displaySalesReport(data);
+            } else {
+                alert('Error al generar reporte: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al cargar el reporte');
         }
-    } catch (error) {
-        console.error('Error:', error);
-        alert('Error al cargar el reporte');
+    } else if (reportType === 'products') {
+        await loadProductsReport('custom', startDate, endDate);
+    } else if (reportType === 'ncf') {
+        showReportPlaceholder(`Reporte de Comprobantes NCF desde ${startDate} hasta ${endDate}`);
+    } else if (reportType === 'users') {
+        showReportPlaceholder(`Reporte de Ventas por Usuario desde ${startDate} hasta ${endDate}`);
+    } else {
+        showReportPlaceholder(`Reporte de ${reportType} desde ${startDate} hasta ${endDate}`);
     }
 }
 
@@ -434,6 +439,411 @@ function generate606Report() {
 
 function generate607Report() {
     window.location.href = '/dgii/';
+}
+
+async function loadProductsReport(period, startDate = null, endDate = null) {
+    try {
+        let url = `/admin/api/products-report?period=${period}&limit=50`;
+        if (period === 'custom' && startDate && endDate) {
+            url += `&start_date=${startDate}&end_date=${endDate}`;
+        }
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success) {
+            displayProductsReport(data);
+        } else {
+            alert('Error al generar reporte: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error al cargar el reporte');
+    }
+}
+
+function displayProductsReport(data) {
+    const { summary, products_by_quantity, products_by_revenue, categories, period, period_name, start_date, end_date } = data;
+    
+    let html = `
+        <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h5>Reporte de Productos Más Vendidos</h5>
+                    <p class="text-muted mb-0">Período: ${period_name}</p>
+                </div>
+                <div>
+                    <button class="btn btn-danger" onclick="downloadProductsPDF('${period}', '${start_date}', '${end_date}')">
+                        <i class="bi bi-file-pdf"></i> Descargar PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="text-muted">Total Productos</h6>
+                        <h3>${summary.total_products}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="text-muted">Unidades Vendidas</h6>
+                        <h3>${summary.total_quantity_sold.toLocaleString()}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="text-muted">Ingresos Totales</h6>
+                        <h3 class="text-success">${formatCurrency(summary.total_revenue)}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="text-muted">Promedio por Producto</h6>
+                        <h3>${formatCurrency(summary.avg_revenue_per_product)}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6><i class="bi bi-trophy"></i> Top 10 Productos por Cantidad</h6>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="productsQuantityChart" style="max-height: 300px;"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6><i class="bi bi-cash-stack"></i> Top 10 Productos por Ingresos</h6>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="productsRevenueChart" style="max-height: 300px;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6><i class="bi bi-pie-chart"></i> Distribución por Categoría</h6>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="categoriesChart" style="max-height: 300px;"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6><i class="bi bi-grid-3x3"></i> Categorías</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Categoría</th>
+                                    <th>Productos</th>
+                                    <th>Unidades</th>
+                                    <th>Ingresos</th>
+                                    <th>%</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+    `;
+    
+    categories.slice(0, 10).forEach(cat => {
+        html += `
+            <tr>
+                <td><strong>${cat.name}</strong></td>
+                <td>${cat.num_products}</td>
+                <td>${cat.quantity_sold.toLocaleString()}</td>
+                <td>${formatCurrency(cat.total_revenue)}</td>
+                <td>${cat.revenue_percentage.toFixed(1)}%</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <ul class="nav nav-tabs mb-3" id="productsTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="quantity-tab" data-bs-toggle="tab" data-bs-target="#quantity" type="button">
+                    <i class="bi bi-box-seam"></i> Por Cantidad Vendida
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="revenue-tab" data-bs-toggle="tab" data-bs-target="#revenue" type="button">
+                    <i class="bi bi-currency-dollar"></i> Por Ingresos
+                </button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="productsTabContent">
+            <div class="tab-pane fade show active" id="quantity" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <h6>Productos Ordenados por Cantidad Vendida</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Producto</th>
+                                        <th>Categoría</th>
+                                        <th>Cantidad</th>
+                                        <th>Ventas</th>
+                                        <th>Ingresos</th>
+                                        <th>Precio Prom.</th>
+                                        <th>Ganancia</th>
+                                        <th>Margen %</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+    `;
+    
+    products_by_quantity.forEach((product, index) => {
+        const profitClass = product.profit_margin > 30 ? 'text-success' : product.profit_margin > 15 ? 'text-warning' : 'text-danger';
+        html += `
+            <tr>
+                <td><strong>${index + 1}</strong></td>
+                <td>${product.name}</td>
+                <td>${product.category}</td>
+                <td><strong>${product.quantity_sold.toLocaleString()}</strong> <small class="text-muted">(${product.quantity_percentage.toFixed(1)}%)</small></td>
+                <td>${product.num_sales}</td>
+                <td>${formatCurrency(product.total_revenue)}</td>
+                <td>${formatCurrency(product.avg_price)}</td>
+                <td>${formatCurrency(product.profit)}</td>
+                <td class="${profitClass}">${product.profit_margin.toFixed(1)}%</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="tab-pane fade" id="revenue" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <h6>Productos Ordenados por Ingresos Generados</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Producto</th>
+                                        <th>Categoría</th>
+                                        <th>Ingresos</th>
+                                        <th>% Total</th>
+                                        <th>Cantidad</th>
+                                        <th>Ganancia</th>
+                                        <th>Margen %</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+    `;
+    
+    products_by_revenue.forEach((product, index) => {
+        const profitClass = product.profit_margin > 30 ? 'text-success' : product.profit_margin > 15 ? 'text-warning' : 'text-danger';
+        html += `
+            <tr>
+                <td><strong>${index + 1}</strong></td>
+                <td>${product.name}</td>
+                <td>${product.category}</td>
+                <td><strong>${formatCurrency(product.total_revenue)}</strong></td>
+                <td>${product.revenue_percentage.toFixed(1)}%</td>
+                <td>${product.quantity_sold.toLocaleString()}</td>
+                <td>${formatCurrency(product.profit)}</td>
+                <td class="${profitClass}">${product.profit_margin.toFixed(1)}%</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('reportResults').style.display = 'block';
+    document.getElementById('reportContent').innerHTML = html;
+    document.getElementById('reportResults').scrollIntoView({ behavior: 'smooth' });
+    
+    // Crear gráficos
+    createProductsCharts(products_by_quantity, products_by_revenue, categories);
+}
+
+function createProductsCharts(productsByQuantity, productsByRevenue, categories) {
+    // Destruir gráficos existentes si existen
+    if (window.quantityChart) window.quantityChart.destroy();
+    if (window.revenueChart) window.revenueChart.destroy();
+    if (window.categoriesChart) window.categoriesChart.destroy();
+    
+    // Gráfico de cantidad vendida (Top 10)
+    const qtyCtx = document.getElementById('productsQuantityChart');
+    if (qtyCtx) {
+        const top10Qty = productsByQuantity.slice(0, 10);
+        window.quantityChart = new Chart(qtyCtx, {
+            type: 'bar',
+            data: {
+                labels: top10Qty.map(p => p.name.length > 20 ? p.name.substring(0, 20) + '...' : p.name),
+                datasets: [{
+                    label: 'Unidades Vendidas',
+                    data: top10Qty.map(p => p.quantity_sold),
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+    
+    // Gráfico de ingresos (Top 10)
+    const revCtx = document.getElementById('productsRevenueChart');
+    if (revCtx) {
+        const top10Rev = productsByRevenue.slice(0, 10);
+        window.revenueChart = new Chart(revCtx, {
+            type: 'bar',
+            data: {
+                labels: top10Rev.map(p => p.name.length > 20 ? p.name.substring(0, 20) + '...' : p.name),
+                datasets: [{
+                    label: 'Ingresos (RD$)',
+                    data: top10Rev.map(p => p.total_revenue),
+                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'RD$' + value.toLocaleString();
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return 'RD$' + context.parsed.y.toLocaleString();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Gráfico de categorías (pie chart)
+    const catCtx = document.getElementById('categoriesChart');
+    if (catCtx) {
+        const top8Categories = categories.slice(0, 8);
+        window.categoriesChart = new Chart(catCtx, {
+            type: 'doughnut',
+            data: {
+                labels: top8Categories.map(c => c.name),
+                datasets: [{
+                    data: top8Categories.map(c => c.total_revenue),
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.7)',
+                        'rgba(54, 162, 235, 0.7)',
+                        'rgba(255, 206, 86, 0.7)',
+                        'rgba(75, 192, 192, 0.7)',
+                        'rgba(153, 102, 255, 0.7)',
+                        'rgba(255, 159, 64, 0.7)',
+                        'rgba(199, 199, 199, 0.7)',
+                        'rgba(83, 102, 255, 0.7)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const percentage = categories.find(c => c.name === label)?.revenue_percentage || 0;
+                                return label + ': RD$' + value.toLocaleString() + ' (' + percentage.toFixed(1) + '%)';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+function downloadProductsPDF(period, startDate, endDate) {
+    let url = `/admin/api/products-report/pdf?period=${period}&limit=50`;
+    if (period === 'custom') {
+        url += `&start_date=${startDate}&end_date=${endDate}`;
+    }
+    window.open(url, '_blank');
 }
 
 function showReportPlaceholder(title) {
