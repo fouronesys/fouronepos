@@ -52,7 +52,7 @@
                             <td>{{ "%08d"|format(sequence.start_number) }} - {{ "%08d"|format(sequence.end_number) }}</td>
                             <td><strong>{{ "%08d"|format(sequence.current_number) }}</strong></td>
                             <td>
-                                {% set remaining = sequence.end_number - sequence.current_number %}
+                                {% set remaining = sequence.end_number - sequence.current_number + 1 %}
                                 {% if remaining <= 100 %}
                                     <span class="badge bg-danger">{{ remaining }}</span>
                                 {% elif remaining <= 500 %}
