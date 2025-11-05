@@ -857,7 +857,7 @@ async function loadNCFReport(period, startDate = null, endDate = null) {
         const data = await response.json();
         
         if (data.success) {
-            displayNCFReport(data);
+            displayNCFReport(data, startDate, endDate);
         } else {
             alert('Error al generar reporte: ' + data.error);
         }
@@ -867,7 +867,7 @@ async function loadNCFReport(period, startDate = null, endDate = null) {
     }
 }
 
-function displayNCFReport(data) {
+function displayNCFReport(data, startDate = '', endDate = '') {
     const { summary, stats_by_type, alerts, ncf_list, period, period_name, total_ncf_count } = data;
     
     let html = `
@@ -878,7 +878,7 @@ function displayNCFReport(data) {
                     <p class="text-muted mb-0">Período: ${period_name}</p>
                 </div>
                 <div>
-                    <button class="btn btn-danger" onclick="downloadNCFPDF('${period}', '${data.start_date || ''}', '${data.end_date || ''}')">
+                    <button class="btn btn-danger" onclick="downloadNCFPDF('${period}', '${startDate || ''}', '${endDate || ''}')">
                         <i class="bi bi-file-pdf"></i> Descargar PDF
                     </button>
                 </div>
