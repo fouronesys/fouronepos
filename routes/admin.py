@@ -3161,3 +3161,323 @@ def download_ncf_report_pdf():
         traceback.print_exc()
         flash(f'Error al generar PDF: {str(e)}', 'error')
         return redirect(url_for('admin.reports'))
+
+
+@bp.route('/api/users-sales-report')
+def users_sales_report_api():
+    """API endpoint para obtener datos de ventas por usuario"""
+    user = require_admin_or_manager_or_cashier()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Obtener parámetros
+    period = request.args.get('period', 'day')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    role_filter = request.args.get('role', 'all')
+    
+    try:
+        from datetime import datetime, timedelta
+        
+        # Determinar rango de fechas según el período
+        if period == 'day':
+            start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Día {start.strftime('%d/%m/%Y')}"
+        elif period == 'week':
+            start = datetime.now() - timedelta(days=7)
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = "Últimos 7 días"
+        elif period == 'month':
+            start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Mes {start.strftime('%B %Y')}"
+        elif period == 'year':
+            start = datetime.now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Año {start.year}"
+        elif period == 'custom' and start_date and end_date:
+            start = datetime.strptime(start_date, '%Y-%m-%d')
+            end = datetime.strptime(end_date, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            period_name = f"{start.strftime('%d/%m/%Y')} - {end.strftime('%d/%m/%Y')}"
+        else:
+            return jsonify({'error': 'Período inválido'}), 400
+        
+        # Consulta base para ventas completadas en el período
+        sales_query = db.session.query(
+            models.User.id,
+            models.User.name,
+            models.User.username,
+            models.User.role,
+            func.count(models.Sale.id).label('num_sales'),
+            func.sum(models.Sale.total).label('total_amount'),
+            func.avg(models.Sale.total).label('avg_ticket'),
+            func.sum(
+                db.session.query(func.sum(models.SaleItem.quantity))
+                .filter(models.SaleItem.sale_id == models.Sale.id)
+                .correlate(models.Sale)
+                .scalar_subquery()
+            ).label('total_products')
+        ).join(
+            models.Sale, models.User.id == models.Sale.user_id
+        ).filter(
+            models.Sale.status == 'completed',
+            models.Sale.created_at >= start,
+            models.Sale.created_at <= end
+        ).group_by(
+            models.User.id,
+            models.User.name,
+            models.User.username,
+            models.User.role
+        )
+        
+        # Aplicar filtro de rol si se especifica
+        if role_filter != 'all':
+            try:
+                role_filter_upper = role_filter.upper()
+                sales_query = sales_query.filter(models.User.role == role_filter_upper)
+            except ValueError:
+                pass
+        
+        # Para cajeros, solo sus propias ventas
+        if user.role.value == 'CAJERO':
+            sales_query = sales_query.filter(models.User.id == user.id)
+        
+        user_stats = sales_query.all()
+        
+        # Calcular totales generales
+        total_sales = sum(u.num_sales for u in user_stats)
+        total_amount = sum(u.total_amount for u in user_stats if u.total_amount)
+        total_users = len(user_stats)
+        
+        # Preparar datos de usuarios
+        users_data = []
+        for idx, user_stat in enumerate(user_stats):
+            # Obtener caja asignada (si es cajero)
+            cash_register = None
+            if user_stat.role.value == 'CAJERO':
+                register = models.CashRegister.query.filter_by(
+                    user_id=user_stat.id, 
+                    active=True
+                ).first()
+                if register:
+                    cash_register = register.name
+            
+            # Calcular porcentajes
+            sales_percentage = (user_stat.num_sales / total_sales * 100) if total_sales > 0 else 0
+            amount_percentage = (user_stat.total_amount / total_amount * 100) if total_amount > 0 else 0
+            
+            users_data.append({
+                'rank': idx + 1,
+                'user_id': user_stat.id,
+                'name': user_stat.name,
+                'username': user_stat.username,
+                'role': user_stat.role.value,
+                'num_sales': int(user_stat.num_sales),
+                'total_amount': float(user_stat.total_amount) if user_stat.total_amount else 0,
+                'avg_ticket': float(user_stat.avg_ticket) if user_stat.avg_ticket else 0,
+                'total_products': int(user_stat.total_products) if user_stat.total_products else 0,
+                'cash_register': cash_register,
+                'sales_percentage': float(sales_percentage),
+                'amount_percentage': float(amount_percentage)
+            })
+        
+        # Ordenar por cantidad de ventas
+        users_by_sales = sorted(users_data, key=lambda x: x['num_sales'], reverse=True)
+        
+        # Actualizar ranking
+        for idx, user_data in enumerate(users_by_sales):
+            user_data['rank'] = idx + 1
+        
+        # Ordenar por monto vendido
+        users_by_amount = sorted(users_data, key=lambda x: x['total_amount'], reverse=True)
+        
+        # Encontrar mejores usuarios
+        top_by_sales = users_by_sales[0] if users_by_sales else None
+        top_by_amount = users_by_amount[0] if users_by_amount else None
+        
+        # Estadísticas por rol
+        role_stats = {}
+        for user_data in users_data:
+            role = user_data['role']
+            if role not in role_stats:
+                role_stats[role] = {
+                    'num_users': 0,
+                    'num_sales': 0,
+                    'total_amount': 0
+                }
+            role_stats[role]['num_users'] += 1
+            role_stats[role]['num_sales'] += user_data['num_sales']
+            role_stats[role]['total_amount'] += user_data['total_amount']
+        
+        # Convertir role_stats a lista
+        role_stats_list = []
+        for role, stats in role_stats.items():
+            role_stats_list.append({
+                'role': role,
+                'num_users': stats['num_users'],
+                'num_sales': stats['num_sales'],
+                'total_amount': stats['total_amount'],
+                'avg_per_user': stats['total_amount'] / stats['num_users'] if stats['num_users'] > 0 else 0
+            })
+        
+        response_data = {
+            'period': period_name,
+            'start_date': start.strftime('%Y-%m-%d'),
+            'end_date': end.strftime('%Y-%m-%d'),
+            'users_by_sales': users_by_sales,
+            'users_by_amount': users_by_amount,
+            'summary': {
+                'total_users': total_users,
+                'total_sales': total_sales,
+                'total_amount': float(total_amount) if total_amount else 0,
+                'avg_per_user': float(total_amount / total_users) if total_users > 0 and total_amount else 0,
+                'avg_sales_per_user': float(total_sales / total_users) if total_users > 0 else 0,
+                'top_by_sales': {
+                    'name': top_by_sales['name'],
+                    'num_sales': top_by_sales['num_sales']
+                } if top_by_sales else None,
+                'top_by_amount': {
+                    'name': top_by_amount['name'],
+                    'total_amount': top_by_amount['total_amount']
+                } if top_by_amount else None
+            },
+            'role_stats': role_stats_list
+        }
+        
+        return jsonify(response_data)
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error al generar reporte: {str(e)}'}), 500
+
+
+@bp.route('/api/users-sales-report/pdf')
+def download_users_sales_report_pdf():
+    """Generar y descargar PDF de reporte de ventas por usuario"""
+    user = require_admin_or_manager_or_cashier()
+    if not isinstance(user, models.User):
+        flash('No autorizado', 'error')
+        return redirect(url_for('auth.login'))
+    
+    # Obtener parámetros
+    period = request.args.get('period', 'day')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    role_filter = request.args.get('role', 'all')
+    
+    try:
+        from datetime import datetime, timedelta
+        from receipt_generator import generate_users_sales_report_pdf
+        from flask import send_file
+        
+        # Determinar rango de fechas según el período
+        if period == 'day':
+            start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Día {start.strftime('%d/%m/%Y')}"
+        elif period == 'week':
+            start = datetime.now() - timedelta(days=7)
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = "Últimos 7 días"
+        elif period == 'month':
+            start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Mes {start.strftime('%B %Y')}"
+        elif period == 'year':
+            start = datetime.now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Año {start.year}"
+        elif period == 'custom' and start_date and end_date:
+            start = datetime.strptime(start_date, '%Y-%m-%d')
+            end = datetime.strptime(end_date, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            period_name = f"{start.strftime('%d/%m/%Y')} - {end.strftime('%d/%m/%Y')}"
+        else:
+            flash('Período inválido', 'error')
+            return redirect(url_for('admin.reports'))
+        
+        # Consulta base para ventas completadas en el período
+        sales_query = db.session.query(
+            models.User.id,
+            models.User.name,
+            models.User.username,
+            models.User.role,
+            func.count(models.Sale.id).label('num_sales'),
+            func.sum(models.Sale.total).label('total_amount'),
+            func.avg(models.Sale.total).label('avg_ticket'),
+            func.sum(
+                db.session.query(func.sum(models.SaleItem.quantity))
+                .filter(models.SaleItem.sale_id == models.Sale.id)
+                .correlate(models.Sale)
+                .scalar_subquery()
+            ).label('total_products')
+        ).join(
+            models.Sale, models.User.id == models.Sale.user_id
+        ).filter(
+            models.Sale.status == 'completed',
+            models.Sale.created_at >= start,
+            models.Sale.created_at <= end
+        ).group_by(
+            models.User.id,
+            models.User.name,
+            models.User.username,
+            models.User.role
+        )
+        
+        # Aplicar filtro de rol si se especifica
+        if role_filter != 'all':
+            try:
+                role_filter_upper = role_filter.upper()
+                sales_query = sales_query.filter(models.User.role == role_filter_upper)
+            except ValueError:
+                pass
+        
+        # Para cajeros, solo sus propias ventas
+        if user.role.value == 'CAJERO':
+            sales_query = sales_query.filter(models.User.id == user.id)
+        
+        user_stats = sales_query.all()
+        
+        # Preparar datos de usuarios
+        users_data = []
+        for user_stat in user_stats:
+            # Obtener caja asignada (si es cajero)
+            cash_register = None
+            if user_stat.role.value == 'CAJERO':
+                register = models.CashRegister.query.filter_by(
+                    user_id=user_stat.id, 
+                    active=True
+                ).first()
+                if register:
+                    cash_register = register.name
+            
+            users_data.append({
+                'user_id': user_stat.id,
+                'name': user_stat.name,
+                'username': user_stat.username,
+                'role': user_stat.role.value,
+                'num_sales': int(user_stat.num_sales),
+                'total_amount': float(user_stat.total_amount) if user_stat.total_amount else 0,
+                'avg_ticket': float(user_stat.avg_ticket) if user_stat.avg_ticket else 0,
+                'total_products': int(user_stat.total_products) if user_stat.total_products else 0,
+                'cash_register': cash_register
+            })
+        
+        # Generar PDF
+        pdf_path = generate_users_sales_report_pdf(users_data, period_name, start, end, role_filter)
+        
+        return send_file(
+            pdf_path,
+            as_attachment=True,
+            download_name=f"reporte_ventas_usuarios_{period}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+            mimetype='application/pdf'
+        )
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        flash(f'Error al generar PDF: {str(e)}', 'error')
+        return redirect(url_for('admin.reports'))

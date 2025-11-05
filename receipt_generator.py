@@ -1131,3 +1131,213 @@ def generate_ncf_report_pdf(sequences: List[Any], ledger_entries: List[Any], per
     
     doc.build(content)
     return output_path
+
+
+def generate_users_sales_report_pdf(users_data: List[dict], period_name: str, start_date: datetime, end_date: datetime, role_filter: str = 'all') -> str:
+    """
+    Generate a comprehensive users sales report PDF
+    
+    Args:
+        users_data: List of user statistics dictionaries
+        period_name: Name of the period (e.g., "Día 23/10/2025")
+        start_date: Start date of the period
+        end_date: End date of the period
+        role_filter: Filter by role ('all', 'ADMINISTRADOR', 'CAJERO', etc.)
+        
+    Returns:
+        Path to generated PDF
+    """
+    import os
+    from utils import get_company_info_for_receipt
+    
+    company_info = get_company_info_for_receipt()
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"reporte_ventas_usuarios_{timestamp}.pdf"
+    output_path = os.path.join('static', 'receipts', filename)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    doc = SimpleDocTemplate(
+        output_path,
+        pagesize=letter,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=40,
+        bottomMargin=40
+    )
+    
+    content = []
+    styles = getSampleStyleSheet()
+    
+    styles.add(ParagraphStyle(
+        name='ReportTitle',
+        fontSize=16,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold',
+        spaceAfter=12
+    ))
+    
+    styles.add(ParagraphStyle(
+        name='SectionHeader',
+        fontSize=12,
+        alignment=TA_LEFT,
+        fontName='Helvetica-Bold',
+        spaceAfter=6,
+        spaceBefore=12
+    ))
+    
+    styles.add(ParagraphStyle(
+        name='NormalText',
+        fontSize=9,
+        alignment=TA_LEFT,
+        fontName='Helvetica'
+    ))
+    
+    styles.add(ParagraphStyle(
+        name='CompanyInfo',
+        fontSize=9,
+        alignment=TA_CENTER,
+        fontName='Helvetica'
+    ))
+    
+    content.append(Paragraph(company_info.get('business_name', 'Four One POS'), styles['ReportTitle']))
+    content.append(Paragraph(f"RNC: {company_info.get('rnc', 'N/A')}", styles['CompanyInfo']))
+    content.append(Paragraph(f"{company_info.get('address', '')}", styles['CompanyInfo']))
+    content.append(Spacer(1, 12))
+    
+    content.append(Paragraph(f"Reporte de Ventas por Usuario - {period_name}", styles['ReportTitle']))
+    content.append(Paragraph(
+        f"Período: {start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}", 
+        styles['CompanyInfo']
+    ))
+    
+    if role_filter != 'all':
+        content.append(Paragraph(
+            f"Filtrado por rol: {role_filter}", 
+            styles['CompanyInfo']
+        ))
+    
+    content.append(Paragraph(
+        f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", 
+        styles['CompanyInfo']
+    ))
+    content.append(Spacer(1, 20))
+    
+    if not users_data:
+        content.append(Paragraph("No se encontraron datos para el período seleccionado.", styles['NormalText']))
+        doc.build(content)
+        return output_path
+    
+    total_sales = sum(u['num_sales'] for u in users_data)
+    total_amount = sum(u['total_amount'] for u in users_data)
+    total_products = sum(u['total_products'] for u in users_data)
+    total_users = len(users_data)
+    
+    content.append(Paragraph("Resumen General", styles['SectionHeader']))
+    
+    summary_data = [
+        ['Total de Usuarios:', str(total_users)],
+        ['Ventas Totales:', f"{int(total_sales):,}"],
+        ['Monto Total:', format_currency_rd(total_amount)],
+        ['Productos Vendidos:', f"{int(total_products):,}"],
+        ['Promedio por Usuario:', format_currency_rd(total_amount / total_users) if total_users > 0 else '$0.00'],
+        ['Ventas por Usuario:', f"{total_sales / total_users:.1f}" if total_users > 0 else '0']
+    ]
+    
+    summary_table = Table(summary_data, colWidths=[3*inch, 2*inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    
+    content.append(summary_table)
+    content.append(Spacer(1, 20))
+    
+    users_sorted = sorted(users_data, key=lambda x: x['total_amount'], reverse=True)
+    
+    content.append(Paragraph("Detalle de Ventas por Usuario", styles['SectionHeader']))
+    content.append(Spacer(1, 6))
+    
+    users_table_data = [['#', 'Usuario', 'Rol', 'Ventas', 'Monto Total', 'Ticket Prom.', 'Productos']]
+    
+    for idx, user in enumerate(users_sorted, 1):
+        role_short = user['role'][:10] if len(user['role']) > 10 else user['role']
+        
+        users_table_data.append([
+            str(idx),
+            user['name'][:18] if len(user['name']) > 18 else user['name'],
+            role_short,
+            str(user['num_sales']),
+            format_currency_rd(user['total_amount']),
+            format_currency_rd(user['avg_ticket']),
+            str(user['total_products'])
+        ])
+    
+    users_table = Table(users_table_data, colWidths=[0.4*inch, 1.8*inch, 1*inch, 0.8*inch, 1.1*inch, 1.1*inch, 0.8*inch])
+    users_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+        ('ALIGN', (1, 1), (1, -1), 'LEFT'),
+    ]))
+    
+    content.append(users_table)
+    
+    role_stats = {}
+    for user in users_data:
+        role = user['role']
+        if role not in role_stats:
+            role_stats[role] = {'num_users': 0, 'num_sales': 0, 'total_amount': 0}
+        role_stats[role]['num_users'] += 1
+        role_stats[role]['num_sales'] += user['num_sales']
+        role_stats[role]['total_amount'] += user['total_amount']
+    
+    if len(role_stats) > 1:
+        content.append(Spacer(1, 20))
+        content.append(Paragraph("Estadísticas por Rol", styles['SectionHeader']))
+        content.append(Spacer(1, 6))
+        
+        role_table_data = [['Rol', 'Usuarios', 'Ventas', 'Monto Total', 'Promedio/Usuario']]
+        
+        for role, stats in sorted(role_stats.items()):
+            avg_per_user = stats['total_amount'] / stats['num_users'] if stats['num_users'] > 0 else 0
+            role_table_data.append([
+                role,
+                str(stats['num_users']),
+                str(stats['num_sales']),
+                format_currency_rd(stats['total_amount']),
+                format_currency_rd(avg_per_user)
+            ])
+        
+        role_table = Table(role_table_data, colWidths=[1.5*inch, 1*inch, 1*inch, 1.5*inch, 1.5*inch])
+        role_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+        ]))
+        
+        content.append(role_table)
+    
+    content.append(Spacer(1, 30))
+    content.append(Paragraph("_" * 50, styles['NormalText']))
+    content.append(Paragraph("Firma Autorizada", styles['NormalText']))
+    
+    doc.build(content)
+    return output_path
