@@ -860,3 +860,274 @@ def generate_products_report_pdf(product_stats: List[Any], period_name: str, sta
     
     doc.build(content)
     return output_path
+
+
+def generate_ncf_report_pdf(sequences: List[Any], ledger_entries: List[Any], period_name: str, start_date: datetime = None, end_date: datetime = None) -> str:
+    """
+    Generate a comprehensive NCF report PDF
+    
+    Args:
+        sequences: List of NCF sequences
+        ledger_entries: List of NCF ledger entries
+        period_name: Name of the period (e.g., "Todas las fechas")
+        start_date: Start date of the period (optional)
+        end_date: End date of the period (optional)
+        
+    Returns:
+        Path to generated PDF
+    """
+    import os
+    from utils import get_company_info_for_receipt
+    import models
+    
+    company_info = get_company_info_for_receipt()
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"reporte_ncf_{timestamp}.pdf"
+    output_path = os.path.join('static', 'receipts', filename)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    doc = SimpleDocTemplate(
+        output_path,
+        pagesize=letter,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=40,
+        bottomMargin=40
+    )
+    
+    content = []
+    styles = getSampleStyleSheet()
+    
+    styles.add(ParagraphStyle(
+        name='ReportTitle',
+        fontSize=16,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold',
+        spaceAfter=12
+    ))
+    
+    styles.add(ParagraphStyle(
+        name='SectionHeader',
+        fontSize=12,
+        alignment=TA_LEFT,
+        fontName='Helvetica-Bold',
+        spaceAfter=6,
+        spaceBefore=12
+    ))
+    
+    styles.add(ParagraphStyle(
+        name='NormalText',
+        fontSize=9,
+        alignment=TA_LEFT,
+        fontName='Helvetica'
+    ))
+    
+    styles.add(ParagraphStyle(
+        name='CompanyInfo',
+        fontSize=9,
+        alignment=TA_CENTER,
+        fontName='Helvetica'
+    ))
+    
+    content.append(Paragraph(company_info.get('business_name', 'Four One POS'), styles['ReportTitle']))
+    content.append(Paragraph(f"RNC: {company_info.get('rnc', 'N/A')}", styles['CompanyInfo']))
+    content.append(Paragraph(f"{company_info.get('address', '')}", styles['CompanyInfo']))
+    content.append(Spacer(1, 12))
+    
+    content.append(Paragraph(f"Reporte de Comprobantes NCF - {period_name}", styles['ReportTitle']))
+    
+    if start_date and end_date:
+        content.append(Paragraph(
+            f"Período: {start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}", 
+            styles['CompanyInfo']
+        ))
+    
+    content.append(Paragraph(
+        f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", 
+        styles['CompanyInfo']
+    ))
+    content.append(Spacer(1, 20))
+    
+    ncf_type_names = {
+        'CONSUMO': 'Consumo Final',
+        'CREDITO_FISCAL': 'Crédito Fiscal',
+        'GUBERNAMENTAL': 'Gubernamental',
+        'NOTA_CREDITO': 'Nota de Crédito',
+        'NOTA_DEBITO': 'Nota de Débito'
+    }
+    
+    stats_by_type = {}
+    alerts = []
+    
+    for sequence in sequences:
+        ncf_type = sequence.ncf_type.value
+        
+        if ncf_type not in stats_by_type:
+            stats_by_type[ncf_type] = {
+                'type': ncf_type,
+                'type_display': ncf_type_names.get(ncf_type, ncf_type),
+                'total_in_range': 0,
+                'total_used': 0,
+                'total_cancelled': 0,
+                'total_available': 0,
+                'sequences_count': 0
+            }
+        
+        total_in_range = sequence.end_number - sequence.start_number + 1
+        total_used = sequence.current_number - sequence.start_number
+        available = sequence.end_number - sequence.current_number + 1
+        
+        cancelled_count = models.CancelledNCF.query.filter_by(ncf_sequence_id=sequence.id).count()
+        
+        stats_by_type[ncf_type]['total_in_range'] += total_in_range
+        stats_by_type[ncf_type]['total_used'] += total_used
+        stats_by_type[ncf_type]['total_cancelled'] += cancelled_count
+        stats_by_type[ncf_type]['total_available'] += available
+        stats_by_type[ncf_type]['sequences_count'] += 1
+        
+        if sequence.active:
+            if available <= 20:
+                alerts.append({
+                    'level': 'critical',
+                    'type_display': ncf_type_names.get(ncf_type, ncf_type),
+                    'serie': sequence.serie,
+                    'available': available,
+                    'message': f'CRÍTICO: Solo quedan {available} comprobantes en serie {sequence.serie}'
+                })
+            elif available <= 100:
+                alerts.append({
+                    'level': 'warning',
+                    'type_display': ncf_type_names.get(ncf_type, ncf_type),
+                    'serie': sequence.serie,
+                    'available': available,
+                    'message': f'ADVERTENCIA: Quedan {available} comprobantes en serie {sequence.serie}'
+                })
+    
+    total_sequences = len(sequences)
+    active_sequences = sum(1 for s in sequences if s.active)
+    total_ncf_in_all_ranges = sum(s['total_in_range'] for s in stats_by_type.values())
+    total_ncf_used = sum(s['total_used'] for s in stats_by_type.values())
+    total_ncf_available = sum(s['total_available'] for s in stats_by_type.values())
+    total_ncf_cancelled = sum(s['total_cancelled'] for s in stats_by_type.values())
+    global_utilization = (total_ncf_used / total_ncf_in_all_ranges * 100) if total_ncf_in_all_ranges > 0 else 0
+    
+    content.append(Paragraph("Resumen General", styles['SectionHeader']))
+    
+    summary_data = [
+        ['Total Secuencias:', f"{total_sequences} ({active_sequences} activas)"],
+        ['NCF en Rangos:', f"{total_ncf_in_all_ranges:,}"],
+        ['NCF Utilizados:', f"{total_ncf_used:,} ({global_utilization:.1f}%)"],
+        ['NCF Disponibles:', f"{total_ncf_available:,}"],
+        ['NCF Cancelados:', f"{total_ncf_cancelled:,}"]
+    ]
+    
+    summary_table = Table(summary_data, colWidths=[2.5*inch, 2.5*inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+    ]))
+    
+    content.append(summary_table)
+    content.append(Spacer(1, 15))
+    
+    if alerts:
+        content.append(Paragraph("⚠️ Alertas de Secuencias", styles['SectionHeader']))
+        alerts_sorted = sorted(alerts, key=lambda x: x['available'])
+        
+        for alert in alerts_sorted:
+            alert_text = f"• {alert['message']} ({alert['type_display']})"
+            content.append(Paragraph(alert_text, styles['NormalText']))
+        
+        content.append(Spacer(1, 15))
+    
+    content.append(Paragraph("Estadísticas por Tipo de NCF", styles['SectionHeader']))
+    
+    stats_data = [['Tipo', 'Secuencias', 'En Rango', 'Utilizados', 'Disponibles', 'Cancelados', 'Util. %']]
+    
+    for stat in stats_by_type.values():
+        utilization = (stat['total_used'] / stat['total_in_range'] * 100) if stat['total_in_range'] > 0 else 0
+        stats_data.append([
+            stat['type_display'],
+            str(stat['sequences_count']),
+            f"{stat['total_in_range']:,}",
+            f"{stat['total_used']:,}",
+            f"{stat['total_available']:,}",
+            str(stat['total_cancelled']),
+            f"{utilization:.1f}%"
+        ])
+    
+    stats_table = Table(stats_data, colWidths=[1.3*inch, 0.8*inch, 0.9*inch, 0.9*inch, 0.9*inch, 0.8*inch, 0.7*inch])
+    stats_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.beige]),
+        ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+    ]))
+    
+    content.append(stats_table)
+    content.append(Spacer(1, 15))
+    
+    if ledger_entries:
+        content.append(Paragraph(f"Comprobantes Emitidos Recientes (Mostrando {min(len(ledger_entries), 100)})", styles['SectionHeader']))
+        
+        ledger_data = [['NCF', 'Tipo', 'Fecha', 'Cliente', 'RNC', 'Monto', 'Estado']]
+        
+        for ledger in ledger_entries[:100]:
+            cancelled = models.CancelledNCF.query.filter_by(ncf=ledger.ncf).first()
+            status = 'Cancelado' if cancelled else 'Usado'
+            
+            client_name = 'N/A'
+            client_rnc = 'N/A'
+            amount = 0
+            
+            if ledger.sale:
+                client_name = ledger.sale.client_name[:15] + '...' if ledger.sale.client_name and len(ledger.sale.client_name) > 17 else (ledger.sale.client_name or 'Cons. Final')
+                client_rnc = ledger.sale.client_rnc or 'N/A'
+                amount = ledger.sale.final_total
+            
+            ledger_data.append([
+                ledger.ncf[-8:],
+                ncf_type_names.get(ledger.sequence.ncf_type.value, ledger.sequence.ncf_type.value)[:10],
+                ledger.issued_at.strftime('%d/%m/%y'),
+                client_name,
+                client_rnc[:12],
+                format_currency_rd(amount),
+                status
+            ])
+        
+        ledger_table = Table(ledger_data, colWidths=[0.9*inch, 0.9*inch, 0.8*inch, 1.4*inch, 1*inch, 0.9*inch, 0.7*inch])
+        ledger_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 7),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+            ('ALIGN', (3, 1), (3, -1), 'LEFT'),
+        ]))
+        
+        content.append(ledger_table)
+    
+    content.append(Spacer(1, 30))
+    content.append(Paragraph("_" * 50, styles['NormalText']))
+    content.append(Paragraph("Firma Autorizada", styles['NormalText']))
+    
+    doc.build(content)
+    return output_path

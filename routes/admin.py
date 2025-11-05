@@ -2826,3 +2826,338 @@ def download_products_report_pdf():
         traceback.print_exc()
         flash(f'Error al generar PDF: {str(e)}', 'error')
         return redirect(url_for('admin.reports'))
+
+
+@bp.route('/api/ncf-report')
+def ncf_report_api():
+    """API endpoint para obtener reporte de comprobantes NCF"""
+    user = require_admin_or_manager_or_cashier()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    # Obtener parámetros
+    ncf_type_filter = request.args.get('ncf_type', 'all')  # all, consumo, credito_fiscal, gubernamental
+    status_filter = request.args.get('status', 'all')  # all, used, cancelled, available
+    period = request.args.get('period', 'all')  # all, day, week, month, year, custom
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    try:
+        from datetime import datetime, timedelta
+        
+        # Determinar rango de fechas según el período (para filtrar comprobantes emitidos)
+        if period == 'day':
+            start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Día {start.strftime('%d/%m/%Y')}"
+        elif period == 'week':
+            start = datetime.now() - timedelta(days=7)
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = "Últimos 7 días"
+        elif period == 'month':
+            start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Mes {start.strftime('%B %Y')}"
+        elif period == 'year':
+            start = datetime.now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Año {start.year}"
+        elif period == 'custom' and start_date and end_date:
+            start = datetime.strptime(start_date, '%Y-%m-%d')
+            end = datetime.strptime(end_date, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            period_name = f"{start.strftime('%d/%m/%Y')} - {end.strftime('%d/%m/%Y')}"
+        else:
+            start = None
+            end = None
+            period_name = "Todas las fechas"
+        
+        # Obtener todas las secuencias NCF
+        sequences_query = models.NCFSequence.query
+        
+        # Filtrar por tipo si se especifica
+        if ncf_type_filter != 'all':
+            try:
+                ncf_type_enum = models.NCFType(ncf_type_filter.upper())
+                sequences_query = sequences_query.filter(models.NCFSequence.ncf_type == ncf_type_enum)
+            except ValueError:
+                pass
+        
+        sequences = sequences_query.all()
+        
+        # Mapeo de nombres amigables para tipos de NCF
+        ncf_type_names = {
+            'CONSUMO': 'Consumo Final',
+            'CREDITO_FISCAL': 'Crédito Fiscal',
+            'GUBERNAMENTAL': 'Gubernamental',
+            'NOTA_CREDITO': 'Nota de Crédito',
+            'NOTA_DEBITO': 'Nota de Débito'
+        }
+        
+        # Estadísticas por tipo de NCF
+        stats_by_type = {}
+        alerts = []
+        
+        for sequence in sequences:
+            ncf_type = sequence.ncf_type.value
+            
+            if ncf_type not in stats_by_type:
+                stats_by_type[ncf_type] = {
+                    'type': ncf_type,
+                    'type_display': ncf_type_names.get(ncf_type, ncf_type),
+                    'sequences': [],
+                    'total_in_range': 0,
+                    'total_used': 0,
+                    'total_cancelled': 0,
+                    'total_available': 0,
+                    'utilization_percentage': 0
+                }
+            
+            # Calcular estadísticas de la secuencia
+            total_in_range = sequence.end_number - sequence.start_number + 1
+            total_used = sequence.current_number - sequence.start_number
+            available = sequence.end_number - sequence.current_number + 1
+            
+            # Contar NCFs cancelados de esta secuencia
+            cancelled_count = models.CancelledNCF.query.filter_by(ncf_sequence_id=sequence.id).count()
+            
+            utilization = (total_used / total_in_range * 100) if total_in_range > 0 else 0
+            
+            # Agregar a estadísticas del tipo
+            stats_by_type[ncf_type]['sequences'].append({
+                'id': sequence.id,
+                'serie': sequence.serie,
+                'start_number': sequence.start_number,
+                'end_number': sequence.end_number,
+                'current_number': sequence.current_number,
+                'total_in_range': total_in_range,
+                'total_used': total_used,
+                'available': available,
+                'cancelled': cancelled_count,
+                'utilization': round(utilization, 2),
+                'active': sequence.active
+            })
+            
+            stats_by_type[ncf_type]['total_in_range'] += total_in_range
+            stats_by_type[ncf_type]['total_used'] += total_used
+            stats_by_type[ncf_type]['total_cancelled'] += cancelled_count
+            stats_by_type[ncf_type]['total_available'] += available
+            
+            # Generar alertas de rangos por agotarse
+            if sequence.active:
+                if available <= 20:
+                    alerts.append({
+                        'level': 'critical',
+                        'type': ncf_type,
+                        'type_display': ncf_type_names.get(ncf_type, ncf_type),
+                        'serie': sequence.serie,
+                        'available': available,
+                        'message': f'CRÍTICO: Solo quedan {available} comprobantes en la serie {sequence.serie} ({ncf_type_names.get(ncf_type, ncf_type)})'
+                    })
+                elif available <= 100:
+                    alerts.append({
+                        'level': 'warning',
+                        'type': ncf_type,
+                        'type_display': ncf_type_names.get(ncf_type, ncf_type),
+                        'serie': sequence.serie,
+                        'available': available,
+                        'message': f'ADVERTENCIA: Quedan {available} comprobantes en la serie {sequence.serie} ({ncf_type_names.get(ncf_type, ncf_type)})'
+                    })
+        
+        # Calcular porcentaje de utilización por tipo
+        for ncf_type in stats_by_type:
+            total_range = stats_by_type[ncf_type]['total_in_range']
+            total_used = stats_by_type[ncf_type]['total_used']
+            stats_by_type[ncf_type]['utilization_percentage'] = round(
+                (total_used / total_range * 100) if total_range > 0 else 0, 2
+            )
+        
+        # Obtener listado de comprobantes emitidos
+        ledger_query = models.NCFLedger.query.join(
+            models.NCFSequence, models.NCFLedger.sequence_id == models.NCFSequence.id
+        ).join(
+            models.User, models.NCFLedger.user_id == models.User.id
+        ).outerjoin(
+            models.Sale, models.NCFLedger.sale_id == models.Sale.id
+        )
+        
+        # Filtrar por período si se especifica
+        if start and end:
+            ledger_query = ledger_query.filter(
+                models.NCFLedger.issued_at >= start,
+                models.NCFLedger.issued_at <= end
+            )
+        
+        # Filtrar por tipo de NCF si se especifica
+        if ncf_type_filter != 'all':
+            try:
+                ncf_type_enum = models.NCFType(ncf_type_filter.upper())
+                ledger_query = ledger_query.filter(models.NCFSequence.ncf_type == ncf_type_enum)
+            except ValueError:
+                pass
+        
+        # Ordenar por fecha de emisión descendente
+        ledger_entries = ledger_query.order_by(models.NCFLedger.issued_at.desc()).limit(500).all()
+        
+        # Preparar listado de comprobantes
+        ncf_list = []
+        for ledger in ledger_entries:
+            # Verificar si está cancelado
+            cancelled = models.CancelledNCF.query.filter_by(ncf=ledger.ncf).first()
+            
+            # Aplicar filtro de estado
+            if status_filter == 'cancelled' and not cancelled:
+                continue
+            elif status_filter == 'used' and cancelled:
+                continue
+            
+            ncf_data = {
+                'id': ledger.id,
+                'ncf': ledger.ncf,
+                'serie': ledger.serie,
+                'number': ledger.number,
+                'type': ledger.sequence.ncf_type.value,
+                'type_display': ncf_type_names.get(ledger.sequence.ncf_type.value, ledger.sequence.ncf_type.value),
+                'issued_at': ledger.issued_at.strftime('%d/%m/%Y %H:%M:%S'),
+                'user': ledger.user.username,
+                'status': 'cancelado' if cancelled else 'usado',
+                'sale_id': ledger.sale_id,
+                'client_name': None,
+                'client_rnc': None,
+                'amount': 0
+            }
+            
+            # Obtener información de la venta si existe
+            if ledger.sale:
+                ncf_data['client_name'] = ledger.sale.client_name or 'Consumidor Final'
+                ncf_data['client_rnc'] = ledger.sale.client_rnc or 'N/A'
+                ncf_data['amount'] = float(ledger.sale.final_total)
+            
+            ncf_list.append(ncf_data)
+        
+        # Resumen general
+        total_sequences = len(sequences)
+        active_sequences = sum(1 for s in sequences if s.active)
+        total_ncf_in_all_ranges = sum(s['total_in_range'] for s in stats_by_type.values())
+        total_ncf_used = sum(s['total_used'] for s in stats_by_type.values())
+        total_ncf_available = sum(s['total_available'] for s in stats_by_type.values())
+        total_ncf_cancelled = sum(s['total_cancelled'] for s in stats_by_type.values())
+        
+        return jsonify({
+            'success': True,
+            'period': period,
+            'period_name': period_name,
+            'summary': {
+                'total_sequences': total_sequences,
+                'active_sequences': active_sequences,
+                'total_ncf_in_all_ranges': total_ncf_in_all_ranges,
+                'total_ncf_used': total_ncf_used,
+                'total_ncf_available': total_ncf_available,
+                'total_ncf_cancelled': total_ncf_cancelled,
+                'global_utilization': round((total_ncf_used / total_ncf_in_all_ranges * 100) if total_ncf_in_all_ranges > 0 else 0, 2)
+            },
+            'stats_by_type': list(stats_by_type.values()),
+            'alerts': sorted(alerts, key=lambda x: x['available']),
+            'ncf_list': ncf_list[:100],  # Limitar a 100 para el frontend
+            'total_ncf_count': len(ncf_list)
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error al generar reporte: {str(e)}'}), 500
+
+
+@bp.route('/api/ncf-report/pdf')
+def download_ncf_report_pdf():
+    """Generar y descargar PDF de reporte de comprobantes NCF"""
+    user = require_admin_or_manager_or_cashier()
+    if not isinstance(user, models.User):
+        flash('No autorizado', 'error')
+        return redirect(url_for('auth.login'))
+    
+    ncf_type_filter = request.args.get('ncf_type', 'all')
+    status_filter = request.args.get('status', 'all')
+    period = request.args.get('period', 'all')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    try:
+        from datetime import datetime, timedelta
+        from receipt_generator import generate_ncf_report_pdf
+        from flask import send_file
+        
+        if period == 'day':
+            start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Día {start.strftime('%d/%m/%Y')}"
+        elif period == 'week':
+            start = datetime.now() - timedelta(days=7)
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = "Últimos 7 días"
+        elif period == 'month':
+            start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Mes {start.strftime('%B %Y')}"
+        elif period == 'year':
+            start = datetime.now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            period_name = f"Año {start.year}"
+        elif period == 'custom' and start_date and end_date:
+            start = datetime.strptime(start_date, '%Y-%m-%d')
+            end = datetime.strptime(end_date, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            period_name = f"{start.strftime('%d/%m/%Y')} - {end.strftime('%d/%m/%Y')}"
+        else:
+            start = None
+            end = None
+            period_name = "Todas las fechas"
+        
+        sequences_query = models.NCFSequence.query
+        
+        if ncf_type_filter != 'all':
+            try:
+                ncf_type_enum = models.NCFType(ncf_type_filter.upper())
+                sequences_query = sequences_query.filter(models.NCFSequence.ncf_type == ncf_type_enum)
+            except ValueError:
+                pass
+        
+        sequences = sequences_query.all()
+        
+        ledger_query = models.NCFLedger.query.join(
+            models.NCFSequence, models.NCFLedger.sequence_id == models.NCFSequence.id
+        ).join(
+            models.User, models.NCFLedger.user_id == models.User.id
+        ).outerjoin(
+            models.Sale, models.NCFLedger.sale_id == models.Sale.id
+        )
+        
+        if start and end:
+            ledger_query = ledger_query.filter(
+                models.NCFLedger.issued_at >= start,
+                models.NCFLedger.issued_at <= end
+            )
+        
+        if ncf_type_filter != 'all':
+            try:
+                ncf_type_enum = models.NCFType(ncf_type_filter.upper())
+                ledger_query = ledger_query.filter(models.NCFSequence.ncf_type == ncf_type_enum)
+            except ValueError:
+                pass
+        
+        ledger_entries = ledger_query.order_by(models.NCFLedger.issued_at.desc()).limit(500).all()
+        
+        pdf_path = generate_ncf_report_pdf(sequences, ledger_entries, period_name, start, end)
+        
+        return send_file(
+            pdf_path,
+            as_attachment=True,
+            download_name=f"reporte_ncf_{period}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+            mimetype='application/pdf'
+        )
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        flash(f'Error al generar PDF: {str(e)}', 'error')
+        return redirect(url_for('admin.reports'))
