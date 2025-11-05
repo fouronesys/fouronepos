@@ -1057,16 +1057,19 @@ function displayNCFReport(data, startDate = '', endDate = '') {
     document.getElementById('reportContent').innerHTML = html;
     document.getElementById('reportResults').scrollIntoView({ behavior: 'smooth' });
     
-    createNCFCharts(stats_by_type);
+    setTimeout(() => {
+        createNCFCharts(stats_by_type);
+    }, 100);
 }
 
 function createNCFCharts(statsByType) {
-    if (window.ncfUtilizationChart) window.ncfUtilizationChart.destroy();
-    if (window.ncfAvailabilityChart) window.ncfAvailabilityChart.destroy();
-    
-    const utilizationCtx = document.getElementById('ncfUtilizationChart');
-    if (utilizationCtx) {
-        window.ncfUtilizationChart = new Chart(utilizationCtx, {
+    try {
+        if (window.ncfUtilizationChart) window.ncfUtilizationChart.destroy();
+        if (window.ncfAvailabilityChart) window.ncfAvailabilityChart.destroy();
+        
+        const utilizationCtx = document.getElementById('ncfUtilizationChart');
+        if (utilizationCtx) {
+            window.ncfUtilizationChart = new Chart(utilizationCtx, {
             type: 'doughnut',
             data: {
                 labels: statsByType.map(s => s.type_display),
@@ -1148,6 +1151,9 @@ function createNCFCharts(statsByType) {
                 }
             }
         });
+    }
+    } catch (error) {
+        console.error('Error al crear gráficos NCF:', error);
     }
 }
 
