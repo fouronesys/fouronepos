@@ -151,6 +151,58 @@
                             </div>
                         </div>
 
+                        <hr>
+
+                        <h6><i class="bi bi-printer"></i> Configuración de Impresora</h6>
+                        
+                        <div class="mb-3">
+                            <label for="printer_type" class="form-label">
+                                <i class="bi bi-hdd-network"></i> Tipo de Impresora
+                            </label>
+                            <select class="form-select" id="printer_type" name="printer_type">
+                                <option value="file" {{ 'selected' if company_settings.get('printer_type', 'file') == 'file' }}>Archivo (Pruebas)</option>
+                                <option value="usb" {{ 'selected' if company_settings.get('printer_type', 'file') == 'usb' }}>USB</option>
+                                <option value="serial" {{ 'selected' if company_settings.get('printer_type', 'file') == 'serial' }}>Serial</option>
+                                <option value="network" {{ 'selected' if company_settings.get('printer_type', 'file') == 'network' }}>Red (WiFi/Ethernet)</option>
+                                <option value="bluetooth" {{ 'selected' if company_settings.get('printer_type', 'file') == 'bluetooth' }}>Bluetooth</option>
+                            </select>
+                            <div class="form-text">Seleccione cómo está conectada su impresora térmica</div>
+                        </div>
+
+                        <div id="bluetoothConfig" style="display: {{ 'block' if company_settings.get('printer_type', 'file') == 'bluetooth' else 'none' }};">
+                            <div class="card bg-light mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title"><i class="bi bi-bluetooth"></i> Configuración Bluetooth</h6>
+                                    
+                                    <div class="mb-3">
+                                        <button type="button" class="btn btn-outline-primary" id="btnScanBluetooth">
+                                            <i class="bi bi-search"></i> Escanear Dispositivos Bluetooth
+                                        </button>
+                                        <span id="scanStatus" class="ms-2"></span>
+                                    </div>
+
+                                    <div id="bluetoothDevicesList" class="mb-3" style="display: none;">
+                                        <label class="form-label">Dispositivos Encontrados</label>
+                                        <div id="devicesList" class="list-group"></div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="printer_bluetooth_mac" class="form-label">
+                                            <i class="bi bi-bluetooth"></i> Dirección MAC de la Impresora
+                                        </label>
+                                        <input type="text" class="form-control" id="printer_bluetooth_mac" name="printer_bluetooth_mac" 
+                                               value="{{ company_settings.get('printer_bluetooth_mac', '') }}" 
+                                               placeholder="00:00:00:00:00:00" readonly>
+                                        <div class="form-text">Dirección MAC de la impresora Bluetooth seleccionada</div>
+                                    </div>
+
+                                    <div id="bluetoothStatus" class="alert alert-info" role="alert">
+                                        <i class="bi bi-info-circle"></i> Use el botón de escaneo para buscar impresoras Bluetooth cercanas
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="d-flex justify-content-between">
                             <button type="button" class="btn btn-secondary" onclick="window.history.back()">
                                 <i class="bi bi-arrow-left"></i> Volver
@@ -411,6 +463,136 @@ function showAlert(type, message) {
             alertDiv.remove();
         }
     }, 5000);
+}
+
+// Bluetooth printer configuration
+document.getElementById('printer_type').addEventListener('change', function() {
+    const bluetoothConfig = document.getElementById('bluetoothConfig');
+    if (this.value === 'bluetooth') {
+        bluetoothConfig.style.display = 'block';
+    } else {
+        bluetoothConfig.style.display = 'none';
+    }
+});
+
+document.getElementById('btnScanBluetooth').addEventListener('click', function() {
+    const btn = this;
+    const scanStatus = document.getElementById('scanStatus');
+    const devicesList = document.getElementById('devicesList');
+    const devicesContainer = document.getElementById('bluetoothDevicesList');
+    const bluetoothStatus = document.getElementById('bluetoothStatus');
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Escaneando...';
+    scanStatus.innerHTML = '<span class="text-muted">Buscando dispositivos (8 segundos)...</span>';
+    
+    const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+    
+    fetch('/admin/api/bluetooth/scan', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ scan_duration: 8 })
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-search"></i> Escanear Dispositivos Bluetooth';
+        
+        if (data.success && data.devices && data.devices.length > 0) {
+            scanStatus.innerHTML = `<span class="text-success">✓ Encontrados ${data.count} dispositivos</span>`;
+            devicesContainer.style.display = 'block';
+            
+            devicesList.innerHTML = '';
+            data.devices.forEach(device => {
+                const deviceItem = document.createElement('a');
+                deviceItem.href = '#';
+                deviceItem.className = 'list-group-item list-group-item-action';
+                
+                let badgeClass = 'bg-secondary';
+                if (device.type === 'printer_detected') {
+                    badgeClass = 'bg-success';
+                }
+                
+                deviceItem.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${device.name}</strong>
+                            <br>
+                            <small class="text-muted">${device.mac_address}</small>
+                        </div>
+                        <span class="badge ${badgeClass}">${device.type === 'printer_detected' ? 'Impresora' : 'Otro'}</span>
+                    </div>
+                `;
+                
+                deviceItem.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    connectBluetoothDevice(device.mac_address, device.name);
+                });
+                
+                devicesList.appendChild(deviceItem);
+            });
+            
+            bluetoothStatus.className = 'alert alert-success';
+            bluetoothStatus.innerHTML = '<i class="bi bi-check-circle"></i> Seleccione un dispositivo de la lista para conectar';
+        } else {
+            scanStatus.innerHTML = '<span class="text-warning">⚠ No se encontraron dispositivos</span>';
+            devicesContainer.style.display = 'none';
+            bluetoothStatus.className = 'alert alert-warning';
+            bluetoothStatus.innerHTML = '<i class="bi bi-exclamation-triangle"></i> No se encontraron dispositivos. Asegúrese de que la impresora esté encendida y en modo de emparejamiento.';
+        }
+    })
+    .catch(error => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-search"></i> Escanear Dispositivos Bluetooth';
+        scanStatus.innerHTML = '<span class="text-danger">✗ Error al escanear</span>';
+        bluetoothStatus.className = 'alert alert-danger';
+        bluetoothStatus.innerHTML = `<i class="bi bi-x-circle"></i> Error: ${error.message}`;
+        console.error('Error:', error);
+    });
+});
+
+function connectBluetoothDevice(macAddress, deviceName) {
+    const bluetoothStatus = document.getElementById('bluetoothStatus');
+    const macInput = document.getElementById('printer_bluetooth_mac');
+    
+    bluetoothStatus.className = 'alert alert-info';
+    bluetoothStatus.innerHTML = '<i class="bi bi-hourglass-split"></i> Conectando con ' + deviceName + '...';
+    
+    const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+    
+    fetch('/admin/api/bluetooth/connect', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({
+            mac_address: macAddress,
+            rfcomm_port: '/dev/rfcomm0'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            macInput.value = macAddress;
+            bluetoothStatus.className = 'alert alert-success';
+            bluetoothStatus.innerHTML = `<i class="bi bi-check-circle"></i> ${data.message}`;
+            showAlert('success', 'Impresora Bluetooth conectada: ' + deviceName);
+        } else {
+            bluetoothStatus.className = 'alert alert-danger';
+            bluetoothStatus.innerHTML = `<i class="bi bi-x-circle"></i> ${data.message}`;
+            showAlert('danger', 'Error al conectar: ' + data.message);
+        }
+    })
+    .catch(error => {
+        bluetoothStatus.className = 'alert alert-danger';
+        bluetoothStatus.innerHTML = `<i class="bi bi-x-circle"></i> Error de conexión: ${error.message}`;
+        showAlert('danger', 'Error al conectar con la impresora');
+        console.error('Error:', error);
+    });
 }
 
 function testReceiptGeneration() {
