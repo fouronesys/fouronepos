@@ -6,8 +6,10 @@ usando la librería python-escpos
 
 import os
 import logging
+import subprocess
+import re
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from escpos.printer import Usb, Serial, Network, File
 from receipt_generator import generate_thermal_receipt_text
 
@@ -20,7 +22,7 @@ class ThermalPrinterConfig:
     
     def __init__(self):
         # Default printer settings (can be overridden via environment variables)
-        self.printer_type = os.environ.get('PRINTER_TYPE', 'file')  # 'usb', 'serial', 'network', 'file'
+        self.printer_type = os.environ.get('PRINTER_TYPE', 'file')  # 'usb', 'serial', 'network', 'bluetooth', 'file'
         
         # USB Printer settings
         self.usb_vendor_id = int(os.environ.get('PRINTER_USB_VENDOR_ID', '0x04b8'), 16)
@@ -33,6 +35,10 @@ class ThermalPrinterConfig:
         # Network Printer settings
         self.network_host = os.environ.get('PRINTER_NETWORK_HOST', '192.168.1.100')
         self.network_port = int(os.environ.get('PRINTER_NETWORK_PORT', '9100'))
+        
+        # Bluetooth Printer settings
+        self.bluetooth_mac = os.environ.get('PRINTER_BLUETOOTH_MAC', '')
+        self.bluetooth_port = os.environ.get('PRINTER_BLUETOOTH_PORT', '/dev/rfcomm0')
         
         # File printer settings (for testing)
         self.file_path = os.environ.get('PRINTER_FILE_PATH', 'receipts_output.txt')
@@ -73,6 +79,21 @@ class ThermalPrinter:
                     port=self.config.network_port
                 )
                 logger.info(f"Inicializada impresora Red: {self.config.network_host}:{self.config.network_port}")
+                
+            elif self.config.printer_type == 'bluetooth':
+                if not self.config.bluetooth_mac:
+                    raise ValueError("Se requiere dirección MAC para impresora Bluetooth")
+                
+                try:
+                    self.printer = Serial(
+                        devfile=self.config.bluetooth_port,
+                        baudrate=self.config.serial_baudrate,
+                        timeout=2.0
+                    )
+                    logger.info(f"Inicializada impresora Bluetooth: {self.config.bluetooth_mac} en {self.config.bluetooth_port}")
+                except Exception as bt_error:
+                    logger.error(f"Error conectando Bluetooth, intentar bindear dispositivo primero: {str(bt_error)}")
+                    raise
                 
             else:  # file printer (default for testing)
                 # Create output directory if it doesn't exist
@@ -252,3 +273,178 @@ def get_thermal_printer_status() -> Dict[str, Any]:
     """
     printer = get_thermal_printer()
     return printer.get_status()
+
+
+def scan_bluetooth_devices(scan_duration: int = 8) -> List[Dict[str, str]]:
+    """
+    Escanea dispositivos Bluetooth cercanos usando bluetoothctl
+    
+    Args:
+        scan_duration: Duración del escaneo en segundos
+        
+    Returns:
+        Lista de dispositivos encontrados con MAC y nombre
+    """
+    devices = []
+    
+    try:
+        logger.info(f"Iniciando escaneo Bluetooth por {scan_duration} segundos...")
+        
+        cmd_start_scan = "bluetoothctl scan on"
+        process = subprocess.Popen(
+            cmd_start_scan,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        import time
+        time.sleep(scan_duration)
+        
+        process.terminate()
+        
+        cmd_list_devices = "bluetoothctl devices"
+        result = subprocess.run(
+            cmd_list_devices,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                match = re.match(r'Device\s+([0-9A-F:]{17})\s+(.+)', line, re.IGNORECASE)
+                if match:
+                    mac_address = match.group(1)
+                    device_name = match.group(2).strip()
+                    
+                    if 'print' in device_name.lower() or 'thermal' in device_name.lower() or 'pos' in device_name.lower():
+                        devices.append({
+                            'mac_address': mac_address,
+                            'name': device_name,
+                            'type': 'printer_detected'
+                        })
+                    else:
+                        devices.append({
+                            'mac_address': mac_address,
+                            'name': device_name,
+                            'type': 'unknown'
+                        })
+            
+            logger.info(f"Escaneo completado. Encontrados {len(devices)} dispositivos")
+        else:
+            logger.error(f"Error escaneando dispositivos: {result.stderr}")
+            
+    except subprocess.TimeoutExpired:
+        logger.error("Timeout escaneando dispositivos Bluetooth")
+    except Exception as e:
+        logger.error(f"Error en escaneo Bluetooth: {str(e)}")
+    
+    return devices
+
+
+def bind_bluetooth_printer(mac_address: str, rfcomm_port: str = '/dev/rfcomm0') -> Dict[str, Any]:
+    """
+    Bindea una impresora Bluetooth a un puerto RFCOMM
+    
+    Args:
+        mac_address: Dirección MAC de la impresora
+        rfcomm_port: Puerto RFCOMM a usar (default: /dev/rfcomm0)
+        
+    Returns:
+        Dict con resultado de la operación
+    """
+    try:
+        logger.info(f"Bindeando impresora {mac_address} a {rfcomm_port}...")
+        
+        unbind_cmd = f"sudo rfcomm release {rfcomm_port}"
+        subprocess.run(unbind_cmd, shell=True, capture_output=True, timeout=5)
+        
+        bind_cmd = f"sudo rfcomm bind {rfcomm_port} {mac_address}"
+        result = subprocess.run(
+            bind_cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            logger.info(f"Impresora bindeada exitosamente en {rfcomm_port}")
+            return {
+                'success': True,
+                'message': f'Impresora conectada en {rfcomm_port}',
+                'port': rfcomm_port,
+                'mac_address': mac_address
+            }
+        else:
+            error_msg = result.stderr or 'Error desconocido'
+            logger.error(f"Error bindeando impresora: {error_msg}")
+            return {
+                'success': False,
+                'message': f'Error al conectar: {error_msg}'
+            }
+            
+    except subprocess.TimeoutExpired:
+        return {
+            'success': False,
+            'message': 'Timeout al conectar la impresora'
+        }
+    except Exception as e:
+        logger.error(f"Error en bind_bluetooth_printer: {str(e)}")
+        return {
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }
+
+
+def check_bluetooth_available() -> Dict[str, Any]:
+    """
+    Verifica si Bluetooth está disponible en el sistema
+    
+    Returns:
+        Dict con información de disponibilidad
+    """
+    try:
+        result = subprocess.run(
+            'which bluetoothctl',
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        
+        bluetoothctl_available = result.returncode == 0
+        
+        if bluetoothctl_available:
+            status_result = subprocess.run(
+                'bluetoothctl show',
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            powered = 'Powered: yes' in status_result.stdout
+            
+            return {
+                'available': True,
+                'powered': powered,
+                'message': 'Bluetooth disponible' if powered else 'Bluetooth apagado - active el adaptador'
+            }
+        else:
+            return {
+                'available': False,
+                'powered': False,
+                'message': 'Bluetooth no está instalado en el sistema'
+            }
+            
+    except Exception as e:
+        logger.error(f"Error verificando Bluetooth: {str(e)}")
+        return {
+            'available': False,
+            'powered': False,
+            'message': f'Error verificando Bluetooth: {str(e)}'
+        }

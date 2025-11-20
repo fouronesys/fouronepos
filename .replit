@@ -5,7 +5,7 @@ integrations = ["python_database:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "freetype", "glibcLocales", "imagemagick", "libiconv", "openjdk17", "openssl", "postgresql", "rustc", "unzip"]
+packages = ["bluez", "cargo", "freetype", "glibcLocales", "imagemagick", "libiconv", "openjdk17", "openssl", "postgresql", "rustc", "unzip"]
 
 [workflows]
 runButton = "Project"
