@@ -3557,8 +3557,21 @@ def connect_bluetooth_printer():
             os.environ['PRINTER_BLUETOOTH_MAC'] = mac_address
             os.environ['PRINTER_BLUETOOTH_PORT'] = rfcomm_port
             
+            from thermal_printer import reset_thermal_printer
+            reset_thermal_printer()
+            
             return jsonify(result)
         else:
+            update_company_setting('printer_type', 'file')
+            update_company_setting('printer_bluetooth_mac', '')
+            
+            import os
+            os.environ['PRINTER_TYPE'] = 'file'
+            os.environ['PRINTER_BLUETOOTH_MAC'] = ''
+            
+            from thermal_printer import reset_thermal_printer
+            reset_thermal_printer()
+            
             return jsonify(result), 400
             
     except Exception as e:
@@ -3577,25 +3590,78 @@ def disconnect_bluetooth_printer():
     
     try:
         import subprocess
+        
+        try:
+            rfcomm_check = subprocess.run(
+                ['which', 'rfcomm'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            
+            if rfcomm_check.returncode != 0:
+                update_company_setting('printer_type', 'file')
+                update_company_setting('printer_bluetooth_mac', '')
+                import os
+                os.environ['PRINTER_TYPE'] = 'file'
+                os.environ['PRINTER_BLUETOOTH_MAC'] = ''
+                
+                from thermal_printer import reset_thermal_printer
+                reset_thermal_printer()
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Configuración actualizada (rfcomm no disponible en este sistema)'
+                })
+        except (FileNotFoundError, subprocess.SubprocessError):
+            update_company_setting('printer_type', 'file')
+            update_company_setting('printer_bluetooth_mac', '')
+            import os
+            os.environ['PRINTER_TYPE'] = 'file'
+            os.environ['PRINTER_BLUETOOTH_MAC'] = ''
+            
+            from thermal_printer import reset_thermal_printer
+            reset_thermal_printer()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Configuración actualizada (Bluetooth no soportado en este entorno)'
+            })
+        
         result = subprocess.run(
-            'sudo rfcomm release /dev/rfcomm0',
-            shell=True,
+            ['rfcomm', 'release', '/dev/rfcomm0'],
             capture_output=True,
             text=True,
             timeout=5
         )
         
         update_company_setting('printer_type', 'file')
+        update_company_setting('printer_bluetooth_mac', '')
         
         import os
         os.environ['PRINTER_TYPE'] = 'file'
+        os.environ['PRINTER_BLUETOOTH_MAC'] = ''
         
+        from thermal_printer import reset_thermal_printer
+        reset_thermal_printer()
+        
+        if result.returncode == 0:
+            return jsonify({
+                'success': True,
+                'message': 'Impresora Bluetooth desconectada correctamente'
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'message': 'Configuración actualizada (puerto ya estaba liberado)'
+            })
+    except subprocess.TimeoutExpired:
         return jsonify({
-            'success': True,
-            'message': 'Impresora Bluetooth desconectada'
-        })
+            'success': False,
+            'message': 'Timeout al desconectar la impresora'
+        }), 200
     except Exception as e:
         return jsonify({
             'success': False,
             'message': f'Error desconectando impresora: {str(e)}'
-        }), 500
+        }), 200

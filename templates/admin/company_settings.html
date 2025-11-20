@@ -190,10 +190,15 @@
                                         <label for="printer_bluetooth_mac" class="form-label">
                                             <i class="bi bi-bluetooth"></i> Dirección MAC de la Impresora
                                         </label>
-                                        <input type="text" class="form-control" id="printer_bluetooth_mac" name="printer_bluetooth_mac" 
-                                               value="{{ company_settings.get('printer_bluetooth_mac', '') }}" 
-                                               placeholder="00:00:00:00:00:00" readonly>
-                                        <div class="form-text">Dirección MAC de la impresora Bluetooth seleccionada</div>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" id="printer_bluetooth_mac" name="printer_bluetooth_mac" 
+                                                   value="{{ company_settings.get('printer_bluetooth_mac', '') }}" 
+                                                   placeholder="00:00:00:00:00:00" pattern="[0-9A-Fa-f:]{17}" readonly>
+                                            <button type="button" class="btn btn-outline-secondary" id="btnToggleManualEntry" title="Editar manualmente">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                        </div>
+                                        <div class="form-text">Dirección MAC de la impresora Bluetooth (seleccione de la lista o ingrese manualmente)</div>
                                     </div>
 
                                     <div id="bluetoothStatus" class="alert alert-info" role="alert">
@@ -475,6 +480,23 @@ document.getElementById('printer_type').addEventListener('change', function() {
     }
 });
 
+let manualEntryEnabled = false;
+document.getElementById('btnToggleManualEntry').addEventListener('click', function() {
+    const macInput = document.getElementById('printer_bluetooth_mac');
+    manualEntryEnabled = !manualEntryEnabled;
+    
+    if (manualEntryEnabled) {
+        macInput.removeAttribute('readonly');
+        macInput.focus();
+        this.innerHTML = '<i class="bi bi-lock"></i>';
+        this.title = 'Bloquear edición';
+    } else {
+        macInput.setAttribute('readonly', 'readonly');
+        this.innerHTML = '<i class="bi bi-pencil"></i>';
+        this.title = 'Editar manualmente';
+    }
+});
+
 document.getElementById('btnScanBluetooth').addEventListener('click', function() {
     const btn = this;
     const scanStatus = document.getElementById('scanStatus');
@@ -512,8 +534,13 @@ document.getElementById('btnScanBluetooth').addEventListener('click', function()
                 deviceItem.className = 'list-group-item list-group-item-action';
                 
                 let badgeClass = 'bg-secondary';
+                let badgeText = 'Otro';
                 if (device.type === 'printer_detected') {
                     badgeClass = 'bg-success';
+                    badgeText = 'Impresora';
+                } else if (device.type === 'demo') {
+                    badgeClass = 'bg-info';
+                    badgeText = 'Demo';
                 }
                 
                 deviceItem.innerHTML = `
@@ -523,7 +550,7 @@ document.getElementById('btnScanBluetooth').addEventListener('click', function()
                             <br>
                             <small class="text-muted">${device.mac_address}</small>
                         </div>
-                        <span class="badge ${badgeClass}">${device.type === 'printer_detected' ? 'Impresora' : 'Otro'}</span>
+                        <span class="badge ${badgeClass}">${badgeText}</span>
                     </div>
                 `;
                 
@@ -535,13 +562,18 @@ document.getElementById('btnScanBluetooth').addEventListener('click', function()
                 devicesList.appendChild(deviceItem);
             });
             
-            bluetoothStatus.className = 'alert alert-success';
-            bluetoothStatus.innerHTML = '<i class="bi bi-check-circle"></i> Seleccione un dispositivo de la lista para conectar';
+            if (data.devices.length === 1 && data.devices[0].type === 'demo') {
+                bluetoothStatus.className = 'alert alert-warning';
+                bluetoothStatus.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Bluetooth no disponible en este sistema. Use el botón de editar para ingresar manualmente la dirección MAC de su impresora.';
+            } else {
+                bluetoothStatus.className = 'alert alert-success';
+                bluetoothStatus.innerHTML = '<i class="bi bi-check-circle"></i> Seleccione un dispositivo de la lista para conectar';
+            }
         } else {
             scanStatus.innerHTML = '<span class="text-warning">⚠ No se encontraron dispositivos</span>';
             devicesContainer.style.display = 'none';
             bluetoothStatus.className = 'alert alert-warning';
-            bluetoothStatus.innerHTML = '<i class="bi bi-exclamation-triangle"></i> No se encontraron dispositivos. Asegúrese de que la impresora esté encendida y en modo de emparejamiento.';
+            bluetoothStatus.innerHTML = '<i class="bi bi-exclamation-triangle"></i> No se encontraron dispositivos. Use el botón de editar para ingresar manualmente la dirección MAC de su impresora.';
         }
     })
     .catch(error => {

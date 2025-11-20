@@ -229,17 +229,28 @@ Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
 # Global printer instance
 _thermal_printer = None
 
-def get_thermal_printer() -> ThermalPrinter:
+def get_thermal_printer(force_reload: bool = False) -> ThermalPrinter:
     """
     Obtiene la instancia global de la impresora térmica
     
+    Args:
+        force_reload: Si True, fuerza la recarga de la configuración
+        
     Returns:
         ThermalPrinter instance
     """
     global _thermal_printer
-    if _thermal_printer is None:
+    if _thermal_printer is None or force_reload:
         _thermal_printer = ThermalPrinter()
     return _thermal_printer
+
+def reset_thermal_printer():
+    """
+    Invalida el singleton de la impresora térmica para forzar recarga de configuración
+    """
+    global _thermal_printer
+    _thermal_printer = None
+    logger.info("Singleton de impresora térmica invalidado")
 
 def print_receipt_auto(sale_data: Dict[str, Any]) -> bool:
     """
@@ -288,12 +299,33 @@ def scan_bluetooth_devices(scan_duration: int = 8) -> List[Dict[str, str]]:
     devices = []
     
     try:
+        bluetoothctl_path = subprocess.run(
+            ['which', 'bluetoothctl'],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        
+        if bluetoothctl_path.returncode != 0:
+            logger.warning("bluetoothctl no disponible - retornando dispositivos de prueba")
+            return [{
+                'mac_address': '00:11:22:33:44:55',
+                'name': 'Demo Thermal Printer (Bluetooth no disponible en este sistema)',
+                'type': 'demo'
+            }]
+    except (FileNotFoundError, subprocess.SubprocessError):
+        logger.warning("Comando 'which' no disponible - retornando dispositivos de prueba")
+        return [{
+            'mac_address': '00:11:22:33:44:55',
+            'name': 'Demo Thermal Printer (Bluetooth no soportado)',
+            'type': 'demo'
+        }]
+    
+    try:
         logger.info(f"Iniciando escaneo Bluetooth por {scan_duration} segundos...")
         
-        cmd_start_scan = "bluetoothctl scan on"
         process = subprocess.Popen(
-            cmd_start_scan,
-            shell=True,
+            ['bluetoothctl', 'scan', 'on'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
@@ -303,11 +335,10 @@ def scan_bluetooth_devices(scan_duration: int = 8) -> List[Dict[str, str]]:
         time.sleep(scan_duration)
         
         process.terminate()
+        process.wait(timeout=2)
         
-        cmd_list_devices = "bluetoothctl devices"
         result = subprocess.run(
-            cmd_list_devices,
-            shell=True,
+            ['bluetoothctl', 'devices'],
             capture_output=True,
             text=True,
             timeout=5
@@ -356,22 +387,49 @@ def bind_bluetooth_printer(mac_address: str, rfcomm_port: str = '/dev/rfcomm0') 
     Returns:
         Dict con resultado de la operación
     """
+    if not re.match(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$', mac_address, re.IGNORECASE):
+        return {
+            'success': False,
+            'message': 'Dirección MAC inválida'
+        }
+    
     try:
         logger.info(f"Bindeando impresora {mac_address} a {rfcomm_port}...")
         
-        unbind_cmd = f"sudo rfcomm release {rfcomm_port}"
-        subprocess.run(unbind_cmd, shell=True, capture_output=True, timeout=5)
+        try:
+            rfcomm_path = subprocess.run(
+                ['which', 'rfcomm'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            
+            if rfcomm_path.returncode != 0:
+                return {
+                    'success': False,
+                    'message': 'rfcomm no disponible en el sistema. Bluetooth no soportado en este entorno.'
+                }
+        except (FileNotFoundError, subprocess.SubprocessError):
+            return {
+                'success': False,
+                'message': 'Herramientas Bluetooth no disponibles. Este entorno no soporta Bluetooth.'
+            }
         
-        bind_cmd = f"sudo rfcomm bind {rfcomm_port} {mac_address}"
-        result = subprocess.run(
-            bind_cmd,
-            shell=True,
+        unbind_result = subprocess.run(
+            ['rfcomm', 'release', rfcomm_port],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        bind_result = subprocess.run(
+            ['rfcomm', 'bind', rfcomm_port, mac_address],
             capture_output=True,
             text=True,
             timeout=10
         )
         
-        if result.returncode == 0:
+        if bind_result.returncode == 0:
             logger.info(f"Impresora bindeada exitosamente en {rfcomm_port}")
             return {
                 'success': True,
@@ -380,7 +438,9 @@ def bind_bluetooth_printer(mac_address: str, rfcomm_port: str = '/dev/rfcomm0') 
                 'mac_address': mac_address
             }
         else:
-            error_msg = result.stderr or 'Error desconocido'
+            error_msg = bind_result.stderr or 'Error desconocido'
+            if 'Permission denied' in error_msg or 'not permitted' in error_msg:
+                error_msg = 'Permisos insuficientes. Ejecute el sistema con privilegios de Bluetooth.'
             logger.error(f"Error bindeando impresora: {error_msg}")
             return {
                 'success': False,
