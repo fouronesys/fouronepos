@@ -3481,3 +3481,121 @@ def download_users_sales_report_pdf():
         traceback.print_exc()
         flash(f'Error al generar PDF: {str(e)}', 'error')
         return redirect(url_for('admin.reports'))
+
+
+@bp.route('/api/bluetooth/status', methods=['GET'])
+def get_bluetooth_status():
+    """Verificar disponibilidad de Bluetooth en el sistema"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    try:
+        from thermal_printer import check_bluetooth_available
+        status = check_bluetooth_available()
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({
+            'available': False,
+            'powered': False,
+            'message': f'Error verificando Bluetooth: {str(e)}'
+        }), 500
+
+
+@bp.route('/api/bluetooth/scan', methods=['POST'])
+def scan_bluetooth_devices_endpoint():
+    """Escanear dispositivos Bluetooth cercanos"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    try:
+        data = request.get_json() or {}
+        scan_duration = data.get('scan_duration', 8)
+        
+        from thermal_printer import scan_bluetooth_devices
+        devices = scan_bluetooth_devices(scan_duration=scan_duration)
+        
+        return jsonify({
+            'success': True,
+            'devices': devices,
+            'count': len(devices),
+            'message': f'Encontrados {len(devices)} dispositivos'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Error escaneando dispositivos: {str(e)}'
+        }), 500
+
+
+@bp.route('/api/bluetooth/connect', methods=['POST'])
+def connect_bluetooth_printer():
+    """Conectar una impresora Bluetooth"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    try:
+        data = request.get_json()
+        if not data or 'mac_address' not in data:
+            return jsonify({'error': 'Dirección MAC requerida'}), 400
+        
+        mac_address = data['mac_address']
+        rfcomm_port = data.get('rfcomm_port', '/dev/rfcomm0')
+        
+        from thermal_printer import bind_bluetooth_printer
+        result = bind_bluetooth_printer(mac_address, rfcomm_port)
+        
+        if result['success']:
+            update_company_setting('printer_bluetooth_mac', mac_address)
+            update_company_setting('printer_bluetooth_port', rfcomm_port)
+            update_company_setting('printer_type', 'bluetooth')
+            
+            import os
+            os.environ['PRINTER_TYPE'] = 'bluetooth'
+            os.environ['PRINTER_BLUETOOTH_MAC'] = mac_address
+            os.environ['PRINTER_BLUETOOTH_PORT'] = rfcomm_port
+            
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error conectando impresora: {str(e)}'
+        }), 500
+
+
+@bp.route('/api/bluetooth/disconnect', methods=['POST'])
+def disconnect_bluetooth_printer():
+    """Desconectar impresora Bluetooth"""
+    user = require_admin()
+    if not isinstance(user, models.User):
+        return jsonify({'error': 'No autorizado'}), 401
+    
+    try:
+        import subprocess
+        result = subprocess.run(
+            'sudo rfcomm release /dev/rfcomm0',
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        update_company_setting('printer_type', 'file')
+        
+        import os
+        os.environ['PRINTER_TYPE'] = 'file'
+        
+        return jsonify({
+            'success': True,
+            'message': 'Impresora Bluetooth desconectada'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error desconectando impresora: {str(e)}'
+        }), 500
