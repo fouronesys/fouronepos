@@ -67,7 +67,7 @@ def log_error(error_type: str, message: str, error_id: str = None,
     log_data = {
         'error_id': error_id,
         'error_type': error_type,
-        'message': message,
+        'msg_detail': message,
         'user_id': user_ctx.get('user_id'),
         'username': user_ctx.get('username'),
         'role': user_ctx.get('role'),
@@ -98,7 +98,7 @@ def log_success(operation: str, message: str, context: Dict[str, Any] = None):
     
     log_data = {
         'operation': operation,
-        'message': message,
+        'msg_detail': message,
         'user_id': user_ctx.get('user_id'),
         'username': user_ctx.get('username'),
         'role': user_ctx.get('role'),
