@@ -3199,10 +3199,13 @@ def preview_sale_calculation():
                 'item_tax_amount': round(item_tax_amount, 2)
             })
         
-        # Calculate service charge from subtotal only - applied as "included" at POS level
+        # Calculate service charge from subtotal - extract the tip that's already included
+        # If prices include 10% tip: price_with_tip = base_price × 1.10
+        # Then: base_price = price_with_tip / 1.10 and tip = price_with_tip - base_price
         service_charge_amount = 0
         if apply_service_charge:
-            service_charge_amount = round(total_subtotal * service_charge_rate, 2)
+            base_without_tip = total_subtotal / (1 + service_charge_rate)
+            service_charge_amount = round(total_subtotal - base_without_tip, 2)
         
         # Calculate exclusive taxes on subtotal ONLY (service charge NOT included in tax base per user preference)
         tax_base = total_subtotal
@@ -3221,10 +3224,11 @@ def preview_sale_calculation():
                     item['item_tax_amount'] = round(tax_on_base * item_proportion, 2)
         
         # Final totals
+        # NOTE: service_charge is for DISPLAY ONLY (assumed included in prices), NOT added to total
         final_subtotal = round(total_subtotal, 2)
         final_tax_amount = round(total_tax_included + total_tax_added, 2)
         final_service_charge = service_charge_amount
-        final_total = round(total_subtotal + total_tax_added + service_charge_amount, 2)
+        final_total = round(total_subtotal + total_tax_added, 2)  # Service charge NOT added (already included)
         
         return jsonify({
             'success': True,
