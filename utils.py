@@ -726,9 +726,21 @@ def initialize_company_settings():
             'value': '1',
             'description': 'Número de copias del recibo a imprimir'
         },
+        'receipt_format': {
+            'value': '80mm',
+            'description': 'Formato del recibo (80mm o 58mm)'
+        },
         'printer_type': {
             'value': 'file',
             'description': 'Tipo de impresora: usb, serial, network, bluetooth, file'
+        },
+        'printer_network_host': {
+            'value': '192.168.1.100',
+            'description': 'Dirección IP de la impresora de red'
+        },
+        'printer_network_port': {
+            'value': '9100',
+            'description': 'Puerto de la impresora de red'
         },
         'printer_bluetooth_mac': {
             'value': '',
@@ -740,7 +752,7 @@ def initialize_company_settings():
         },
         'printer_paper_width': {
             'value': '80',
-            'description': 'Ancho del papel de la impresora térmica (58mm o 80mm)'
+            'description': 'Ancho del papel de la impresora térmica (58 o 80)'
         },
         'printer_auto_cut': {
             'value': 'true',
@@ -808,7 +820,10 @@ def get_company_settings() -> Dict[str, Any]:
         'receipt_logo',
         'fiscal_printer_enabled',
         'receipt_copies',
+        'receipt_format',
         'printer_type',
+        'printer_network_host',
+        'printer_network_port',
         'printer_bluetooth_mac',
         'printer_bluetooth_port',
         'printer_paper_width',

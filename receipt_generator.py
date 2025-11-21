@@ -466,7 +466,15 @@ def generate_thermal_receipt_text(sale_data: Dict[str, Any]) -> str:
     Returns:
         Formatted text for thermal printing
     """
-    generator = DominicanReceiptGenerator()
+    # Get receipt format from company settings
+    company_settings = get_company_info_for_receipt()
+    from utils import get_company_settings
+    settings_data = get_company_settings()
+    receipt_format = '80mm'  # Default
+    if settings_data['success']:
+        receipt_format = settings_data['settings'].get('receipt_format', '80mm')
+    
+    generator = DominicanReceiptGenerator(format_type=receipt_format)
     return generator.generate_thermal_receipt(sale_data)
 
 
