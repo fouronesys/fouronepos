@@ -372,7 +372,7 @@ async function downloadPDF(event, buttonElement) {
     }
 }
 
-// Enhanced auto-print functionality with fallbacks
+// Enhanced auto-print functionality - triggers immediately without delays
 document.addEventListener('DOMContentLoaded', function() {
     // Auto-print if triggered by POS system
     {% if auto_print %}
@@ -387,15 +387,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // Check if printing is available
         if (typeof window.print === 'function') {
             try {
+                // Focus window before printing for better browser compatibility
+                window.focus();
+                // Trigger print immediately
                 window.print();
                 console.log('[Receipt] Print dialog opened successfully');
-                
-                // If print fails, show manual instructions
-                setTimeout(() => {
-                    if (!window.document.hasFocus()) {
-                        console.log('[Receipt] Print dialog appears to be open');
-                    }
-                }, 1500);
                 
             } catch (error) {
                 console.error('[Receipt] Print error:', error);
@@ -425,11 +421,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 8000);
     }
     
-    // Multiple triggers to ensure print happens
-    setTimeout(attemptPrint, 1000);  // Primary trigger
-    setTimeout(() => {
-        if (!printAttempted) attemptPrint();
-    }, 2000);  // Fallback trigger
+    // Trigger print immediately when DOM is ready (no delays)
+    // Use requestAnimationFrame to ensure content is rendered
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            attemptPrint();
+        });
+    });
     
     {% endif %}
     
