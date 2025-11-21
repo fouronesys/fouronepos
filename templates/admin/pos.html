@@ -758,21 +758,14 @@ class CartManager {
         const applyServiceCharge = document.getElementById('apply-service-charge')?.checked || false;
         const serviceChargeRate = 0.10; // 10%
         
-        let subtotal = 0; // Subtotal (sum of product prices WITHOUT service charge)
-        let pricesWithServiceCharge = 0; // Total of displayed prices (WITH service charge if applicable)
+        let subtotal = 0; // Subtotal = sum of all product prices (as-is)
         let inclusiveTaxes = {}; // Taxes included in prices
         let exclusiveTaxes = {}; // Taxes to be added to base
         
         // First pass: Calculate subtotal and identify tax types per product
         this.cart.forEach(item => {
             const itemPrice = item.price * item.quantity;
-            pricesWithServiceCharge += itemPrice;
-            
-            // If service charge is "included", extract it by subtracting 10% directly from the price
-            // Example: Price with tip = 317.80, Propina 10% = 31.78, Subtotal = 317.80 - 31.78 = 286.02
-            const itemServiceCharge = applyServiceCharge ? itemPrice * serviceChargeRate : 0;
-            const itemSubtotal = itemPrice - itemServiceCharge;
-            subtotal += itemSubtotal;
+            subtotal += itemPrice; // Sum of all item prices (may include inclusive taxes)
             
             // Process taxes for this product (taxes calculated on ORIGINAL price WITH service charge)
             if (item.tax_types && item.tax_types.length > 0) {
@@ -823,14 +816,18 @@ class CartManager {
         const totalExclusiveTax = Object.values(exclusiveTaxes).reduce((sum, tax) => sum + tax.amount, 0);
         const totalTax = totalInclusiveTax + totalExclusiveTax;
         
-        // Service charge (propina) - extracted from prices if "included"
-        // When checkbox is ON, we extract it from prices, then add it back to the total
-        // This allows us to calculate ITBIS on the subtotal WITHOUT the service charge
-        const serviceCharge = applyServiceCharge ? pricesWithServiceCharge - subtotal : 0;
+        // Service charge (propina) - extract correctly from prices if "included"
+        // If prices include 10% tip, extract it properly: tip = price - (price / 1.10)
+        let serviceCharge = 0;
+        if (applyServiceCharge) {
+            const baseWithoutTip = subtotal / (1 + serviceChargeRate);
+            serviceCharge = subtotal - baseWithoutTip;
+        }
         
-        // Total: subtotal (without service charge) + exclusive taxes + service charge added back
-        // Apply rounding to nearest whole number (375.06 -> 376, 375.02 -> 375)
-        const totalBeforeRounding = subtotal + totalExclusiveTax + serviceCharge;
+        // SIMPLIFIED TOTAL CALCULATION (aligned with backend):
+        // Total = subtotal (sum of item prices) + exclusive taxes only
+        // Inclusive taxes are already in subtotal, service charge is already in subtotal
+        const totalBeforeRounding = subtotal + totalExclusiveTax;
         const total = Math.round(totalBeforeRounding);
         
         // For backward compatibility, provide a single tax rate (average)
@@ -3372,12 +3369,22 @@ async function printReceipt(saleData) {
         // Automatically download PDF receipt
         downloadReceiptPDF(saleData.sale_id);
         
-        // Auto-hide after 10 seconds to give user time to read and interact
+        // OPTIONAL AUTOMATIC PRINTING: Only on mobile/tablet devices where user expects it
+        // Desktop users can use the manual "Imprimir" button
+        const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        if (isMobileOrTablet) {
+            // Small delay to ensure modal content is fully rendered
+            setTimeout(() => {
+                printReceiptToDevice(saleData.sale_id);
+            }, 800);
+        }
+        
+        // Auto-hide modal after 15 seconds to give user time to read and interact
         setTimeout(() => {
             modal.hide();
-        }, 10000);
+        }, 15000);
         
-        console.log('[Print] Receipt generated and displayed successfully');
+        console.log('[Print] Receipt generated and displayed. Auto-print:', isMobileOrTablet);
         return true;
         
     } catch (error) {

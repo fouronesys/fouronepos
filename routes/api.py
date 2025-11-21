@@ -550,42 +550,37 @@ def add_sale_item(sale_id):
             
             db.session.add(sale_item)
         
-        # Recalculate sale totals from all items using proper per-item tax calculation
-        # Calculate totals by tax rate categories with support for included taxes
-        subtotal_by_rate = {}
-        total_subtotal = 0
-        total_tax_included = 0  # Tax that was already included in prices
-        total_tax_added = 0     # Tax that gets added to prices
+        # Recalculate sale totals (aligned with finalize_sale's simplified logic)
+        # subtotal = sum of all item prices, tax_amount = all taxes for reporting
+        # total = subtotal + exclusive taxes only
         
-        # Group items by tax rate and calculate totals per category
+        subtotal = sum(item.total_price for item in sale.sale_items)
+        
+        # Calculate exclusive taxes (to be added to total)
+        tax_exclusive = 0
         for item in sale.sale_items:
-            # Defensive fallback: if fields are NULL, use product's current values
             rate = item.tax_rate if item.tax_rate is not None else item.product.tax_rate
             is_included = item.is_tax_included if hasattr(item, 'is_tax_included') else item.product.is_tax_included
             
-            if rate not in subtotal_by_rate:
-                subtotal_by_rate[rate] = 0
-            
-            if is_included and rate > 0:
-                # Tax is included in the price - calculate base amount and included tax
-                # Formula: base = total / (1 + rate), tax = total - base
-                base_amount = item.total_price / (1 + rate)
-                tax_amount = item.total_price - base_amount
-                subtotal_by_rate[rate] += base_amount
-                total_subtotal += base_amount
-                total_tax_included += round(tax_amount, 2)
-            else:
-                # Tax is added to price (normal behavior) or no tax
-                subtotal_by_rate[rate] += item.total_price
-                total_subtotal += item.total_price
-                if rate > 0:
-                    tax_amount = round(item.total_price * rate, 2)
-                    total_tax_added += tax_amount
+            if not is_included and rate > 0:
+                tax_exclusive += round(item.total_price * rate, 2)
         
-        # Set sale totals
-        sale.subtotal = round(total_subtotal, 2)
-        sale.tax_amount = round(total_tax_included + total_tax_added, 2)
-        sale.total = round(total_subtotal + total_tax_added, 2)  # Only add non-included taxes
+        # Calculate all taxes for reporting
+        tax_all = 0
+        for item in sale.sale_items:
+            rate = item.tax_rate if item.tax_rate is not None else item.product.tax_rate
+            is_included = item.is_tax_included if hasattr(item, 'is_tax_included') else item.product.is_tax_included
+            
+            if rate > 0:
+                if is_included:
+                    tax_all += round(item.total_price - (item.total_price / (1 + rate)), 2)
+                else:
+                    tax_all += round(item.total_price * rate, 2)
+        
+        # Set sale totals (consistent with finalize_sale)
+        sale.subtotal = round(subtotal, 2)
+        sale.tax_amount = round(tax_all, 2)
+        sale.total = round(subtotal + tax_exclusive)
         
         # Commit the transaction
         db.session.commit()
@@ -1068,71 +1063,55 @@ def finalize_sale(sale_id):
         if change_amount is not None:
             sale.change_amount = change_amount
         
-        # Calculate totals with DR fiscal compliance (ITBIS over subtotal + service charge)
-        subtotal_by_rate = {}
-        exclusive_tax_by_rate = {}  # Track exclusive tax rates for base calculation
-        total_subtotal = 0
-        total_tax_included = 0  # Tax that was already included in prices
+        # SIMPLIFIED AND CONSISTENT CALCULATION LOGIC:
+        # - subtotal = sum of all item.total_price (prices as stored, may include inclusive taxes)
+        # - tax_amount = all taxes (inclusive + exclusive) for reporting
+        # - service_charge_amount = 10% of subtotal for display only (NOT added to total)
+        # - total = subtotal + exclusive taxes ONLY (inclusive taxes already in subtotal)
         
-        # First pass: Calculate subtotal and identify tax rates
+        # Step 1: Calculate subtotal (sum of all item prices as-is)
+        subtotal = sum(item.total_price for item in sale.sale_items)
+        
+        # Step 2: Extract service charge from prices for display (NOT added to total)
+        # If prices include 10% tip, we need to extract it properly:
+        # price_with_tip = base_price × 1.10
+        # base_price = price_with_tip / 1.10
+        # tip = price_with_tip - base_price
+        service_charge_amount = 0
+        if apply_service_charge:
+            # Extract the 10% tip that's already included in the prices
+            base_without_tip = subtotal / (1 + service_charge_rate)
+            service_charge_amount = round(subtotal - base_without_tip, 2)
+        
+        # Step 3: Calculate exclusive taxes (these WILL be added to total)
+        tax_exclusive = 0
         for item in sale.sale_items:
-            # Defensive fallback: if fields are NULL, use product's current values
             rate = item.tax_rate if item.tax_rate is not None else item.product.tax_rate
             is_included = item.is_tax_included if hasattr(item, 'is_tax_included') else item.product.is_tax_included
             
-            if rate not in subtotal_by_rate:
-                subtotal_by_rate[rate] = 0
+            if not is_included and rate > 0:
+                # Only exclusive taxes are added to total
+                tax_exclusive += round(item.total_price * rate, 2)
+        
+        # Step 4: Calculate all taxes for reporting (inclusive + exclusive)
+        tax_all = 0
+        for item in sale.sale_items:
+            rate = item.tax_rate if item.tax_rate is not None else item.product.tax_rate
+            is_included = item.is_tax_included if hasattr(item, 'is_tax_included') else item.product.is_tax_included
             
-            if is_included and rate > 0:
-                # Tax is included in the price - calculate base amount and included tax
-                # Formula: base = total / (1 + rate), tax = total - base
-                base_amount = item.total_price / (1 + rate)
-                tax_amount = item.total_price - base_amount
-                subtotal_by_rate[rate] += base_amount
-                total_subtotal += base_amount
-                total_tax_included += round(tax_amount, 2)
-            else:
-                # Tax is exclusive (added to price) or no tax
-                subtotal_by_rate[rate] += item.total_price
-                total_subtotal += item.total_price
-                if rate > 0:
-                    # Track exclusive tax rates and their subtotal amounts for later calculation
-                    if rate not in exclusive_tax_by_rate:
-                        exclusive_tax_by_rate[rate] = 0
-                    exclusive_tax_by_rate[rate] += item.total_price
+            if rate > 0:
+                if is_included:
+                    # Included tax: extract from price for reporting
+                    tax_all += round(item.total_price - (item.total_price / (1 + rate)), 2)
+                else:
+                    # Exclusive tax: calculate from price
+                    tax_all += round(item.total_price * rate, 2)
         
-        # Calculate service charge (propina) as "included" - extracted for display only, NOT added to total
-        # The item prices already include the service charge, so we need to extract the base price
-        # and calculate the service charge from the difference
-        service_charge_amount = 0
-        actual_subtotal = total_subtotal  # This will be the subtotal WITHOUT service charge
-        
-        if apply_service_charge:
-            # The total_subtotal from items already includes the service charge in the prices
-            # We need to reverse-calculate: actual_subtotal = total_subtotal / (1 + service_charge_rate)
-            # But since the frontend already sends items without service charge, we calculate it here
-            # Service charge is extracted from the difference between displayed prices and subtotal
-            # For now, we calculate it on the subtotal for display purposes only
-            service_charge_amount = round(total_subtotal * service_charge_rate, 2)
-        
-        # Calculate exclusive taxes on subtotal ONLY (service charge NOT included in tax base per user preference)
-        tax_base = total_subtotal
-        total_tax_added = 0
-        
-        for rate, rate_subtotal in exclusive_tax_by_rate.items():
-            # Apply tax proportionally to items that have this rate
-            proportion = rate_subtotal / total_subtotal if total_subtotal > 0 else 0
-            tax_on_base = tax_base * proportion * rate
-            total_tax_added += round(tax_on_base, 2)
-        
-        # Set sale totals
-        sale.subtotal = round(total_subtotal, 2)
-        sale.tax_amount = round(total_tax_included + total_tax_added, 2)  # Only taxes, not service charge
-        sale.service_charge_amount = service_charge_amount  # Store service charge separately
-        # Total = subtotal (without service charge) + taxes + service charge (added back)
-        # Apply rounding to nearest whole number (375.06 -> 376, 375.02 -> 375)
-        total_before_rounding = total_subtotal + total_tax_included + total_tax_added + service_charge_amount
-        sale.total = round(total_before_rounding)
+        # Step 5: Set sale totals
+        sale.subtotal = round(subtotal, 2)  # Sum of item prices
+        sale.tax_amount = round(tax_all, 2)  # All taxes for reporting
+        sale.service_charge_amount = service_charge_amount  # Tip for display
+        sale.total = round(subtotal + tax_exclusive)  # Subtotal + exclusive taxes only
         
         # Add client info for fiscal/government invoices (NCF compliance)
         if customer_name and customer_rnc and ncf_type in ['credito_fiscal', 'gubernamental']:

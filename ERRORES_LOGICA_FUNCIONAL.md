@@ -197,74 +197,80 @@ Cuando se divide una cuenta (`split_sale`), se crean múltiples ventas independi
 
 ---
 
-### 8. **PROBLEMA: Cálculo de Propina Antes o Después de Impuestos** ✅ ACTUALIZADO (16 Oct 2025)
+### 8. **PROBLEMA: Cálculo de Propina Antes o Después de Impuestos** ✅ CORREGIDO (21 Nov 2025)
 
-**Estado:** ✅ Modificado según preferencia del usuario
+**Estado:** ✅ Corregido completamente - Propina e ITBIS ya no se suman incorrectamente
 
-**Método Anterior (Normativa Dominicana Tradicional - FASE 1):**
+**PROBLEMA DETECTADO (21 Nov 2025):**
+El sistema estaba SUMANDO la propina y los impuestos incluidos al total, cuando estos ya estaban incluidos en los precios de los productos. Esto causaba un cobro excesivo al cliente.
+
+**LÓGICA CORRECTA IMPLEMENTADA:**
+
+1. **Propina Incluida (cuando checkbox está activado):**
+   - Los precios de productos YA incluyen la propina del 10%
+   - La propina se extrae SOLO para mostrarla en el desglose del recibo
+   - La propina NO se suma al total (ya está incluida en el precio)
+
+2. **ITBIS según configuración del producto:**
+   - **Si `is_tax_included = True`:** El precio del producto YA incluye el ITBIS
+     - El impuesto se extrae para mostrarlo en el desglose
+     - El impuesto NO se suma al total (ya está incluido)
+   - **Si `is_tax_included = False`:** El ITBIS es exclusivo
+     - El impuesto SÍ se suma al total del precio base
+
+**Ejemplo práctico con ITBIS EXCLUSIVO:**
 ```
-Subtotal: RD$ 300
-ITBIS 18%: RD$ 54
-Base para Propina: RD$ 354 (subtotal + impuestos)
-Propina 10%: RD$ 35.40
-Total Final: RD$ 389.40
-```
-
-**Método Actual (Configuración Personalizada - 18 Oct 2025):**
-```
-Ejemplo práctico real:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Producto: Pechurinas
-Precio en sistema (incluye propina): RD$ 317.80
-Precio mostrado al cliente: RD$ 286.02 (sin propina)
-
-CÁLCULO AUTOMÁTICO DEL SISTEMA:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. Extracción de propina:
-   Precio original: RD$ 317.80
-   Propina 10% = 317.80 × 0.10 = RD$ 31.78
-   Subtotal sin propina = 317.80 - 31.78 = RD$ 286.02
-
-2. Cálculo de ITBIS (sobre precio ORIGINAL con propina):
-   ITBIS 18% = 317.80 × 0.18 = RD$ 57.20
-
-3. Total a pagar:
-   Total = Subtotal + Propina + ITBIS
-   Total = 286.02 + 31.78 + 57.20 = RD$ 375.00
-
-DESGLOSE EN RECIBO:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Subtotal (sin propina):        RD$ 286.02
-Propina (10%):                 RD$  31.78
-ITBIS (18%):                   RD$  57.20
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TOTAL A PAGAR:                 RD$ 375.00
+Producto: Hamburguesa
+Precio base (con propina incluida): RD$ 220.00
+Propina 10% (incluida): RD$ 20.00
+Subtotal sin propina: RD$ 200.00
+ITBIS 18% EXCLUSIVO: RD$ 220.00 × 0.18 = RD$ 39.60
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TOTAL A PAGAR: RD$ 259.60
 ```
 
-**Explicación del método:**
-La propina (10%) se extrae del precio original del producto para mostrar
-el subtotal sin propina. El ITBIS (18%) se calcula sobre el precio ORIGINAL
-(que incluye la propina). El total final incluye: subtotal + propina + ITBIS.
-Este método permite mostrar al cliente el precio sin propina, mientras se
-aplica el ITBIS correctamente sobre el precio total con propina.
+**Ejemplo práctico con ITBIS INCLUIDO:**
+```
+Producto: Refresco
+Precio (con propina e ITBIS incluidos): RD$ 118.00
+Propina 10% (incluida, para desglose): RD$ 10.73
+ITBIS 18% (incluido, para desglose): RD$ 18.00
+Subtotal base: RD$ 89.27
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TOTAL A PAGAR: RD$ 118.00 (igual al precio, no se suma nada)
+```
 
-**Implementación Actual:**
-- ✅ **Frontend (pos.html, línea ~776):** `itemSubtotal = itemPrice / 1.10` (calcula subtotal sin propina)
-- ✅ **Frontend (pos.html, línea ~788):** `taxAmount = itemPrice * taxRate` (ITBIS sobre precio ORIGINAL con propina)
-- ✅ **Frontend (pos.html, línea ~831):** `serviceCharge = pricesWithServiceCharge - subtotal` (propina extraída)
-- ✅ **Frontend (pos.html, línea ~835):** `total = subtotal + taxes + serviceCharge` (suma de todos los componentes)
-- ✅ **Backend (api.py, línea ~799):** `total = total_subtotal + taxes + service_charge_amount` (propina incluida en total)
-- ✅ **Interfaz:** Checkbox "Propina 10% Incluida" (seleccionada por defecto)
-- ✅ **Cálculo:** `Total = Subtotal + Propina + ITBIS(18% del precio original con propina)`
+**Implementación Corregida:**
+- ✅ **Backend (api.py, línea ~1138):** `total = total_items_price + total_tax_exclusive`
+  - Para productos con impuesto INCLUIDO: total = precio del producto (que ya incluye el impuesto)
+  - Para productos con impuesto EXCLUSIVO: total = precio del producto + impuesto
+- ✅ **Backend (api.py, línea ~596):** Función `add_item_to_sale` alineada con la misma lógica
+- ✅ **Frontend (pos.html, línea ~838):** `total = subtotal + totalInclusiveTax + totalExclusiveTax`
+- ✅ **Propina:** Se calcula SOLO para desglose cuando checkbox está activado, NO se suma al total
+- ✅ **ITBIS incluido:** Se muestra en desglose pero NO se suma al total (ya está en el precio)
+- ✅ **ITBIS exclusivo:** SÍ se suma al total
 
-**Notas Importantes:**
-- ⚠️ **Cambio de Normativa:** Este método NO sigue la normativa laboral dominicana tradicional
-- ✅ Cuando la propina está "incluida", los precios de productos YA contienen la propina del 10%
-- ✅ La propina (10%) se extrae del precio para mostrar el subtotal sin propina
-- ✅ El ITBIS (18%) se calcula sobre el PRECIO ORIGINAL (con propina incluida)
-- ✅ El total incluye: Subtotal + Propina + ITBIS
-- ✅ Fórmula: Total = Subtotal (sin propina) + Propina + ITBIS (18% del precio con propina)
-- ✅ Ejemplo: Precio 317.80 → Subtotal 286.02 + Propina 31.78 + ITBIS 57.20 = Total 375.00
+**Definiciones Monetarias Consistentes:**
+```
+subtotal = Suma(item.total_price)  // Suma de todos los precios de productos
+tax_amount = Suma(impuestos_incluidos + impuestos_exclusivos)  // Para reporting
+service_charge = subtotal × 0.10  // Solo para desglose, NO se suma al total
+total = subtotal + Suma(impuestos_exclusivos)  // Solo se suman impuestos exclusivos
+```
+
+**Explicación:**
+- `subtotal`: Suma directa de todos los precios de productos tal como están almacenados
+- Los productos con impuesto INCLUIDO ya tienen el impuesto en su precio
+- Los productos con impuesto EXCLUSIVO NO tienen el impuesto en su precio
+- Por eso solo sumamos los impuestos EXCLUSIVOS al total
+- La propina (10%) se calcula solo para mostrarla en el desglose, NO se suma
+
+**Impresión Automática:**
+- ✅ Impresión automática SOLO en dispositivos móviles y tablets
+- ✅ En escritorio, el usuario usa el botón manual "Imprimir en Impresora"
+- ✅ Funciona con la API de impresión del navegador (`window.print()`)
+- ✅ Delay de 800ms para asegurar que el contenido esté renderizado
+- ✅ Modal permanece 15 segundos para dar tiempo al usuario
 
 ---
 
