@@ -1634,11 +1634,25 @@ def api_update_company_settings():
         'receipt_logo',
         'fiscal_printer_enabled',
         'receipt_copies',
-        'receipt_format'
+        'receipt_format',
+        'printer_type',
+        'printer_network_host',
+        'printer_network_port',
+        'printer_bluetooth_mac',
+        'printer_bluetooth_port',
+        'printer_usb_vendor_id',
+        'printer_usb_product_id',
+        'printer_serial_port',
+        'printer_serial_baudrate',
+        'printer_paper_width',
+        'printer_auto_cut',
+        'printer_auto_open_drawer'
     ]
     
     results = []
     errors = []
+    
+    printer_settings_updated = False
     
     for key, value in data.items():
         if key not in valid_keys:
@@ -1662,8 +1676,24 @@ def api_update_company_settings():
         
         if result['success']:
             results.append(f'{key} actualizado')
+            
+            # Track if printer settings were updated
+            if key.startswith('printer_'):
+                printer_settings_updated = True
         else:
             errors.append(f'{key}: {result["message"]}')
+    
+    # Sync printer settings to environment variables if any were updated
+    if printer_settings_updated:
+        try:
+            from utils import sync_printer_settings_to_env
+            sync_printer_settings_to_env()
+            
+            # Reset thermal printer to pick up new settings
+            from thermal_printer import reset_thermal_printer
+            reset_thermal_printer()
+        except Exception as e:
+            logger.error(f"Error syncing printer settings: {str(e)}")
     
     if errors:
         return jsonify({

@@ -169,6 +169,45 @@
                             <div class="form-text">Seleccione cómo está conectada su impresora térmica</div>
                         </div>
 
+                        <div id="networkConfig" style="display: {{ 'block' if company_settings.get('printer_type', 'file') == 'network' else 'none' }};">
+                            <div class="card bg-light mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title"><i class="bi bi-hdd-network"></i> Configuración de Red</h6>
+                                    
+                                    <div class="mb-3">
+                                        <label for="printer_network_host" class="form-label">
+                                            <i class="bi bi-globe"></i> Dirección IP
+                                        </label>
+                                        <input type="text" class="form-control" id="printer_network_host" name="printer_network_host" 
+                                               value="{{ company_settings.get('printer_network_host', '192.168.1.100') }}" 
+                                               placeholder="192.168.1.100" pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$">
+                                        <div class="form-text">Dirección IP de su impresora en la red local</div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="printer_network_port" class="form-label">
+                                            <i class="bi bi-ethernet"></i> Puerto
+                                        </label>
+                                        <input type="number" class="form-control" id="printer_network_port" name="printer_network_port" 
+                                               value="{{ company_settings.get('printer_network_port', '9100') }}" 
+                                               placeholder="9100" min="1" max="65535">
+                                        <div class="form-text">Puerto de red (típicamente 9100 para impresoras ESC/POS)</div>
+                                    </div>
+
+                                    <div class="alert alert-info">
+                                        <i class="bi bi-info-circle"></i> 
+                                        <strong>Configuración de impresora de red:</strong>
+                                        <ul class="mb-0 mt-2">
+                                            <li>Asegúrese de que la impresora esté conectada a la misma red</li>
+                                            <li>Puede encontrar la IP en el menú de configuración de la impresora</li>
+                                            <li>El puerto estándar ESC/POS es 9100</li>
+                                            <li>Verifique que no haya firewall bloqueando la conexión</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="bluetoothConfig" style="display: {{ 'block' if company_settings.get('printer_type', 'file') == 'bluetooth' else 'none' }};">
                             <div class="card bg-light mb-3">
                                 <div class="card-body">
@@ -493,13 +532,20 @@ function showAlert(type, message) {
     }, 5000);
 }
 
-// Bluetooth printer configuration
+// Printer type configuration
 document.getElementById('printer_type').addEventListener('change', function() {
+    const networkConfig = document.getElementById('networkConfig');
     const bluetoothConfig = document.getElementById('bluetoothConfig');
-    if (this.value === 'bluetooth') {
+    
+    // Hide all configs first
+    networkConfig.style.display = 'none';
+    bluetoothConfig.style.display = 'none';
+    
+    // Show the relevant config
+    if (this.value === 'network') {
+        networkConfig.style.display = 'block';
+    } else if (this.value === 'bluetooth') {
         bluetoothConfig.style.display = 'block';
-    } else {
-        bluetoothConfig.style.display = 'none';
     }
 });
 
