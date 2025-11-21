@@ -98,3 +98,13 @@ externalPort = 9000
 [deployment]
 deploymentTarget = "autoscale"
 run = ["gunicorn", "--bind", "0.0.0.0:5000", "--reuse-port"]
+
+[userenv]
+
+[userenv.shared]
+PRINTER_TYPE = "network"
+PRINTER_NETWORK_HOST = "172.31.222.5"
+PRINTER_NETWORK_PORT = "9100"
+PRINTER_PAPER_WIDTH = "80"
+PRINTER_AUTO_CUT = "true"
+PRINTER_AUTO_OPEN_DRAWER = "false"

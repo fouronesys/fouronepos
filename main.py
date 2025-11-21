@@ -139,6 +139,14 @@ db.init_app(app)
 #     # Use flask db upgrade or proper migration tools instead
 #     db.create_all()
 
+# Sync printer settings from database to environment variables on startup
+with app.app_context():
+    try:
+        from utils import sync_printer_settings_to_env
+        sync_printer_settings_to_env()
+        logging.info("Printer settings synchronized from database to environment variables")
+    except Exception as e:
+        logging.warning(f"Could not sync printer settings on startup: {e}")
 
 # Import routes after app initialization
 from routes import auth, admin, waiter, api, inventory, dgii, test_api, fiscal_audit
