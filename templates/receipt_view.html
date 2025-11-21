@@ -4,8 +4,17 @@
 
 {% block head %}
 {{ super() }}
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
+    /* Page setup for print - works on all devices */
+    @page {
+        size: auto;
+        margin: 5mm;
+    }
+    
+    /* Optimized print styles for mobile and desktop */
     @media print {
+        /* Hide everything except receipt */
         body * {
             visibility: hidden;
         }
@@ -17,29 +26,72 @@
             left: 0;
             top: 0;
             width: 100%;
+            margin: 0;
+            padding: 0;
         }
         .no-print {
             display: none !important;
         }
         .page-break {
             page-break-after: always;
+            break-after: always;
+        }
+        
+        /* Force color printing for better receipt appearance */
+        * {
+            -webkit-print-color-adjust: exact !important;
+            color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        
+        /* Optimize page layout */
+        body {
+            margin: 0;
+            padding: 0;
+            background: white !important;
+        }
+        
+        /* Receipt paper optimizations for print */
+        .receipt-paper {
+            margin: 0 !important;
+            padding: 10mm !important;
+            border: none !important;
+            box-shadow: none !important;
+            max-width: 100% !important;
+            width: 100% !important;
+            background: white !important;
         }
     }
     
-    .receipt-paper {
-        background: white;
-        {% if receipt_format == '58mm' %}
-        max-width: 220px; /* 58mm format - narrower */
-        font-size: 10px;
-        {% else %}
-        max-width: 320px; /* 80mm format - standard */
-        font-size: 12px;
-        {% endif %}
-        margin: 0 auto;
-        padding: 15px;
-        border: 1px solid #ddd;
-        font-family: 'Courier New', monospace;
-        line-height: 1.4;
+    /* Screen styles - optimized for all devices */
+    @media screen {
+        .receipt-paper {
+            background: white;
+            {% if receipt_format == '58mm' %}
+            max-width: 220px; /* 58mm format - narrower */
+            font-size: 10px;
+            {% else %}
+            max-width: 320px; /* 80mm format - standard */
+            font-size: 12px;
+            {% endif %}
+            margin: 0 auto;
+            padding: 15px;
+            border: 1px solid #ddd;
+            font-family: 'Courier New', monospace;
+            line-height: 1.4;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+    }
+    
+    /* Mobile-specific screen adjustments */
+    @media screen and (max-width: 768px) {
+        .receipt-paper {
+            max-width: 100%;
+            margin: 0;
+            border-left: none;
+            border-right: none;
+            box-shadow: none;
+        }
     }
     
     .receipt-header {
@@ -165,16 +217,18 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-end align-items-center mb-4 no-print">
+    <div class="d-flex justify-content-between align-items-center mb-4 no-print flex-wrap gap-2">
         <div>
-            <button type="button" class="btn btn-secondary me-2" onclick="window.history.back()">
-                <i class="bi bi-arrow-left"></i> Volver
+            <button type="button" class="btn btn-secondary" onclick="window.history.back()">
+                <i class="bi bi-arrow-left"></i> <span class="d-none d-sm-inline">Volver</span>
             </button>
-            <button type="button" class="btn btn-primary me-2" onclick="window.print()">
-                <i class="bi bi-printer"></i> Imprimir
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-primary" onclick="window.print()" title="Abre el diálogo de impresión nativo de tu dispositivo">
+                <i class="bi bi-printer"></i> <span class="d-none d-sm-inline">Imprimir</span>
             </button>
-            <button type="button" class="btn btn-success" onclick="downloadPDF(event, this)">
-                <i class="bi bi-file-earmark-pdf"></i> Descargar PDF
+            <button type="button" class="btn btn-success" onclick="downloadPDF(event, this)" title="Descarga el recibo en formato PDF">
+                <i class="bi bi-file-earmark-pdf"></i> <span class="d-none d-sm-inline">Descargar PDF</span>
             </button>
         </div>
     </div>
@@ -372,44 +426,68 @@ async function downloadPDF(event, buttonElement) {
     }
 }
 
-// Enhanced auto-print functionality - triggers immediately without delays
+// Enhanced auto-print functionality - optimized for mobile and desktop
 document.addEventListener('DOMContentLoaded', function() {
     // Auto-print if triggered by POS system
     {% if auto_print %}
     let printAttempted = false;
+    let printCompleted = false;
     
     function attemptPrint() {
         if (printAttempted) return;
         printAttempted = true;
         
         console.log('[Receipt] Auto-print triggered for {{ receipt_format }} format');
+        console.log('[Receipt] User agent:', navigator.userAgent);
+        console.log('[Receipt] Platform:', navigator.platform);
+        
+        // Detect mobile devices
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        const isAndroid = /Android/.test(navigator.userAgent);
+        
+        console.log('[Receipt] Device detection - Mobile:', isMobile, 'iOS:', isIOS, 'Android:', isAndroid);
         
         // Check if printing is available
         if (typeof window.print === 'function') {
             try {
                 // Focus window before printing for better browser compatibility
                 window.focus();
-                // Trigger print immediately
-                window.print();
-                console.log('[Receipt] Print dialog opened successfully');
+                
+                // For mobile devices, add a small delay to ensure rendering is complete
+                const printDelay = isMobile ? 300 : 0;
+                
+                setTimeout(() => {
+                    // Trigger native print dialog
+                    window.print();
+                    console.log('[Receipt] Native print dialog opened successfully');
+                }, printDelay);
                 
             } catch (error) {
                 console.error('[Receipt] Print error:', error);
-                showPrintFallback();
+                showPrintFallback(isMobile);
             }
         } else {
-            console.warn('[Receipt] window.print not available');
-            showPrintFallback();
+            console.warn('[Receipt] window.print not available on this browser');
+            showPrintFallback(isMobile);
         }
     }
     
-    function showPrintFallback() {
+    function showPrintFallback(isMobile) {
+        const shortcutText = isMobile 
+            ? 'Use el menú del navegador para imprimir' 
+            : 'Use Ctrl+P (Cmd+P en Mac) para imprimir';
+            
         const fallbackMsg = document.createElement('div');
         fallbackMsg.innerHTML = `
-            <div style="position: fixed; top: 20px; right: 20px; background: #ff6b6b; color: white; padding: 15px; border-radius: 8px; z-index: 10000; max-width: 300px;">
-                <strong>Impresión automática no disponible</strong><br>
-                Use Ctrl+P (Cmd+P en Mac) para imprimir manualmente.
-                <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; color: white; font-size: 18px; cursor: pointer;">&times;</button>
+            <div style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #ff6b6b; color: white; padding: 15px 20px; border-radius: 8px; z-index: 10000; max-width: 90%; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 15px;">
+                    <div>
+                        <strong>Impresión automática no disponible</strong><br>
+                        <small>${shortcutText}</small>
+                    </div>
+                    <button onclick="this.closest('div').parentElement.remove()" style="background: rgba(255,255,255,0.2); border: none; color: white; font-size: 20px; cursor: pointer; padding: 5px 10px; border-radius: 4px; min-width: 30px;">&times;</button>
+                </div>
             </div>
         `;
         document.body.appendChild(fallbackMsg);
@@ -418,30 +496,40 @@ document.addEventListener('DOMContentLoaded', function() {
             if (fallbackMsg.parentElement) {
                 fallbackMsg.remove();
             }
-        }, 8000);
+        }, 10000);
     }
     
-    // Trigger print immediately when DOM is ready (no delays)
-    // Use requestAnimationFrame to ensure content is rendered
+    // Use requestAnimationFrame to ensure content is fully rendered
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
             attemptPrint();
         });
     });
     
+    // Listen for print events (afterprint) to detect when user finishes printing
+    window.addEventListener('afterprint', function() {
+        printCompleted = true;
+        console.log('[Receipt] Print dialog closed');
+    });
+    
+    // Listen for beforeprint event
+    window.addEventListener('beforeprint', function() {
+        console.log('[Receipt] Print dialog opened');
+    });
+    
     {% endif %}
     
     // Legacy support for hash-based printing
-    setTimeout(() => {
-        if (window.location.hash === '#print') {
+    if (window.location.hash === '#print') {
+        setTimeout(() => {
             window.print();
-        }
-    }, 500);
+        }, 500);
+    }
     
-    // Handle visibility change to detect print completion
+    // Handle visibility change to detect when user returns to page
     document.addEventListener('visibilitychange', function() {
         if (!document.hidden && printAttempted) {
-            console.log('[Receipt] Page became visible after print attempt');
+            console.log('[Receipt] Page visible after print attempt');
         }
     });
 });
