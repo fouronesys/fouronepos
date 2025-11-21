@@ -250,20 +250,36 @@ TOTAL A PAGAR: RD$ 118.00 (igual al precio, no se suma nada)
 - ✅ **ITBIS incluido:** Se muestra en desglose pero NO se suma al total (ya está en el precio)
 - ✅ **ITBIS exclusivo:** SÍ se suma al total
 
-**Definiciones Monetarias Consistentes:**
-```
-subtotal = Suma(item.total_price)  // Suma de todos los precios de productos
-tax_amount = Suma(impuestos_incluidos + impuestos_exclusivos)  // Para reporting
-service_charge = subtotal × 0.10  // Solo para desglose, NO se suma al total
-total = subtotal + Suma(impuestos_exclusivos)  // Solo se suman impuestos exclusivos
+**Definiciones Monetarias Finales:**
+```python
+# Backend: routes/api.py (add_item_to_sale y finalize_sale)
+subtotal = sum(item.total_price for item in items)  # Suma de precios tal como están
+service_charge = subtotal - (subtotal / 1.10)  # Extracción correcta de propina incluida
+tax_exclusive = sum(impuestos exclusivos)  # Impuestos que se suman al total
+total = subtotal + tax_exclusive  # Total final
 ```
 
-**Explicación:**
-- `subtotal`: Suma directa de todos los precios de productos tal como están almacenados
-- Los productos con impuesto INCLUIDO ya tienen el impuesto en su precio
-- Los productos con impuesto EXCLUSIVO NO tienen el impuesto en su precio
-- Por eso solo sumamos los impuestos EXCLUSIVOS al total
-- La propina (10%) se calcula solo para mostrarla en el desglose, NO se suma
+```javascript
+// Frontend: templates/admin/pos.html (getTotals)
+subtotal = sum(item.price × item.quantity)  # Suma de precios
+serviceCharge = subtotal - (subtotal / 1.10)  # Extracción correcta de propina
+taxExclusive = sum(impuestos exclusivos)  # Impuestos a sumar
+total = round(subtotal + taxExclusive)  # Total redondeado
+```
+
+**Explicación de las Correcciones:**
+1. **Propina (10%):**
+   - ✅ CORRECTO: `propina = precio - (precio / 1.10)` (extracción inversa)
+   - ❌ INCORRECTO: `propina = precio × 0.10` (calcula 10% adicional, no extrae)
+   
+2. **Subtotal:**
+   - Es la suma directa de todos los precios de productos
+   - Ya incluye propina (si está activada) e impuestos incluidos
+   
+3. **Total:**
+   - Solo se suman impuestos EXCLUSIVOS
+   - La propina NO se suma (ya está en los precios)
+   - Los impuestos incluidos NO se suman (ya están en los precios)
 
 **Impresión Automática:**
 - ✅ Impresión automática SOLO en dispositivos móviles y tablets
