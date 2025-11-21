@@ -209,6 +209,81 @@
                             </div>
                         </div>
 
+                        <div id="usbConfig" style="display: {{ 'block' if company_settings.get('printer_type', 'file') == 'usb' else 'none' }};">
+                            <div class="card bg-light mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title"><i class="bi bi-usb"></i> Configuración USB</h6>
+                                    
+                                    <div class="mb-3">
+                                        <label for="printer_usb_vendor_id" class="form-label">
+                                            <i class="bi bi-usb-symbol"></i> Vendor ID (VID)
+                                        </label>
+                                        <input type="text" class="form-control" id="printer_usb_vendor_id" name="printer_usb_vendor_id" 
+                                               value="{{ company_settings.get('printer_usb_vendor_id', '0x04b8') }}" 
+                                               placeholder="0x04b8" pattern="0x[0-9A-Fa-f]{4}">
+                                        <div class="form-text">ID del fabricante de la impresora (formato hexadecimal, ej: 0x04b8 para Epson)</div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="printer_usb_product_id" class="form-label">
+                                            <i class="bi bi-usb-symbol"></i> Product ID (PID)
+                                        </label>
+                                        <input type="text" class="form-control" id="printer_usb_product_id" name="printer_usb_product_id" 
+                                               value="{{ company_settings.get('printer_usb_product_id', '0x0202') }}" 
+                                               placeholder="0x0202" pattern="0x[0-9A-Fa-f]{4}">
+                                        <div class="form-text">ID del producto específico (formato hexadecimal)</div>
+                                    </div>
+
+                                    <div class="alert alert-info">
+                                        <i class="bi bi-info-circle"></i> 
+                                        <strong>¿Cómo encontrar VID y PID?</strong>
+                                        <ul class="mb-0 mt-2">
+                                            <li><strong>Windows:</strong> Administrador de dispositivos → Propiedades → Detalles → Id. de hardware</li>
+                                            <li><strong>Linux:</strong> Ejecute <code>lsusb</code> en terminal</li>
+                                            <li><strong>Valores comunes:</strong> Epson (0x04b8), Star (0x0519), Bixolon (0x1504)</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="serialConfig" style="display: {{ 'block' if company_settings.get('printer_type', 'file') == 'serial' else 'none' }};">
+                            <div class="card bg-light mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title"><i class="bi bi-terminal"></i> Configuración Serial</h6>
+                                    
+                                    <div class="mb-3">
+                                        <label for="printer_serial_port" class="form-label">
+                                            <i class="bi bi-terminal"></i> Puerto Serial
+                                        </label>
+                                        <input type="text" class="form-control" id="printer_serial_port" name="printer_serial_port" 
+                                               value="{{ company_settings.get('printer_serial_port', '/dev/ttyUSB0') }}" 
+                                               placeholder="/dev/ttyUSB0">
+                                        <div class="form-text">Ruta del puerto serial (Linux: /dev/ttyUSB0, Windows: COM1)</div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="printer_serial_baudrate" class="form-label">
+                                            <i class="bi bi-speedometer2"></i> Baudrate
+                                        </label>
+                                        <select class="form-select" id="printer_serial_baudrate" name="printer_serial_baudrate">
+                                            <option value="9600" {{ 'selected' if company_settings.get('printer_serial_baudrate', '9600') == '9600' }}>9600 bps</option>
+                                            <option value="19200" {{ 'selected' if company_settings.get('printer_serial_baudrate', '9600') == '19200' }}>19200 bps</option>
+                                            <option value="38400" {{ 'selected' if company_settings.get('printer_serial_baudrate', '9600') == '38400' }}>38400 bps</option>
+                                            <option value="57600" {{ 'selected' if company_settings.get('printer_serial_baudrate', '9600') == '57600' }}>57600 bps</option>
+                                            <option value="115200" {{ 'selected' if company_settings.get('printer_serial_baudrate', '9600') == '115200' }}>115200 bps</option>
+                                        </select>
+                                        <div class="form-text">Velocidad de comunicación (comúnmente 9600 o 115200)</div>
+                                    </div>
+
+                                    <div class="alert alert-info">
+                                        <i class="bi bi-info-circle"></i> 
+                                        <strong>Configuración típica:</strong> 9600 bps, 8 bits de datos, sin paridad, 1 bit de parada (8N1)
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="bluetoothConfig" style="display: {{ 'block' if company_settings.get('printer_type', 'file') == 'bluetooth' else 'none' }};">
                             <div class="card bg-light mb-3">
                                 <div class="card-body">
@@ -266,6 +341,36 @@
                                                 </div>
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card bg-light mb-3">
+                            <div class="card-body">
+                                <h6 class="card-title"><i class="bi bi-sliders"></i> Opciones Avanzadas</h6>
+                                
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="printer_auto_cut" class="form-label">
+                                            <i class="bi bi-scissors"></i> Corte Automático
+                                        </label>
+                                        <select class="form-select" id="printer_auto_cut" name="printer_auto_cut">
+                                            <option value="true" {{ 'selected' if company_settings.get('printer_auto_cut', 'true') == 'true' }}>Habilitado</option>
+                                            <option value="false" {{ 'selected' if company_settings.get('printer_auto_cut', 'true') == 'false' }}>Deshabilitado</option>
+                                        </select>
+                                        <div class="form-text">Cortar papel automáticamente después de imprimir</div>
+                                    </div>
+                                    
+                                    <div class="col-md-6 mb-3">
+                                        <label for="printer_auto_open_drawer" class="form-label">
+                                            <i class="bi bi-box"></i> Abrir Cajón Automático
+                                        </label>
+                                        <select class="form-select" id="printer_auto_open_drawer" name="printer_auto_open_drawer">
+                                            <option value="false" {{ 'selected' if company_settings.get('printer_auto_open_drawer', 'false') == 'false' }}>Deshabilitado</option>
+                                            <option value="true" {{ 'selected' if company_settings.get('printer_auto_open_drawer', 'false') == 'true' }}>Habilitado</option>
+                                        </select>
+                                        <div class="form-text">Abrir cajón de dinero al imprimir recibo</div>
                                     </div>
                                 </div>
                             </div>
@@ -547,15 +652,23 @@ function showAlert(type, message) {
 
 // Printer type configuration
 document.getElementById('printer_type').addEventListener('change', function() {
+    const usbConfig = document.getElementById('usbConfig');
+    const serialConfig = document.getElementById('serialConfig');
     const networkConfig = document.getElementById('networkConfig');
     const bluetoothConfig = document.getElementById('bluetoothConfig');
     
     // Hide all configs first
+    usbConfig.style.display = 'none';
+    serialConfig.style.display = 'none';
     networkConfig.style.display = 'none';
     bluetoothConfig.style.display = 'none';
     
     // Show the relevant config
-    if (this.value === 'network') {
+    if (this.value === 'usb') {
+        usbConfig.style.display = 'block';
+    } else if (this.value === 'serial') {
+        serialConfig.style.display = 'block';
+    } else if (this.value === 'network') {
         networkConfig.style.display = 'block';
     } else if (this.value === 'bluetooth') {
         bluetoothConfig.style.display = 'block';
