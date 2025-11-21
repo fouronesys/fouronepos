@@ -58,17 +58,21 @@ def get_printer_status():
 
 @bp.route('/thermal-printer/test', methods=['POST'])
 def test_printer():
-    """Prueba de impresión térmica"""
+    """Prueba de impresión térmica con verificación de conectividad"""
     try:
-        success = test_thermal_printer()
-        return jsonify({
-            'success': success,
-            'message': 'Prueba de impresión completada' if success else 'Error en prueba de impresión'
-        })
+        result = test_thermal_printer()
+        
+        # El resultado ya viene con success, message, y opcionalmente error/details
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+            
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': str(e)
+            'message': f'Error inesperado: {str(e)}',
+            'error': 'EXCEPTION'
         }), 500
 
 @bp.route('/receipt/sample', methods=['POST'])

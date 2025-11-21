@@ -123,6 +123,20 @@ class ThermalPrinter:
                 logger.info(f"Inicializada impresora Serial: {self.config.serial_port}")
                 
             elif self.config.printer_type == 'network':
+                # Test network connectivity first
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(3)
+                try:
+                    result = sock.connect_ex((self.config.network_host, self.config.network_port))
+                    sock.close()
+                    if result != 0:
+                        raise ConnectionError(f"No se puede conectar a {self.config.network_host}:{self.config.network_port}. La impresora no es accesible desde el servidor.")
+                except socket.timeout:
+                    raise ConnectionError(f"Timeout al conectar a {self.config.network_host}:{self.config.network_port}. La impresora no responde.")
+                except socket.gaierror:
+                    raise ConnectionError(f"No se puede resolver el host {self.config.network_host}. Verifica la dirección IP.")
+                
                 self.printer = Network(
                     host=self.config.network_host,
                     port=self.config.network_port
@@ -208,13 +222,63 @@ class ThermalPrinter:
             logger.error(f"Error imprimiendo recibo: {str(e)}")
             return False
     
-    def test_print(self) -> bool:
+    def test_print(self) -> Dict[str, Any]:
         """
-        Imprime un recibo de prueba
+        Imprime un recibo de prueba y verifica la conexión
         
         Returns:
-            bool: True si la prueba fue exitosa
+            Dict con el resultado de la prueba: {
+                'success': bool,
+                'message': str,
+                'error': str (opcional)
+            }
         """
+        # Verificar que hay impresora configurada
+        if not self.printer:
+            error_msg = "No hay impresora disponible. Verifica la configuración."
+            logger.error(error_msg)
+            return {
+                'success': False,
+                'message': error_msg,
+                'error': 'PRINTER_NOT_CONFIGURED'
+            }
+        
+        # Para impresoras de red, verificar conectividad primero
+        if self.config.printer_type == 'network':
+            import socket
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(3)
+                result = sock.connect_ex((self.config.network_host, self.config.network_port))
+                sock.close()
+                
+                if result != 0:
+                    error_msg = f"❌ No se puede conectar a la impresora en {self.config.network_host}:{self.config.network_port}. La impresora no es accesible desde este servidor."
+                    logger.error(error_msg)
+                    return {
+                        'success': False,
+                        'message': error_msg,
+                        'error': 'NETWORK_UNREACHABLE',
+                        'details': 'La impresora está en una red privada y el servidor no puede alcanzarla. Necesitas usar una impresora accesible desde internet o instalar un servidor local de impresión.'
+                    }
+            except socket.timeout:
+                error_msg = f"❌ Timeout al conectar a {self.config.network_host}:{self.config.network_port}. La impresora no responde."
+                logger.error(error_msg)
+                return {
+                    'success': False,
+                    'message': error_msg,
+                    'error': 'CONNECTION_TIMEOUT'
+                }
+            except Exception as e:
+                error_msg = f"❌ Error verificando conectividad: {str(e)}"
+                logger.error(error_msg)
+                return {
+                    'success': False,
+                    'message': error_msg,
+                    'error': 'CONNECTION_ERROR'
+                }
+        
+        # Intentar imprimir
         test_receipt = """
 ========================================
            PRUEBA DE IMPRESORA
@@ -231,10 +295,6 @@ Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
 
         """
         
-        if not self.printer:
-            logger.error("No hay impresora disponible para prueba")
-            return False
-        
         try:
             self.printer.text(test_receipt)
             if self.config.auto_cut:
@@ -243,21 +303,31 @@ Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
                 except:
                     pass
             
-            logger.info("Prueba de impresión completada")
-            return True
+            success_msg = f"✅ Prueba de impresión enviada exitosamente a {self.config.printer_type}"
+            logger.info(success_msg)
+            return {
+                'success': True,
+                'message': success_msg
+            }
             
         except Exception as e:
-            logger.error(f"Error en prueba de impresión: {str(e)}")
-            return False
+            error_msg = f"❌ Error al imprimir: {str(e)}"
+            logger.error(error_msg)
+            return {
+                'success': False,
+                'message': error_msg,
+                'error': 'PRINT_ERROR',
+                'details': str(e)
+            }
     
     def get_status(self) -> Dict[str, Any]:
         """
-        Obtiene el estado de la impresora
+        Obtiene el estado de la impresora con verificación de conectividad
         
         Returns:
-            Dict con información del estado
+            Dict con información del estado y conectividad
         """
-        return {
+        status = {
             'printer_type': self.config.printer_type,
             'paper_width': f"{self.config.paper_width}mm",
             'auto_cut': self.config.auto_cut,
@@ -270,6 +340,30 @@ Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
                 'file_path': self.config.file_path if self.config.printer_type == 'file' else None
             }
         }
+        
+        # Para impresoras de red, verificar conectividad
+        if self.config.printer_type == 'network' and self.printer is not None:
+            import socket
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2)
+                result = sock.connect_ex((self.config.network_host, self.config.network_port))
+                sock.close()
+                
+                if result == 0:
+                    status['connectivity'] = 'connected'
+                    status['connectivity_message'] = f"✅ Conectado a {self.config.network_host}:{self.config.network_port}"
+                else:
+                    status['connectivity'] = 'unreachable'
+                    status['connectivity_message'] = f"❌ No se puede alcanzar {self.config.network_host}:{self.config.network_port}"
+            except Exception as e:
+                status['connectivity'] = 'error'
+                status['connectivity_message'] = f"❌ Error verificando conectividad: {str(e)}"
+        else:
+            status['connectivity'] = 'unknown'
+            status['connectivity_message'] = 'Verificación de conectividad no disponible para este tipo de impresora'
+        
+        return status
 
 
 # Helper function removed - datetime imported at top
@@ -314,12 +408,12 @@ def print_receipt_auto(sale_data: Dict[str, Any]) -> bool:
     printer = get_thermal_printer()
     return printer.print_receipt(sale_data)
 
-def test_thermal_printer() -> bool:
+def test_thermal_printer() -> Dict[str, Any]:
     """
     Función conveniente para probar la impresora
     
     Returns:
-        bool: True si la prueba fue exitosa
+        Dict con el resultado de la prueba
     """
     printer = get_thermal_printer()
     return printer.test_print()
