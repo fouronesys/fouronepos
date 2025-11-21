@@ -4,6 +4,7 @@ from models import db
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import text
+from sqlalchemy.orm import joinedload
 import time
 import random
 import os
@@ -434,8 +435,10 @@ def add_sale_item(sale_id):
                 allowed_statuses=['pending', 'tab_open']
             )
         
-        # Lock product to ensure consistent stock validation
-        product = db.session.query(models.Product).filter_by(id=data['product_id']).with_for_update().first()
+        # Lock product to ensure consistent stock validation and load tax relationships
+        product = db.session.query(models.Product).options(
+            joinedload(models.Product.product_taxes).joinedload(models.ProductTax.tax_type)
+        ).filter_by(id=data['product_id']).with_for_update().first()
         if not product:
             return error_response(
                 error_type='not_found',
