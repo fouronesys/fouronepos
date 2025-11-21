@@ -175,18 +175,6 @@
                                     <h6 class="card-title"><i class="bi bi-bluetooth"></i> Configuración Bluetooth</h6>
                                     
                                     <div class="mb-3">
-                                        <button type="button" class="btn btn-outline-primary" id="btnScanBluetooth">
-                                            <i class="bi bi-search"></i> Escanear Dispositivos Bluetooth
-                                        </button>
-                                        <span id="scanStatus" class="ms-2"></span>
-                                    </div>
-
-                                    <div id="bluetoothDevicesList" class="mb-3" style="display: none;">
-                                        <label class="form-label">Dispositivos Encontrados</label>
-                                        <div id="devicesList" class="list-group"></div>
-                                    </div>
-
-                                    <div class="mb-3">
                                         <label for="printer_bluetooth_mac" class="form-label">
                                             <i class="bi bi-bluetooth"></i> Dirección MAC de la Impresora
                                         </label>
@@ -198,11 +186,46 @@
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                         </div>
-                                        <div class="form-text">Dirección MAC de la impresora Bluetooth (seleccione de la lista o ingrese manualmente)</div>
+                                        <div class="form-text">Haga clic en el botón de editar para ingresar la dirección MAC de su impresora Bluetooth</div>
                                     </div>
 
-                                    <div id="bluetoothStatus" class="alert alert-info" role="alert">
-                                        <i class="bi bi-info-circle"></i> Use el botón de escaneo para buscar impresoras Bluetooth cercanas
+                                    <div class="accordion mb-3" id="bluetoothHelpAccordion">
+                                        <div class="accordion-item">
+                                            <h2 class="accordion-header">
+                                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#bluetoothHelpContent">
+                                                    <i class="bi bi-question-circle me-2"></i> ¿Cómo obtener la dirección MAC?
+                                                </button>
+                                            </h2>
+                                            <div id="bluetoothHelpContent" class="accordion-collapse collapse">
+                                                <div class="accordion-body">
+                                                    <div class="alert alert-info mb-3">
+                                                        <strong>Para dispositivos Android:</strong>
+                                                        <ol class="mt-2 mb-0">
+                                                            <li>Vaya a <strong>Configuración → Bluetooth</strong></li>
+                                                            <li>Busque su impresora y toque el ícono (⚙️) o (ℹ️)</li>
+                                                            <li>Copie la dirección MAC</li>
+                                                            <li>Péguala en el campo de arriba usando el botón de editar (✏️)</li>
+                                                        </ol>
+                                                        <small class="text-muted">Si no ve la MAC, use apps como "Bluetooth Scanner" o "nRF Connect" de Google Play.</small>
+                                                    </div>
+                                                    
+                                                    <div class="alert alert-warning mb-3">
+                                                        <strong>Para dispositivos iOS/iPad:</strong>
+                                                        <ol class="mt-2 mb-0">
+                                                            <li>iOS no muestra las MAC por seguridad</li>
+                                                            <li>Busque la MAC en la etiqueta física de su impresora</li>
+                                                            <li>También puede consultarla en el manual de usuario</li>
+                                                        </ol>
+                                                    </div>
+                                                    
+                                                    <div class="alert alert-secondary mb-0">
+                                                        <strong>Desde computadora:</strong>
+                                                        <p class="mb-2">La dirección MAC suele estar impresa en una etiqueta en la parte posterior o inferior de la impresora térmica.</p>
+                                                        <small>Formato esperado: 00:11:22:33:44:55</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -480,150 +503,26 @@ document.getElementById('printer_type').addEventListener('change', function() {
     }
 });
 
+// Toggle manual MAC address entry
 let manualEntryEnabled = false;
-document.getElementById('btnToggleManualEntry').addEventListener('click', function() {
-    const macInput = document.getElementById('printer_bluetooth_mac');
-    manualEntryEnabled = !manualEntryEnabled;
-    
-    if (manualEntryEnabled) {
-        macInput.removeAttribute('readonly');
-        macInput.focus();
-        this.innerHTML = '<i class="bi bi-lock"></i>';
-        this.title = 'Bloquear edición';
-    } else {
-        macInput.setAttribute('readonly', 'readonly');
-        this.innerHTML = '<i class="bi bi-pencil"></i>';
-        this.title = 'Editar manualmente';
-    }
-});
-
-document.getElementById('btnScanBluetooth').addEventListener('click', function() {
-    const btn = this;
-    const scanStatus = document.getElementById('scanStatus');
-    const devicesList = document.getElementById('devicesList');
-    const devicesContainer = document.getElementById('bluetoothDevicesList');
-    const bluetoothStatus = document.getElementById('bluetoothStatus');
-    
-    btn.disabled = true;
-    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Escaneando...';
-    scanStatus.innerHTML = '<span class="text-muted">Buscando dispositivos (8 segundos)...</span>';
-    
-    const csrfToken = document.querySelector('input[name="csrf_token"]').value;
-    
-    fetch('/admin/api/bluetooth/scan', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken
-        },
-        body: JSON.stringify({ scan_duration: 8 })
-    })
-    .then(response => response.json())
-    .then(data => {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-search"></i> Escanear Dispositivos Bluetooth';
+const btnToggleManualEntry = document.getElementById('btnToggleManualEntry');
+if (btnToggleManualEntry) {
+    btnToggleManualEntry.addEventListener('click', function() {
+        const macInput = document.getElementById('printer_bluetooth_mac');
+        if (!macInput) return;
         
-        if (data.success && data.devices && data.devices.length > 0) {
-            scanStatus.innerHTML = `<span class="text-success">✓ Encontrados ${data.count} dispositivos</span>`;
-            devicesContainer.style.display = 'block';
-            
-            devicesList.innerHTML = '';
-            data.devices.forEach(device => {
-                const deviceItem = document.createElement('a');
-                deviceItem.href = '#';
-                deviceItem.className = 'list-group-item list-group-item-action';
-                
-                let badgeClass = 'bg-secondary';
-                let badgeText = 'Otro';
-                if (device.type === 'printer_detected') {
-                    badgeClass = 'bg-success';
-                    badgeText = 'Impresora';
-                } else if (device.type === 'demo') {
-                    badgeClass = 'bg-info';
-                    badgeText = 'Demo';
-                }
-                
-                deviceItem.innerHTML = `
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong>${device.name}</strong>
-                            <br>
-                            <small class="text-muted">${device.mac_address}</small>
-                        </div>
-                        <span class="badge ${badgeClass}">${badgeText}</span>
-                    </div>
-                `;
-                
-                deviceItem.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    connectBluetoothDevice(device.mac_address, device.name);
-                });
-                
-                devicesList.appendChild(deviceItem);
-            });
-            
-            if (data.devices.length === 1 && data.devices[0].type === 'demo') {
-                bluetoothStatus.className = 'alert alert-warning';
-                bluetoothStatus.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Bluetooth no disponible en este sistema. Use el botón de editar para ingresar manualmente la dirección MAC de su impresora.';
-            } else {
-                bluetoothStatus.className = 'alert alert-success';
-                bluetoothStatus.innerHTML = '<i class="bi bi-check-circle"></i> Seleccione un dispositivo de la lista para conectar';
-            }
+        manualEntryEnabled = !manualEntryEnabled;
+        
+        if (manualEntryEnabled) {
+            macInput.removeAttribute('readonly');
+            macInput.focus();
+            this.innerHTML = '<i class="bi bi-lock"></i>';
+            this.title = 'Bloquear edición';
         } else {
-            scanStatus.innerHTML = '<span class="text-warning">⚠ No se encontraron dispositivos</span>';
-            devicesContainer.style.display = 'none';
-            bluetoothStatus.className = 'alert alert-warning';
-            bluetoothStatus.innerHTML = '<i class="bi bi-exclamation-triangle"></i> No se encontraron dispositivos. Use el botón de editar para ingresar manualmente la dirección MAC de su impresora.';
+            macInput.setAttribute('readonly', 'readonly');
+            this.innerHTML = '<i class="bi bi-pencil"></i>';
+            this.title = 'Editar manualmente';
         }
-    })
-    .catch(error => {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-search"></i> Escanear Dispositivos Bluetooth';
-        scanStatus.innerHTML = '<span class="text-danger">✗ Error al escanear</span>';
-        bluetoothStatus.className = 'alert alert-danger';
-        bluetoothStatus.innerHTML = `<i class="bi bi-x-circle"></i> Error: ${error.message}`;
-        console.error('Error:', error);
-    });
-});
-
-function connectBluetoothDevice(macAddress, deviceName) {
-    const bluetoothStatus = document.getElementById('bluetoothStatus');
-    const macInput = document.getElementById('printer_bluetooth_mac');
-    
-    bluetoothStatus.className = 'alert alert-info';
-    bluetoothStatus.innerHTML = '<i class="bi bi-hourglass-split"></i> Conectando con ' + deviceName + '...';
-    
-    const csrfToken = document.querySelector('input[name="csrf_token"]').value;
-    
-    fetch('/admin/api/bluetooth/connect', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken
-        },
-        body: JSON.stringify({
-            mac_address: macAddress,
-            rfcomm_port: '/dev/rfcomm0'
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            macInput.value = macAddress;
-            bluetoothStatus.className = 'alert alert-success';
-            bluetoothStatus.innerHTML = `<i class="bi bi-check-circle"></i> ${data.message}`;
-            showAlert('success', 'Impresora Bluetooth conectada: ' + deviceName);
-        } else {
-            bluetoothStatus.className = 'alert alert-danger';
-            bluetoothStatus.innerHTML = `<i class="bi bi-x-circle"></i> ${data.message}`;
-            showAlert('danger', 'Error al conectar: ' + data.message);
-        }
-    })
-    .catch(error => {
-        bluetoothStatus.className = 'alert alert-danger';
-        bluetoothStatus.innerHTML = `<i class="bi bi-x-circle"></i> Error de conexión: ${error.message}`;
-        showAlert('danger', 'Error al conectar con la impresora');
-        console.error('Error:', error);
     });
 }
 
