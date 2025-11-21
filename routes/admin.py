@@ -5,6 +5,7 @@ from datetime import datetime, date
 from sqlalchemy import func, and_
 import bcrypt
 import secrets
+import logging
 from flask_wtf.csrf import validate_csrf
 from werkzeug.exceptions import BadRequest
 from utils import (
@@ -15,6 +16,7 @@ from utils import (
 )
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
+logger = logging.getLogger(__name__)
 
 
 def validate_csrf_token():
@@ -1690,10 +1692,15 @@ def api_update_company_settings():
             sync_printer_settings_to_env()
             
             # Reset thermal printer to pick up new settings
-            from thermal_printer import reset_thermal_printer
-            reset_thermal_printer()
+            try:
+                from thermal_printer import reset_thermal_printer
+                reset_thermal_printer()
+            except ImportError as ie:
+                logger.warning(f"No se pudo importar thermal_printer (puede ser un problema con python-escpos): {str(ie)}")
+            except Exception as te:
+                logger.warning(f"Error al reiniciar impresora térmica: {str(te)}")
         except Exception as e:
-            logger.error(f"Error syncing printer settings: {str(e)}")
+            logger.error(f"Error al sincronizar configuración de impresora: {str(e)}")
     
     if errors:
         return jsonify({
