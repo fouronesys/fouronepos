@@ -124,6 +124,7 @@
                                     <option value="80mm" {{ 'selected' if company_settings.get('receipt_format', '80mm') == '80mm' }}>80mm (Estándar)</option>
                                     <option value="58mm" {{ 'selected' if company_settings.get('receipt_format', '80mm') == '58mm' }}>58mm (Compacto)</option>
                                 </select>
+                                <input type="hidden" id="printer_paper_width" name="printer_paper_width" value="{{ company_settings.get('printer_paper_width', '80') }}">
                                 <div class="form-text">Ancho del papel térmico</div>
                             </div>
                             
@@ -450,6 +451,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
+    // Sync receipt_format to printer_paper_width
+    const receiptFormat = document.getElementById('receipt_format');
+    const printerPaperWidth = document.getElementById('printer_paper_width');
+    if (receiptFormat && printerPaperWidth) {
+        receiptFormat.addEventListener('change', function() {
+            // Convert "80mm" -> "80", "58mm" -> "58"
+            printerPaperWidth.value = this.value.replace('mm', '');
+        });
+        // Initialize on page load
+        printerPaperWidth.value = receiptFormat.value.replace('mm', '');
+    }
+    
     function updatePreview() {
         const name = document.getElementById('company_name').value || 'Mi Empresa';
         const rnc = document.getElementById('company_rnc').value;
@@ -574,11 +587,12 @@ if (btnToggleManualEntry) {
 
 function testReceiptGeneration() {
     // Show loading message
-    showAlert('info', 'Generando recibo de prueba...');
+    showAlert('info', 'Generando y enviando recibo de prueba a la impresora...');
     
     // Get CSRF token
     const csrfToken = document.querySelector('input[name="csrf_token"]').value;
     
+    // First, generate the PDF receipt
     fetch('/admin/api/test-receipt', {
         method: 'POST',
         headers: {
@@ -590,7 +604,7 @@ function testReceiptGeneration() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showAlert('success', data.message);
+            showAlert('success', 'Recibo generado correctamente. Enviando a impresora...');
             
             // Open PDF in new window
             if (data.pdf_path) {
@@ -628,6 +642,33 @@ function testReceiptGeneration() {
                     thermalModal.remove();
                 });
             }
+            
+            // Now send to thermal printer
+            fetch('/api/test/receipt/sample', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({})
+            })
+            .then(response => response.json())
+            .then(printerData => {
+                if (printerData.success) {
+                    if (printerData.thermal_print_success) {
+                        showAlert('success', '✅ Recibo enviado a la impresora térmica correctamente');
+                    } else {
+                        showAlert('warning', '⚠️ Recibo generado pero no se pudo enviar a la impresora térmica');
+                    }
+                } else {
+                    showAlert('warning', '⚠️ Recibo generado pero hubo un error al enviar a la impresora: ' + printerData.error);
+                }
+            })
+            .catch(error => {
+                console.error('Printer error:', error);
+                showAlert('warning', '⚠️ Recibo generado pero no se pudo conectar con la impresora térmica');
+            });
+            
         } else {
             showAlert('danger', 'Error: ' + data.message);
         }
