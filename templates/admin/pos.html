@@ -1529,14 +1529,16 @@ function processSale() {
                     sale_id: result.id,  // Use result.id from finalize_sale response
                     table_id: result.table_id || null
                 };
-                printReceipt(saleData).then(printed => {
+                // Pass thermal_print_success to avoid duplicate printing
+                const thermalSuccess = result.thermal_print_success || false;
+                printReceipt(saleData, thermalSuccess).then(printed => {
                     if (printed) {
-                        console.log('[POS] Receipt printed successfully after sale');
+                        console.log('[POS] Receipt handled successfully after sale (thermal:', thermalSuccess, ')');
                     } else {
-                        console.log('[POS] Receipt printing failed, but sale was processed');
+                        console.log('[POS] Receipt handling failed, but sale was processed');
                     }
                 }).catch(error => {
-                    console.error('[POS] Receipt printing error:', error);
+                    console.error('[POS] Receipt handling error:', error);
                     // Don't show error to user as sale was successful
                 });
             }
@@ -2281,14 +2283,16 @@ async function finalizeBillingOrder(order) {
                 sale_id: response.id,
                 table_id: order.table_id || null
             };
-            printReceipt(saleData).then(printed => {
+            // Pass thermal_print_success to avoid duplicate printing
+            const thermalSuccess = response.thermal_print_success || false;
+            printReceipt(saleData, thermalSuccess).then(printed => {
                 if (printed) {
-                    console.log('[Billing] Receipt printed successfully after order finalization');
+                    console.log('[Billing] Receipt handled successfully after order finalization (thermal:', thermalSuccess, ')');
                 } else {
-                    console.log('[Billing] Receipt printing failed, but order was processed');
+                    console.log('[Billing] Receipt handling failed, but order was processed');
                 }
             }).catch(error => {
-                console.error('[Billing] Receipt printing error:', error);
+                console.error('[Billing] Receipt handling error:', error);
             });
         }
         
@@ -3301,14 +3305,24 @@ function printCashSummary() {
 }
 
 // Print receipt function - called automatically after sale finalization
-async function printReceipt(saleData) {
+// Only opens browser print dialog if thermal printing failed
+async function printReceipt(saleData, thermalPrintSuccess = false) {
     try {
         if (!saleData || !saleData.sale_id) {
             console.error('[Print] No sale ID provided for receipt printing');
             return false;
         }
         
-        // Generate thermal receipt via API
+        // If thermal printing was successful, just show brief success message and skip modal
+        if (thermalPrintSuccess) {
+            console.log('[Print] Thermal printer success - skipping browser print dialog');
+            showNotification('Recibo impreso en impresora térmica', 'success');
+            // Automatically download PDF receipt
+            downloadReceiptPDF(saleData.sale_id);
+            return true;
+        }
+        
+        // Generate thermal receipt via API (only if thermal printing failed)
         const response = await apiRequest(`/api/receipts/${saleData.sale_id}/thermal`);
         
         if (!response.success || !response.receipt_text) {
@@ -3328,9 +3342,9 @@ async function printReceipt(saleData) {
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
-                            <div class="alert alert-success">
-                                <i class="bi bi-check-circle me-2"></i>
-                                Recibo generado automáticamente después de la venta
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                La impresión térmica no está disponible. Use el botón "Imprimir" para imprimir manualmente.
                             </div>
                             <div class="receipt-preview">
                                 <pre style="font-family: 'Courier New', monospace; font-size: 12px; background: #f8f9fa; color: #000; padding: 15px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; border: 1px solid #dee2e6;">${response.receipt_text}</pre>
