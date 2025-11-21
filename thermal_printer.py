@@ -10,12 +10,61 @@ import subprocess
 import re
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from escpos.printer import Usb, Serial, Network, File
-from receipt_generator import generate_thermal_receipt_text
 
-# Configure logging
+# Configure logging first
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Monkey-patch for python-escpos 3.1 compatibility
+# The library internally tries to import DeviceNotFoundError which doesn't exist in 3.1
+try:
+    import escpos.exceptions
+    if not hasattr(escpos.exceptions, 'DeviceNotFoundError'):
+        # Create DeviceNotFoundError as an alias for USBNotFoundError or Error
+        if hasattr(escpos.exceptions, 'USBNotFoundError'):
+            escpos.exceptions.DeviceNotFoundError = escpos.exceptions.USBNotFoundError
+        else:
+            escpos.exceptions.DeviceNotFoundError = escpos.exceptions.Error
+        logger.info("Monkey-patched DeviceNotFoundError for python-escpos 3.1 compatibility")
+except Exception as e:
+    logger.warning(f"Could not monkey-patch escpos.exceptions: {e}")
+
+try:
+    from escpos.printer import Usb, Serial, Network, File
+    from escpos.exceptions import Error as EscposException
+    ESCPOS_AVAILABLE = True
+    logger.info("python-escpos loaded successfully")
+except Exception as e:
+    ESCPOS_AVAILABLE = False
+    logger.warning(f"python-escpos no disponible o tiene problemas de compatibilidad: {e}")
+    EscposException = Exception
+    
+    # Create placeholder classes when escpos is not available
+    class Usb:
+        def __init__(self, *args, **kwargs): pass
+        def text(self, *args, **kwargs): pass
+        def cut(self): pass
+        def cashdraw(self, *args, **kwargs): pass
+    
+    class Serial:
+        def __init__(self, *args, **kwargs): pass
+        def text(self, *args, **kwargs): pass
+        def cut(self): pass
+        def cashdraw(self, *args, **kwargs): pass
+    
+    class Network:
+        def __init__(self, *args, **kwargs): pass
+        def text(self, *args, **kwargs): pass
+        def cut(self): pass
+        def cashdraw(self, *args, **kwargs): pass
+    
+    class File:
+        def __init__(self, *args, **kwargs): pass
+        def text(self, *args, **kwargs): pass
+        def cut(self): pass
+        def cashdraw(self, *args, **kwargs): pass
+
+from receipt_generator import generate_thermal_receipt_text
 
 class ThermalPrinterConfig:
     """Configuración de impresora térmica"""

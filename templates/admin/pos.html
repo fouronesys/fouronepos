@@ -358,7 +358,7 @@
                 <div class="cart-config">
                     <div class="config-item">
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="apply-service-charge" onchange="updateTotals()" checked>
+                            <input class="form-check-input" type="checkbox" id="apply-service-charge" onchange="updateTotals()">
                             <label class="form-check-label" for="apply-service-charge">
                                 <i class="bi bi-percent me-2"></i>
                                 <strong>Propina 10% Incluida</strong>
@@ -1320,7 +1320,7 @@ function clearCart() {
     cartManager.clear();
     document.getElementById('table-select').value = '';
     document.getElementById('ncf-type-select').value = 'consumo';
-    document.getElementById('apply-service-charge').checked = true; // Keep service charge enabled by default
+    document.getElementById('apply-service-charge').checked = false; // Service charge disabled by default
     toggleClientInfo(); // Reset client info section
 }
 
