@@ -438,7 +438,7 @@ def add_sale_item(sale_id):
         # Lock product to ensure consistent stock validation and load tax relationships
         product = db.session.query(models.Product).options(
             joinedload(models.Product.product_taxes).joinedload(models.ProductTax.tax_type)
-        ).filter_by(id=data['product_id']).with_for_update().first()
+        ).filter_by(id=data['product_id']).with_for_update(of=models.Product).first()
         if not product:
             return error_response(
                 error_type='not_found',
