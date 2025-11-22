@@ -1204,18 +1204,9 @@ def finalize_sale(sale_id):
                     logger.error(f"Error generando PDF para venta {sale.id}: {str(pdf_error)}")
                     response_data['pdf_generated'] = False
                 
-                # Attempt automatic thermal printing
-                try:
-                    from thermal_printer import print_receipt_auto
-                    print_success = print_receipt_auto(sale_data)
-                    response_data['thermal_print_success'] = print_success
-                    if print_success:
-                        logger.info(f"Recibo térmico impreso automáticamente para venta {sale.id}")
-                    else:
-                        logger.warning(f"Fallo en impresión térmica automática para venta {sale.id}")
-                except Exception as thermal_error:
-                    logger.error(f"Error en impresión térmica: {str(thermal_error)}")
-                    response_data['thermal_print_success'] = False
+                # Thermal printing has been replaced with native print dialog
+                # Users will print using browser's native print dialog (window.print())
+                response_data['thermal_print_success'] = False
             else:
                 response_data['message'] = 'Venta finalizada exitosamente. Error generando recibo automático.'
         except Exception as print_error:
@@ -2640,18 +2631,9 @@ def finalize_table_sale(sale_id):
             response_data['receipt_text'] = receipt_text
             response_data['auto_print'] = True
             
-            # Attempt automatic thermal printing
-            try:
-                from thermal_printer import print_receipt_auto
-                print_success = print_receipt_auto(sale_data)
-                response_data['thermal_print_success'] = print_success
-                if print_success:
-                    logger.info(f"Recibo térmico impreso automáticamente para venta {sale.id}")
-                else:
-                    logger.warning(f"Fallo en impresión térmica automática para venta {sale.id}")
-            except Exception as thermal_error:
-                logger.error(f"Error en impresión térmica: {str(thermal_error)}")
-                response_data['thermal_print_success'] = False
+            # Thermal printing has been replaced with native print dialog
+            # Users will print using browser's native print dialog (window.print())
+            response_data['thermal_print_success'] = False
             
         except Exception as e:
             print(f"[ERROR PRINT] Auto receipt error for sale {sale.id}: {str(e)}")

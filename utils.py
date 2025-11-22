@@ -821,13 +821,7 @@ def get_company_settings() -> Dict[str, Any]:
         'fiscal_printer_enabled',
         'receipt_copies',
         'receipt_format',
-        'printer_type',
-        'printer_network_host',
-        'printer_network_port',
-        'printer_bluetooth_mac',
-        'printer_bluetooth_port',
-        'printer_paper_width',
-        'printer_auto_cut'
+        'printer_paper_width'
     ]
     
     settings = {}
